@@ -36,12 +36,31 @@ function bytesToBase64(bytes) {
   return btoa(bin)
 }
 
+/** 常用包预加载（Pyodide 需显式 loadPackage 才能 import） */
+const PRELOAD_PACKAGES = ['numpy', 'pandas', 'matplotlib', 'scipy', 'sklearn']
+
+async function ensurePackages(py, code) {
+  const imports = [...code.matchAll(/^\s*(?:import|from)\s+([a-zA-Z_]\w*)/gm)].map((m) => m[1])
+  const need = [...new Set(imports)].filter((m) => PRELOAD_PACKAGES.includes(m))
+  const loaded = new Set()
+  for (const m of need) {
+    try {
+      await py.loadPackage(m)
+      loaded.add(m)
+    } catch (e) {
+      console.warn(`[pyodide] 加载包 ${m} 失败：${e.message}`)
+    }
+  }
+  return loaded
+}
+
 /**
  * 运行 Python 代码
  * @returns {Promise<{output:string, img:string|null, error:string|null}>}
  */
 export async function runPython(code) {
   const py = await getPyodide()
+  await ensurePackages(py, code)
   const out = []
   py.setStdout({ batched: (s) => out.push(s) })
   py.setStderr({ batched: (s) => out.push(s) })
