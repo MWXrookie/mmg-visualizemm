@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>模型视界 · 数学建模 AI 辅导工具</title>
+<style>
+  :root {
+    --bg: oklch(0.978 0.005 256.4);
+    --surface: oklch(1 0 0);
+    --fg: oklch(0.279 0.03 257);
+    --muted: oklch(0.554 0.022 257);
+    --border: oklch(0.928 0.006 257);
+    --accent: oklch(0.546 0.213 258);
+    --accent-soft: color-mix(in oklch, var(--accent) 12%, var(--surface));
+    --accent-fg: oklch(1 0 0);
+
+    --c-blue: oklch(0.47 0.2 258);
+    --c-amber: oklch(0.53 0.14 60);
+    --c-green: oklch(0.52 0.12 155);
+
+    --font-display: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+    --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+    --font-mono: 'SF Mono', 'Cascadia Mono', Consolas, ui-monospace, monospace;
+
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: var(--font-body); font-size: 15px; line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  img, svg { display: block; max-width: 100%; }
+  a { color: inherit; text-decoration: none; }
+  button { font: inherit; cursor: pointer; }
+  p { text-wrap: pretty; }
+  h1, h2, h3 { text-wrap: balance; }
+
+  .icon { width: 18px; height: 18px; flex: none; }
+  .icon-sm { width: 15px; height: 15px; flex: none; }
+
+  .topnav {
+    position: sticky; top: 0; z-index: 20; height: 56px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px;
+    background: color-mix(in oklch, var(--surface) 88%, transparent);
+    backdrop-filter: blur(12px); border-bottom: 1px solid var(--border);
+  }
+  .tn-left { display: flex; align-items: center; gap: 14px; }
+  .logo { display: flex; align-items: center; gap: 9px; }
+  .logo-mark {
+    width: 30px; height: 30px; border-radius: 8px;
+    background: var(--accent); color: var(--accent-fg); display: grid; place-items: center;
+  }
+  .logo-name { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; }
+  .tn-right { display: flex; align-items: center; gap: 6px; }
+  .avatar {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: color-mix(in oklch, var(--accent) 16%, var(--surface));
+    color: var(--accent); font-size: 13px; font-weight: 600;
+    display: grid; place-items: center; margin-left: 4px;
+  }
+
+  .page { max-width: 1080px; margin-inline: auto; padding: 56px 24px 72px; }
+
+  .hero { text-align: center; max-width: 640px; margin-inline: auto; }
+  .hero .kicker {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-family: var(--font-mono); font-size: 12px; color: var(--accent);
+    background: var(--accent-soft); padding: 4px 12px; border-radius: 999px;
+  }
+  .hero h1 { font-size: 34px; font-weight: 750; letter-spacing: -0.02em; margin: 18px 0 12px; }
+  .hero p { margin: 0; color: var(--muted); font-size: 15.5px; line-height: 1.75; }
+  .hero .flow {
+    display: flex; align-items: center; justify-content: center; gap: 0;
+    margin-top: 26px; font-size: 13px; color: var(--muted);
+  }
+  .flow .f { display: inline-flex; align-items: center; gap: 7px; }
+  .flow .f b {
+    width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--accent-soft); color: var(--accent);
+    font-family: var(--font-mono); font-size: 10.5px;
+  }
+  .flow .arrow { color: var(--border); margin: 0 16px; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 44px; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+  .scard {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 22px 22px 20px;
+    display: flex; flex-direction: column;
+    transition: border-color 0.15s ease, transform 0.15s ease;
+  }
+  .scard:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .scard:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .scard .row { display: flex; align-items: center; gap: 10px; }
+  .scard .idx {
+    font-family: var(--font-mono); font-size: 11px; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 7px; padding: 2px 8px;
+  }
+  .scard h3 { font-size: 17px; font-weight: 650; margin: 12px 0 6px; }
+  .scard p { margin: 0; font-size: 13.5px; color: var(--muted); line-height: 1.7; }
+  .scard .meta {
+    margin-top: auto; padding-top: 16px;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 2px 9px; border-radius: 999px;
+    border: 1px solid var(--border);
+    font-family: var(--font-mono); font-size: 10.5px; color: var(--muted);
+  }
+  .scard .go {
+    display: inline-flex; align-items: center; gap: 6px;
+    color: var(--accent); font-size: 13px; font-weight: 600; flex: none;
+  }
+  .scard .go:hover { text-decoration: underline; }
+
+  .foot { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--border); }
+  .foot p { margin: 0; text-align: center; font-size: 12.5px; color: var(--muted); }
+</style>
+</head>
+<body>
+  <header class="topnav" data-od-id="topnav">
+    <div class="tn-left">
+      <a class="logo" href="index.html">
+        <span class="logo-mark">
+          <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5m8 14V5m8 14V9"/></svg>
+        </span>
+        <span class="logo-name">模型视界</span>
+      </a>
+    </div>
+    <div class="tn-right">
+      <a class="avatar" href="workbench.html" aria-label="进入读题工作台">张</a>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="hero" data-od-id="hero">
+      <span class="kicker">Web 原型 · 高保真</span>
+      <h1>数学建模 AI 辅导工具</h1>
+      <p>一个桌面端读题工作台原型：帮你逐段拆解题目结构，AI 只引导思路、不直接给答案，让「建模思路」一步步长出来。</p>
+      <div class="flow" data-od-id="workflow">
+        <span class="f"><b>1</b>读题理解</span>
+        <span class="arrow">→</span>
+        <span class="f"><b>2</b>精读深挖</span>
+        <span class="arrow">→</span>
+        <span class="f"><b>3</b>建模方向</span>
+      </div>
+    </section>
+
+    <section class="grid" data-od-id="screen-list">
+      <a class="scard" href="workbench.html" data-od-id="screen-workbench">
+        <div class="row"><span class="idx">P1</span><span class="chip" style="color: var(--c-blue); border-color: color-mix(in oklch, var(--c-blue) 40%, var(--border));">核心</span></div>
+        <h3>读题工作台</h3>
+        <p>左题右解双栏：题干三种角色高亮（约束 / 已知 / 目标）、划词浮动工具栏、附件表格预览，右侧 AI 解读 / 对话 / 卡片三 Tab。</p>
+        <div class="meta">
+          <div class="chips"><span class="chip">workbench.html</span></div>
+          <span class="go">进入原型
+            <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+          </span>
+        </div>
+      </a>
+
+      <a class="scard" href="settings.html" data-od-id="screen-settings">
+        <div class="row"><span class="idx">P2</span></div>
+        <h3>BYOK 模型设置</h3>
+        <p>接入 DeepSeek / 通义 / Kimi 或自定义端点，API Key 仅存本地浏览器；带连接测试、隐私说明、偏好开关与三分钟新手指引。</p>
+        <div class="meta">
+          <div class="chips"><span class="chip">settings.html</span></div>
+          <span class="go">进入原型
+            <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+          </span>
+        </div>
+      </a>
+
+      <a class="scard" href="knowledge-card.html" data-od-id="screen-knowledge">
+        <div class="row"><span class="idx">P3</span><span class="chip" style="color: var(--c-green); border-color: color-mix(in oklch, var(--c-green) 40%, var(--border));">可嵌入对话</span></div>
+        <h3>知识卡片 · 决策树</h3>
+        <p>可嵌入对话流的卡片形态：深度滑块 + 逐层生长动画，演示「先判断、再分支」的拆解思路，附收藏与相关概念跳转。</p>
+        <div class="meta">
+          <div class="chips"><span class="chip">knowledge-card.html</span></div>
+          <span class="go">进入原型
+            <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+          </span>
+        </div>
+      </a>
+
+      <a class="scard" href="guided-chat.html" data-od-id="screen-guided">
+        <div class="row"><span class="idx">P4</span><span class="chip" style="color: var(--c-amber); border-color: color-mix(in oklch, var(--c-amber) 40%, var(--border));">引导模式</span></div>
+        <h3>对话深挖</h3>
+        <p>精读深挖的全宽对话态：AI 反问式引导（左侧主色边）、知识卡片入口横条、上下文判定卡与防代做提示条。</p>
+        <div class="meta">
+          <div class="chips"><span class="chip">guided-chat.html</span></div>
+          <span class="go">进入原型
+            <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+          </span>
+        </div>
+      </a>
+    </section>
+
+    <footer class="foot">
+      <p>模型视界 · 读题 → 深挖 → 定方向。原型文件归档于 docs/prototypes/。</p>
+    </footer>
+  </main>
+</body>
+</html>

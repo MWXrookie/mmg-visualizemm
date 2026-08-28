@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MMG_VisualizeMM · 读题工作台（原型）</title>
+<style>
+  :root {
+    --color-primary: #2563EB; --color-on-primary: #FFFFFF;
+    --color-secondary: #3B82F6; --color-accent: #EA580C;
+    --color-background: #F8FAFC; --color-foreground: #1E293B;
+    --color-card: #FFFFFF; --color-muted: #E9EFF8;
+    --color-muted-foreground: #475569; --color-border: #E2E8F0;
+    --color-destructive: #DC2626; --color-ring: #2563EB;
+    --role-constraint: #2563EB; --role-target: #16A34A;
+    --role-known: #D97706; --role-assumption: #7C3AED; --role-bg: #64748B;
+    --radius-sm: 6px; --radius-md: 10px; --radius-lg: 14px; --radius-full: 999px;
+    --shadow-card: 0 1px 2px rgba(15,23,42,.06);
+    --shadow-pop: 0 4px 16px rgba(15,23,42,.12);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--color-background); color: var(--color-foreground);
+    font-size: 14px; line-height: 1.6;
+  }
+  /* ===== 顶部导航 ===== */
+  .topnav { height:56px; background:var(--color-card); border-bottom:1px solid var(--color-border); display:flex; align-items:center; padding:0 24px; gap:16px; position:sticky; top:0; z-index:20; }
+  .logo { display:flex; align-items:center; gap:8px; font-weight:700; font-size:16px; }
+  .logo-badge { width:28px; height:28px; border-radius:8px; background:var(--color-primary); display:flex; align-items:center; justify-content:center; color:#fff; font-size:14px; }
+  .nav-spacer { flex:1; }
+  .session-title { font-size:13px; color:var(--color-muted-foreground); }
+  .nav-icon { width:32px; height:32px; border-radius:8px; border:1px solid var(--color-border); background:var(--color-card); display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--color-muted-foreground); }
+  /* ===== 步骤指示器 ===== */
+  .steps { height:32px; display:flex; align-items:center; justify-content:center; gap:0; background:var(--color-card); border-bottom:1px solid var(--color-border); font-size:13px; }
+  .step { display:flex; align-items:center; gap:6px; padding:0 8px; color:var(--color-muted-foreground); }
+  .step .dot { width:8px; height:8px; border-radius:50%; border:1.5px solid #CBD5E1; }
+  .step.done .dot { background:#16A34A; border-color:#16A34A; }
+  .step.done { color:var(--color-foreground); }
+  .step.active .dot { background:var(--color-primary); border-color:var(--color-primary); }
+  .step.active { color:var(--color-foreground); font-weight:600; }
+  .step-line { width:32px; height:2px; background:var(--color-border); }
+  /* ===== 主区双栏 ===== */
+  .main { display:flex; gap:24px; padding:24px; max-width:1440px; margin:0 auto; }
+  .col-left { flex:3; min-width:0; }
+  .col-right { flex:2; min-width:0; }
+  /* ===== 题目区 ===== */
+  .card { background:var(--color-card); border:1px solid var(--color-border); border-radius:var(--radius-md); box-shadow:var(--shadow-card); }
+  .paper { padding:24px; }
+  .paper-head { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:12px; }
+  .paper-title { font-size:18px; font-weight:600; line-height:1.45; }
+  .attach-row { display:flex; gap:8px; margin-top:8px; }
+  .attach { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--color-muted-foreground); background:var(--color-muted); border-radius:var(--radius-full); padding:2px 10px; }
+  .attach .ok { color:#16A34A; font-size:11px; }
+  .paper-body { font-size:16px; line-height:1.8; }
+  .paper-body p { margin-bottom:8px; }
+  .hl-constraint { background:rgba(37,99,235,.15); border-radius:3px; padding:0 1px; }
+  .hl-known { background:rgba(217,119,6,.15); border-radius:3px; padding:0 1px; }
+  .hl-target { background:rgba(22,163,74,.15); border-radius:3px; padding:0 1px; }
+  .sel { background:rgba(37,99,235,.22); box-shadow:0 0 0 1px rgba(37,99,235,.4); border-radius:3px; }
+  /* 角色胶囊标签 */
+  .tag { display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 8px; border-radius:var(--radius-full); font-size:12px; font-weight:600; letter-spacing:.02em; }
+  .tag .pt { width:6px; height:6px; border-radius:50%; }
+  .tag-constraint { color:#1D4ED8; background:rgba(37,99,235,.1); } .tag-constraint .pt { background:var(--role-constraint); }
+  .tag-known { color:#B45309; background:rgba(217,119,6,.12); } .tag-known .pt { background:var(--role-known); }
+  .tag-target { color:#15803D; background:rgba(22,163,74,.12); } .tag-target .pt { background:var(--role-target); }
+  .tag-assumption { color:#6D28D9; background:rgba(124,58,237,.1); } .tag-assumption .pt { background:var(--role-assumption); }
+  .tag-bg { color:#475569; background:rgba(100,116,139,.12); } .tag-bg .pt { background:var(--role-bg); }
+  /* 浮动工具栏 */
+  .toolbar-wrap { position:relative; height:0; }
+  .float-toolbar { position:absolute; top:-44px; left:50%; transform:translateX(-50%); display:flex; gap:4px; background:var(--color-card); border:1px solid var(--color-border); border-radius:8px; padding:4px; box-shadow:var(--shadow-pop); z-index:30; }
+  .btn { height:28px; display:inline-flex; align-items:center; gap:6px; border-radius:6px; padding:0 10px; font-size:13px; font-weight:500; cursor:pointer; border:none; font-family:inherit; }
+  .btn-primary { background:var(--color-primary); color:var(--color-on-primary); }
+  .btn-ghost { background:transparent; color:var(--color-muted-foreground); border:1px solid var(--color-border); }
+  /* 表格预览 */
+  .table-card { margin-top:24px; padding:16px; }
+  .table-card h4 { font-size:14px; font-weight:600; margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+  .tbl { width:100%; border-collapse:collapse; font-size:13px; }
+  .tbl th { background:var(--color-muted); font-weight:600; font-size:13px; text-align:left; padding:8px 12px; position:sticky; top:0; }
+  .tbl td { padding:8px 12px; border-top:1px solid var(--color-border); }
+  .tbl td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .tbl tr:hover td { background:rgba(37,99,235,.04); }
+  /* ===== AI 解读区 ===== */
+  .tabs { display:flex; height:40px; border-bottom:1px solid var(--color-border); margin-bottom:16px; }
+  .tab { flex:1; display:flex; align-items:center; justify-content:center; gap:6px; font-size:14px; color:var(--color-muted-foreground); cursor:pointer; border-bottom:2px solid transparent; }
+  .tab.active { color:var(--color-primary); font-weight:600; border-bottom-color:var(--color-primary); }
+  .ai-card { padding:16px; margin-bottom:16px; }
+  .ai-card h4 { font-size:16px; font-weight:600; margin:12px 0 6px; }
+  .ai-card h4:first-child { margin-top:0; }
+  .ai-card ul { list-style:none; }
+  .ai-card li { padding:2px 0; font-size:14px; display:flex; gap:8px; }
+  .ai-card li::before { content:""; width:6px; height:6px; border-radius:50%; background:var(--color-primary); margin-top:8px; flex-shrink:0; }
+  .footnote { color:var(--color-primary); font-size:12px; vertical-align:super; cursor:pointer; }
+  /* 角色判定卡 */
+  .role-card { border:1px solid rgba(217,119,6,.4); border-left:3px solid var(--role-known); }
+  .role-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .conf { font-size:12px; color:var(--color-muted-foreground); }
+  .conf b { color:#15803D; font-weight:600; }
+  .doubt { font-size:12px; color:var(--color-primary); cursor:pointer; }
+  .role-body { font-size:14px; margin-top:8px; }
+  .role-impact { margin-top:8px; font-size:13px; color:var(--color-muted-foreground); background:var(--color-muted); border-radius:var(--radius-sm); padding:8px 12px; }
+  /* 对话区 */
+  .msg { display:flex; gap:10px; margin-bottom:12px; }
+  .avatar { width:28px; height:28px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:12px; }
+  .avatar.user { background:var(--color-primary); color:#fff; }
+  .avatar.ai { background:var(--color-muted); color:var(--color-muted-foreground); }
+  .bubble { max-width:85%; padding:12px 14px; border-radius:10px; font-size:14px; line-height:1.6; }
+  .msg.user { flex-direction:row-reverse; }
+  .msg.user .bubble { background:var(--color-primary); color:#fff; border-top-right-radius:4px; }
+  .msg.ai .bubble { background:var(--color-card); border:1px solid var(--color-border); border-top-left-radius:4px; }
+  .bubble.guide { border-left:3px solid var(--color-primary); background:rgba(37,99,235,.04); }
+  .msg-actions { display:flex; gap:4px; margin-top:6px; }
+  .mini-btn { width:28px; height:28px; border-radius:6px; border:1px solid var(--color-border); background:var(--color-card); display:flex; align-items:center; justify-content:center; font-size:13px; cursor:pointer; color:var(--color-muted-foreground); }
+  /* 输入区 */
+  .input-bar { display:flex; gap:8px; padding:12px 0 0; border-top:1px solid var(--color-border); margin-top:4px; }
+  .input { flex:1; height:44px; border:1px solid var(--color-border); border-radius:var(--radius-sm); padding:0 12px; font-size:14px; font-family:inherit; }
+  .input:focus { outline:none; border-color:var(--color-ring); box-shadow:0 0 0 2px rgba(37,99,235,.2); }
+  .send { height:44px; padding:0 20px; border-radius:8px; background:var(--color-primary); color:#fff; border:none; font-size:14px; font-weight:600; cursor:pointer; }
+  .btn-accent { background:var(--color-accent); color:#fff; border:none; border-radius:8px; height:36px; font-size:14px; font-weight:600; cursor:pointer; font-family:inherit; }
+  .guide-note { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--color-muted-foreground); background:rgba(37,99,235,.06); border-left:3px solid var(--color-primary); padding:6px 12px; border-radius:0 var(--radius-sm) var(--radius-sm) 0; margin-bottom:8px; }
+  .card-link { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--color-primary); background:var(--color-muted); border-radius:var(--radius-sm); padding:8px 12px; margin:8px 0; cursor:pointer; }
+</style>
+</head>
+<body>
+
+<!-- 顶部导航 56px -->
+<nav class="topnav">
+  <div class="logo"><div class="logo-badge">M</div>MMG_VisualizeMM</div>
+  <div class="session-title">会话：2026 国赛 C 题 · 新能源公交车</div>
+  <div class="nav-spacer"></div>
+  <div class="nav-icon" title="卡片库">◆</div>
+  <div class="nav-icon" title="编程工作台">&lt;/&gt;</div>
+  <div class="nav-icon" title="设置">⚙</div>
+</nav>
+
+<!-- 步骤指示器 -->
+<div class="steps">
+  <div class="step done"><span class="dot"></span>① 读题理解</div>
+  <div class="step-line"></div>
+  <div class="step active"><span class="dot"></span>② 精读深挖</div>
+  <div class="step-line"></div>
+  <div class="step"><span class="dot"></span>③ 建模方向</div>
+</div>
+
+<div class="main">
+  <!-- ======== 左栏 60% 题目区 ======== -->
+  <div class="col-left">
+    <div class="card paper">
+      <div class="paper-head">
+        <div>
+          <div class="paper-title">2026 年高教社杯全国大学生数学建模竞赛 C 题</div>
+          <div class="attach-row">
+            <span class="attach"><span class="ok">✓</span>表1_需求量.xlsx</span>
+            <span class="attach"><span class="ok">✓</span>表2_运营数据.pdf</span>
+            <span class="attach">表3_成本明细.xlsx</span>
+          </div>
+        </div>
+        <button class="btn btn-ghost">编辑</button>
+      </div>
+
+      <div class="paper-body">
+        <p>随着城市交通电动化进程加快，新能源公交车逐步替代传统燃油公交车。某市计划在未来 5 年内分批完成公交车辆的更新替换。</p>
+        <p><span class="tag tag-constraint" style="margin-right:6px"><span class="pt"></span>约束条件</span><span class="hl-constraint">车辆更新须满足各线路最低运营班次要求，且单条线路新能源车占比不超过 80%</span>，以保障极端天气下的运力冗余。</p>
+        <p><span class="tag tag-known" style="margin-right:6px"><span class="pt"></span>已知条件</span>表 1 给出了各线路<span class="hl-known">未来 5 年的日均需求量（单位：车次/日）</span>；表 2 给出燃油车与新能源车的<span class="hl-known">单位运营成本与碳排放强度</span>。</p>
+        <p><span class="tag tag-target" style="margin-right:6px"><span class="pt"></span>目标</span>请建立模型，<span class="hl-target">在满足运力与预算约束的前提下，最小化总成本并评估碳减排效果</span>，为分批更新方案提供决策依据。</p>
+        <p>表 3 提供了不同车型的购置成本、使用年限与残值信息，可作为长期规划参数。</p>
+
+        <!-- 选中态 + 浮动工具栏 -->
+        <div class="toolbar-wrap">
+          <div class="float-toolbar">
+            <button class="btn btn-primary">✦ AI 解读</button>
+            <button class="btn btn-ghost">提问</button>
+            <button class="btn btn-ghost">复制</button>
+          </div>
+        </div>
+        <p><span class="tag tag-known" style="margin-right:6px"><span class="pt"></span>已知条件</span><span class="sel">表 1 给出了各线路未来 5 年的日均需求量（单位：车次/日）</span>——这里的需求量数据是模型输入的核心。</p>
+      </div>
+    </div>
+
+    <!-- 表格预览 -->
+    <div class="card table-card">
+      <h4>📄 附件预览：表1_需求量.xlsx <span class="tag tag-bg"><span class="pt"></span>前 6 行</span></h4>
+      <table class="tbl">
+        <thead><tr><th>线路编号</th><th>线路名称</th><th>第 1 年</th><th>第 2 年</th><th>第 3 年</th><th>第 4 年</th><th>第 5 年</th></tr></thead>
+        <tbody>
+          <tr><td>L01</td><td>1 路</td><td class="num">482</td><td class="num">495</td><td class="num">510</td><td class="num">522</td><td class="num">536</td></tr>
+          <tr><td>L02</td><td>2 路</td><td class="num">356</td><td class="num">361</td><td class="num">368</td><td class="num">374</td><td class="num">381</td></tr>
+          <tr><td>L03</td><td>5 路</td><td class="num">268</td><td class="num">274</td><td class="num">281</td><td class="num">289</td><td class="num">295</td></tr>
+          <tr><td>L04</td><td>9 路</td><td class="num">193</td><td class="num">198</td><td class="num">204</td><td class="num">210</td><td class="num">216</td></tr>
+          <tr><td>L05</td><td>12 路</td><td class="num">145</td><td class="num">149</td><td class="num">153</td><td class="num">157</td><td class="num">162</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ======== 右栏 40% AI 解读区 ======== -->
+  <div class="col-right">
+    <div class="tabs">
+      <div class="tab active">整体解读</div>
+      <div class="tab">对话深挖</div>
+      <div class="tab">知识卡片</div>
+    </div>
+
+    <div class="card ai-card">
+      <h4>题目在问什么</h4>
+      <ul>
+        <li>制定 5 年新能源公交车分批更新方案</li>
+        <li>在运力与预算约束下最小化总成本</li>
+        <li>评估碳减排效果</li>
+      </ul>
+      <h4>数据清单（表 ↔ 题干自动关联）</h4>
+      <ul>
+        <li>表1「日均需求量」↔ 题干「未来 5 年需求量」</li>
+        <li>表2「运营成本/碳排放」↔ 题干「成本与碳排放强度」</li>
+        <li>表3「购置成本/残值」↔ 题干「长期规划参数」</li>
+      </ul>
+      <h4>输出要求</h4>
+      <ul><li>分批方案 + 成本/减排量化评估 + 敏感性分析</li></ul>
+    </div>
+
+    <!-- 角色判定卡（划词触发） -->
+    <div class="card ai-card role-card">
+      <div class="role-head">
+        <span class="tag tag-known"><span class="pt"></span>已知条件</span>
+        <span class="conf">置信度 <b>92%</b></span>
+        <span class="doubt">质疑</span>
+      </div>
+      <div class="role-body">
+        这段给出：各线路未来 5 年的<span style="font-weight:600">日均需求量</span>，单位车次/日——是模型的<span style="font-weight:600">输入数据</span>，直接决定每条线路需要配置的最小车辆数。
+      </div>
+      <div class="role-impact">对建模的影响：需求量 × 班次换算 = 车辆需求下界，将作为第一组约束进入优化模型<span class="footnote">[1]</span><span class="footnote">[2]</span></div>
+    </div>
+
+    <!-- 对话区 -->
+    <div class="msg ai">
+      <div class="avatar ai">AI</div>
+      <div class="bubble">
+        你已经明确了「需求量」是已知条件。接下来思考：<b>最小化总成本</b>这个目标下，哪些变量是你要决策的？
+        <div class="msg-actions"><button class="mini-btn">👍</button><button class="mini-btn">👎</button><button class="mini-btn">↻</button></div>
+      </div>
+    </div>
+    <div class="msg user">
+      <div class="avatar user">我</div>
+      <div class="bubble">应该是「各线路替换成新能源车的数量」？</div>
+    </div>
+    <div class="msg ai">
+      <div class="avatar ai">AI</div>
+      <div class="bubble guide">
+        💡 对，方向正确。再反问一步：约束里说「单条线路新能源车占比不超过 80%」——这个上限会如何限制你的决策变量？试着把约束写成不等式。
+        <div class="msg-actions"><button class="mini-btn">👍</button><button class="mini-btn">👎</button><button class="mini-btn">↻</button></div>
+      </div>
+    </div>
+
+    <div class="card-link">💡 相关概念：整数规划 → <span style="font-weight:600">查看知识卡片</span></div>
+
+    <!-- 深挖模式入口（橙色 CTA，最高优先级引导） -->
+    <div style="margin-bottom:8px;">
+      <button class="btn-accent" style="width:100%;">➜ 进入深挖模式（完整建模引导）</button>
+    </div>
+
+    <!-- 输入区 -->
+    <div class="guide-note">🔒 引导模式已开启：AI 只引导思路，不直接给答案</div>
+    <div class="input-bar">
+      <input class="input" placeholder="提出你的问题，或先听听 AI 的反问…" />
+      <button class="send">发送</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

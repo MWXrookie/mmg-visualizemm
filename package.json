@@ -1,0 +1,26 @@
+{
+  "name": "mmg-visualizemm",
+  "version": "0.1.0",
+  "private": true,
+  "description": "面向数学建模新手的「AI 辅助读题 + 自主建模」辅导工具（开源自托管 + BYOK）",
+  "type": "module",
+  "scripts": {
+    "dev:web": "vite --config web/vite.config.js",
+    "dev:server": "node --use-system-ca server/index.js",
+    "build": "vite build --config web/vite.config.js",
+    "start": "node --use-system-ca server/index.js",
+    "dev": "concurrently -n WEB,SRV -c blue,green \"npm:dev:web\" \"npm:dev:server\""
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "express": "^4.21.2",
+    "pdf-parse": "^2.4.5"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vite": "^6.0.7"
+  }
+}
