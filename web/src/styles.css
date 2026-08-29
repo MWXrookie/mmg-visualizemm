@@ -177,6 +177,29 @@ body {
 .paper-body p { margin-bottom: 8px; }
 .paper-body::selection, .paper-body p::selection { background: rgba(37, 99, 235, 0.22); }
 
+/* Markdown 题干排版 */
+.markdown-body h1 { font-size: 20px; font-weight: 700; margin: 16px 0 8px; }
+.markdown-body h2 { font-size: 18px; font-weight: 700; margin: 14px 0 8px; }
+.markdown-body h3 { font-size: 16px; font-weight: 600; margin: 12px 0 6px; }
+.markdown-body h4 { font-size: 15px; font-weight: 600; margin: 10px 0 6px; }
+.markdown-body ul, .markdown-body ol { margin: 6px 0 10px; padding-left: 22px; }
+.markdown-body li { margin-bottom: 3px; }
+.markdown-body blockquote {
+  border-left: 3px solid var(--color-primary); background: rgba(37, 99, 235, 0.05);
+  padding: 6px 14px; margin: 8px 0; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; color: var(--color-muted-foreground);
+}
+.markdown-body strong { font-weight: 700; }
+.markdown-body em { font-style: italic; }
+.markdown-body hr { border: none; border-top: 1px solid var(--color-border); margin: 14px 0; }
+.markdown-body code {
+  background: var(--color-muted); border-radius: 4px; padding: 1px 5px; font-family: "JetBrains Mono", Consolas, monospace; font-size: 13px;
+}
+.markdown-body pre { background: #0f172a; color: #e2e8f0; border-radius: 8px; padding: 12px; overflow-x: auto; margin: 8px 0; }
+.markdown-body pre code { background: none; color: inherit; padding: 0; }
+.markdown-body table { border-collapse: collapse; margin: 10px 0; font-size: 13px; }
+.markdown-body th, .markdown-body td { border: 1px solid var(--color-border); padding: 6px 10px; text-align: left; }
+.markdown-body th { background: var(--color-muted); font-weight: 600; }
+
 .role-card { padding: 16px; margin-bottom: 16px; border-left: 3px solid #64748b; }
 .role-card.role-constraint { border-left-color: #2563eb; }
 .role-card.role-target { border-left-color: #16a34a; }

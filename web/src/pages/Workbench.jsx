@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { marked } from 'marked'
 import { chat, parseFile, attachSummary } from '../api.js'
 import { CONCEPT_KEYWORDS } from './Cards.jsx'
 import { saveSession, loadSession, clearSession } from '../store.js'
@@ -41,6 +42,23 @@ function extractJson(text) {
 function roleKey(role) {
   const map = { '约束条件': 'constraint', '目标': 'target', '已知条件': 'known', '假设': 'assumption', '背景信息': 'bg' }
   return map[role] || 'bg'
+}
+
+/** 题干 Markdown 渲染（含双向引用高亮） */
+function renderProblem(problemText, quoteHl) {
+  let html = ''
+  try {
+    html = marked.parse(problemText || '')
+  } catch {
+    html = problemText || ''
+  }
+  if (quoteHl) {
+    const esc = quoteHl.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    if (html.includes(esc)) {
+      html = html.split(esc).join(`<mark class="quote-hl">${esc}</mark>`)
+    }
+  }
+  return html
 }
 
 /** 对话概念检测：命中词表时显示知识卡片入口 */
@@ -514,24 +532,14 @@ export default function Workbench({ settings, onOpenCards }) {
                 {loading ? 'AI 解读中…' : '✨ AI 整体解读'}
               </button>
             </div>
-            <div className="paper-body" ref={textRef} onMouseUp={onSelect} onKeyUp={onSelect} tabIndex={0}>
-              {problemText.split('\n').map((line, i) => {
-                // 双向引用：答案引用的原句在题目中高亮
-                if (quoteHl) {
-                  const idx = line.indexOf(quoteHl)
-                  if (idx >= 0) {
-                    return (
-                      <p key={i}>
-                        {line.slice(0, idx)}
-                        <mark className="quote-hl">{quoteHl}</mark>
-                        {line.slice(idx + quoteHl.length)}
-                      </p>
-                    )
-                  }
-                }
-                return <p key={i}>{line || '\u00A0'}</p>
-              })}
-            </div>
+            <div
+              className="paper-body markdown-body"
+              ref={textRef}
+              onMouseUp={onSelect}
+              onKeyUp={onSelect}
+              tabIndex={0}
+              dangerouslySetInnerHTML={{ __html: renderProblem(problemText, quoteHl) }}
+            />
           </div>
 
           {/* 附件表格预览 */}
