@@ -66,7 +66,7 @@
 
 ## 产物
 
-- `docs/prototypes/startup-byok.html` / `workbench-byok.html` / `guided-chat-byok.html` / `settings-byok.html` — 4 页原型（浅色+深色）
+- `docs/prototypes/byok/`（workbench / guided-chat / settings / startup，浅色+深色）— 4 页新版原型
 - `docs/prototypes/generated/` — OpenDesign 直接落盘区（原始产物）
 
 ## 待办/注意

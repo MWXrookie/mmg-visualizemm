@@ -92,4 +92,4 @@
 
 ## 生成后回填
 
-产出后请：①截图归档 `docs/prototypes/screenshots/`；②如有与 DESIGN.md 冲突的视觉选择，单独列出待决策；③本目录 `一致性检查报告.md` 同步更新。
+产出后请：①截图归档对应版本的 `screenshots/`（新版 `byok/screenshots/`）；②如有与 DESIGN.md 冲突的视觉选择，单独列出待决策；③本目录 `legacy/一致性检查报告.md` 同步更新。

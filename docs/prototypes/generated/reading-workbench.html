@@ -1,0 +1,693 @@
+<!doctype html>
+<!--- reading-workbench · 数学建模 AI 辅导工具 — 读题工作台（沉浸态 + 空态） -->
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>读题工作台 · 数学建模 AI 辅导工具</title>
+<style>
+  /* ═══ design tokens ═══════════════════════════════════════════════
+     浅色(默认) / 深色 双主题 via html[data-theme] */
+  :root {
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 14px;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+                 'Hiragino Sans GB', 'Microsoft YaHei', system-ui, sans-serif;
+    --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  }
+
+  html[data-theme="light"] {
+    --bg:       #F6F8FB;
+    --surface:  #FFFFFF;
+    --fg:       #1E293B;
+    --muted:    #64748B;
+    --border:   #E5EAF1;
+    --accent:   #2563EB;
+    --constraint: #2563EB;   /* 约束 · 蓝 */
+    --known:    #B45309;     /* 已知 · 琥珀 */
+    --goal:     #15803D;     /* 目标 · 绿 */
+    --ok:       #16A34A;
+    --err:      #DC2626;
+  }
+  html[data-theme="dark"] {
+    --bg:       #0E1526;
+    --surface:  #16203A;
+    --fg:       #E2E8F0;
+    --muted:    #94A3B8;
+    --border:   #2A3857;
+    --accent:   #3B82F6;
+    --constraint: #60A5FA;
+    --known:    #F0A84C;
+    --goal:     #4ADE80;
+    --ok:       #22C55E;
+    --err:      #F87171;
+  }
+
+  /* 派生（仅 color-mix） */
+  html[data-theme] {
+    --accent-grad1: var(--accent);
+    --accent-grad2: color-mix(in oklch, var(--accent) 82%, #1D4ED8);
+    --accent-ink:   #fff;
+    --border-soft:  color-mix(in oklch, var(--border) 60%, transparent);
+    --surface-2:    color-mix(in oklch, var(--bg) 55%, var(--surface) 45%);
+    --constraint-bg: color-mix(in oklch, var(--constraint) 12%, transparent);
+    --known-bg:      color-mix(in oklch, var(--known) 13%, transparent);
+    --goal-bg:       color-mix(in oklch, var(--goal) 13%, transparent);
+    --shadow: 0 1px 2px rgb(15 23 42 / .05), 0 8px 24px -12px rgb(15 23 42 / .12);
+    --shadow-lg: 0 2px 6px rgb(15 23 42 / .08), 0 18px 40px -18px rgb(15 23 42 / .22);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--fg);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+  button { font-family: inherit; cursor: pointer; }
+  svg { display: block; }
+
+  a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  .icon { width: 18px; height: 18px; stroke: currentColor; fill: none;
+          stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* ═══ 顶部栏 ═══ */
+  .topbar {
+    position: fixed; inset: 0 0 auto 0; z-index: 30;
+    height: 56px; padding: 0 18px;
+    display: flex; align-items: center; gap: 14px;
+    background: color-mix(in oklch, var(--surface) 88%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .topbar-back {
+    width: 38px; height: 38px; border: 1px solid var(--border);
+    border-radius: var(--radius-md); background: var(--surface); color: var(--fg);
+    display: grid; place-items: center; transition: border-color .15s, background .15s;
+  }
+  .topbar-back:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft, color-mix(in oklch, var(--accent) 10%, transparent)); }
+  .topbar-back:active { background: color-mix(in oklch, var(--accent) 18%, transparent); }
+  .tb-title { font-size: 16px; font-weight: 650; letter-spacing: .2px; }
+  .tb-tag {
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: .5px;
+    color: var(--accent); background: color-mix(in oklch, var(--accent) 12%, transparent);
+    padding: 2px 9px; border-radius: 999px; border: 1px solid color-mix(in oklch, var(--accent) 25%, transparent);
+  }
+  .tb-spacer { flex: 1; }
+  .tb-save {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 8px 15px; border-radius: var(--radius-md);
+    background: var(--accent); color: var(--accent-ink);
+    border: 1px solid var(--accent); font-size: 13.5px; font-weight: 600;
+    box-shadow: 0 1px 0 color-mix(in oklch, #fff 18%, transparent) inset, var(--shadow);
+    transition: filter .15s, transform .08s, background .15s;
+  }
+  .tb-save:hover { filter: brightness(1.06); }
+  .tb-save:active { transform: translateY(1px); }
+  .icon-btn {
+    width: 38px; height: 38px; border: 1px solid var(--border); border-radius: var(--radius-md);
+    background: var(--surface); color: var(--muted);
+    display: grid; place-items: center; transition: border-color .15s, color .15s, background .15s;
+  }
+  .icon-btn:hover { border-color: var(--border); color: var(--fg); background: var(--surface-2); }
+  .icon-btn:active { background: color-mix(in oklch, var(--fg) 6%, transparent); }
+
+  /* ═══ 布局骨架 ═══ */
+  .app { display: flex; height: 100%; padding-top: 56px; }
+
+  /* 左栏已收起 */
+  .rail-collapsed {
+    width: 52px; flex: 0 0 52px;
+    border-right: 1px solid var(--border-soft);
+    background: color-mix(in oklch, var(--surface) 72%, var(--bg) 28%);
+    padding: 10px 0;
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+  }
+  .rail-collapsed .icon-btn { width: 36px; height: 36px; }
+
+  .stage { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 40px minmax(0, 30%); min-width: 0; }
+
+  /* ═══ 主工作区 ═══ */
+  .workspace {
+    display: flex; flex-direction: column; min-width: 0; overflow: hidden;
+  }
+  .ws-scroll { flex: 1; overflow-y: auto; padding: 28px 36px 40px; }
+
+  .ai-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 9px 18px; border-radius: 10px;
+    color: #fff; font-size: 14px; font-weight: 600;
+    border: none;
+    background: linear-gradient(120deg, var(--accent-grad1), var(--accent-grad2));
+    box-shadow: 0 4px 14px -6px color-mix(in oklch, var(--accent) 55%, transparent);
+    transition: filter .15s, transform .08s;
+  }
+  .ai-btn:hover { filter: brightness(1.05) saturate(1.05); }
+  .ai-btn:active { transform: translateY(1px); }
+
+  .passage-block {
+    margin-top: 22px; background: var(--surface);
+    border: 1px solid var(--border-soft); border-radius: var(--radius-lg);
+    padding: 26px 30px;
+  }
+  .section-label {
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--muted); margin: 0 0 12px;
+  }
+  .passage { white-space: pre-wrap; font-size: 15.5px; line-height: 1.85; color: var(--fg); }
+  .paragraph { margin: 0 0 16px; }
+
+  /* 角色语义色高亮 */
+  .hl-constraint { background: var(--constraint-bg); color: var(--constraint);
+    border-radius: 3px; padding: 0 2px;
+    box-shadow: 0 0 0 1px color-mix(in oklch, var(--constraint) 28%, transparent); }
+  .hl-known   { background: var(--known-bg); color: var(--known);
+    border-radius: 3px; padding: 0 2px;
+    box-shadow: 0 0 0 1px color-mix(in oklch, var(--known) 30%, transparent); }
+  .hl-goal    { background: var(--goal-bg); color: var(--goal);
+    border-radius: 3px; padding: 0 2px;
+    box-shadow: 0 0 0 1px color-mix(in oklch, var(--goal) 30%, transparent); }
+
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 18px; padding-top: 14px;
+            border-top: 1px dashed var(--border-soft); }
+  .legend-item { display: inline-flex; align-items: center; gap: 7px;
+                 font-size: 12.5px; color: var(--muted); }
+  .legend-dot { width: 9px; height: 9px; border-radius: 3px; }
+  .rule-constraint { background: var(--constraint); }
+  .rule-known   { background: var(--known); }
+  .rule-goal    { background: var(--goal); }
+
+  /* 浮动工具栏（选中态） */
+  .sel {
+    position: relative; border: 1.5px solid var(--accent); border-radius: 4px;
+    background: color-mix(in oklch, var(--accent) 9%, transparent); cursor: pointer;
+  }
+  .toolbar {
+    position: absolute; left: 0; top: -46px; z-index: 20;
+    display: none; align-items: center; gap: 4px;
+    background: var(--fg); color: var(--bg);
+    border-radius: 10px; padding: 5px;
+    box-shadow: var(--shadow-lg);
+  }
+  .sel .toolbar { display: flex; }
+  .toolbar-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    border: none; background: transparent; color: var(--bg);
+    padding: 6px 10px; border-radius: 7px; font-size: 12.5px; font-weight: 550;
+  }
+  .toolbar-btn:hover { background: color-mix(in oklch, #fff 16%, transparent); }
+  .toolbar-btn:active { background: color-mix(in oklch, #fff 24%, transparent); }
+
+  /* 附件表格预览 */
+  .attachments { margin-top: 22px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .attach-card { background: var(--surface); border: 1px solid var(--border-soft);
+    border-radius: var(--radius-lg); padding: 16px 18px; }
+  .attach-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .attach-name { font-size: 14px; font-weight: 650; }
+  .attach-badge { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted);
+    border: 1px solid var(--border); padding: 1px 7px; border-radius: 6px; }
+  .tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .tbl th, .tbl td { padding: 7px 9px; border: 1px solid var(--border-soft); text-align: left; white-space: nowrap; }
+  .tbl th { font-weight: 600; color: var(--muted); background: var(--surface-2); font-size: 11.5px; }
+  .tbl td.num, .tbl th.num { text-align: right; font-family: var(--font-mono); }
+
+  /* ═══ 书签竖栏 ═══ */
+  .bookmark-rail {
+    width: 40px; flex: 0 0 40px;
+    border-left: 1px solid var(--border-soft); border-right: 1px solid var(--border-soft);
+    background: color-mix(in oklch, var(--surface) 70%, var(--bg) 30%);
+    display: flex; flex-direction: column; align-items: center; gap: 12px; padding-top: 14px;
+  }
+  .bm {
+    writing-mode: vertical-rl; width: 30px; padding: 9px 4px;
+    font-size: 12.5px; font-weight: 600; letter-spacing: 1.5px;
+    border-radius: 8px; border: 1px solid var(--border); background: var(--surface);
+    color: var(--muted); display: flex; align-items: center; justify-content: center; gap: 6px;
+    backface-visibility: hidden;
+    transition: border-color .15s, color .15s, background .15s;
+  }
+  .bm:hover { border-color: var(--accent); color: var(--accent); background: color-mix(in oklch, var(--accent) 9%, transparent); }
+  .bm.active { border-color: var(--accent); color: #fff;
+    background: linear-gradient(160deg, var(--accent-grad1), var(--accent-grad2)); }
+  .bm-more { border-style: dashed; }
+  .bm-more.active {}
+  .bm .icon { transform: rotate(0deg); }
+
+  /* ═══ AI 面板 ═══ */
+  .ai-panel { display: flex; flex-direction: column; min-width: 0; overflow: hidden; background: var(--surface-2); }
+  .panel-head { padding: 18px 20px 14px; border-bottom: 1px solid var(--border-soft); }
+  .panel-eyebrow { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 1.6px;
+                   text-transform: uppercase; color: var(--accent); font-weight: 600; }
+  .panel-title { font-size: 17px; font-weight: 700; margin: 3px 0 2px; }
+  .panel-sub { font-size: 12.5px; color: var(--muted); }
+  .panel-scroll { flex: 1; overflow-y: auto; padding: 18px 20px 28px; }
+  .panel-foot { padding: 12px 20px; border-top: 1px solid var(--border-soft);
+                display: flex; gap: 8px; }
+  .foot-btn {
+    flex: 1; padding: 9px 0; text-align: center; border-radius: var(--radius-md);
+    font-size: 13px; font-weight: 600; border: 1px solid var(--border); background: var(--surface); color: var(--fg);
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    transition: border-color .15s, color .15s, background .15s;
+  }
+  .foot-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .foot-btn:active { background: color-mix(in oklch, var(--accent) 10%, transparent); }
+
+  /* 角色判定卡 */
+  .role-card { background: var(--surface); border: 1px solid var(--border-soft);
+    border-radius: var(--radius-md); padding: 16px; box-shadow: var(--shadow); }
+  .role-top { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .role-badge {
+    font-family: var(--font-mono); font-size: 12px; font-weight: 650;
+    padding: 3px 10px; border-radius: 999px; border: 1px solid;
+  }
+  .r-constraint .role-badge { color: var(--constraint); border-color: color-mix(in oklch, var(--constraint) 40%, transparent); background: var(--constraint-bg); }
+  .r-known .role-badge { color: var(--known); border-color: color-mix(in oklch, var(--known) 42%, transparent); background: var(--known-bg); }
+  .r-goal .role-badge { color: var(--goal); border-color: color-mix(in oklch, var(--goal) 42%, transparent); background: var(--goal-bg); }
+  .conf {
+    display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted);
+    font-family: var(--font-mono); }
+  .conf-track { width: 74px; height: 5px; background: var(--border); border-radius: 99px; overflow: hidden; }
+  .conf-fill { height: 100%; border-radius: 99px; }
+  .r-constraint .conf-fill { background: var(--constraint); }
+  .r-known .conf-fill { background: var(--known); }
+  .r-goal .conf-fill { background: var(--goal); }
+  .role-impact { font-size: 13.5px; color: var(--fg); margin: 4px 0 10px; }
+  .role-quote {
+    font-size: 12.5px; color: var(--muted); background: var(--surface-2);
+    border-left: 2px solid var(--border); padding: 8px 12px; border-radius: 0 8px 8px 0;
+    margin-bottom: 12px; }
+  .role-actions { display: flex; gap: 8px; }
+  .mini-btn {
+    padding: 6px 11px; border-radius: var(--radius-sm); font-size: 12.5px; font-weight: 550;
+    border: 1px solid var(--border); background: var(--surface); color: var(--fg);
+    display: inline-flex; align-items: center; gap: 5px;
+    transition: border-color .15s, color .15s, background .15s;
+  }
+  .mini-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .mini-btn:active { background: color-mix(in oklch, var(--accent) 10%, transparent); }
+
+  /* 知识卡片列表 */
+  .card-list { display: flex; flex-direction: column; gap: 12px; }
+  .kcard { background: var(--surface); border: 1px solid var(--border-soft);
+    border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--shadow); }
+  .kcard-head { display: flex; align-items: center; gap: 10px; padding: 13px 15px; cursor: pointer; }
+  .kcard-head:hover { background: var(--surface-2); }
+  .kcard-tag { width: 32px; height: 32px; border-radius: 9px; flex: 0 0 32px;
+    display: grid; place-items: center; color: #fff; font-weight: 700; font-family: var(--font-mono); font-size: 13px;
+    background: linear-gradient(135deg, var(--accent-grad1), var(--accent-grad2)); }
+  .kcard-title { font-size: 14px; font-weight: 650; }
+  .kcard-desc { font-size: 12px; color: var(--muted); }
+  .chev { margin-left: auto; width: 16px; height: 16px; color: var(--muted);
+          transition: transform .2s; }
+  .kcard.open .chev { transform: rotate(180deg); }
+  .kcard-body { display: none; padding: 4px 15px 15px; font-size: 13px; color: var(--fg); }
+  .kcard.open .kcard-body { display: block; }
+  .kcard-body ul { margin: 0; padding-left: 18px; }
+  .kcard-body li { margin: 5px 0; }
+
+  /* ═══ 空状态 ═══ */
+  .empty { display: none; height: 100%; flex-direction: column; overflow-y: auto; padding: 60px 36px; }
+  body[data-view="empty"] .workspace > .ws-scroll { display: none; }
+  body[data-view="empty"] .empty { display: flex; }
+  body[data-view="immersive"] .empty { display: none; }
+  .empty-title { font-size: 22px; font-weight: 700; margin: 0 0 6px; }
+  .empty-sub { color: var(--muted); font-size: 14px; margin: 0 0 34px; }
+  .empty-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; max-width: 760px; }
+  .drop-btn {
+    border: 2px dashed var(--border); border-radius: var(--radius-lg); background: var(--surface);
+    padding: 46px 24px; text-align: center; color: var(--fg);
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+    transition: border-color .18s, background .18s, transform .08s;
+  }
+  .drop-btn:hover { border-color: var(--accent); background: color-mix(in oklch, var(--accent) 7%, var(--surface)); }
+  .drop-btn:active { transform: scale(.99); }
+  .drop-icon { width: 44px; height: 44px; border-radius: 14px; color: var(--accent);
+    background: color-mix(in oklch, var(--accent) 12%, transparent);
+    display: grid; place-items: center; }
+  .drop-btn .icon { width: 24px; height: 24px; }
+  .drop-label { font-size: 16px; font-weight: 650; }
+  .drop-hint { font-size: 12.5px; color: var(--muted); }
+
+  /* 主题切换按钮 */
+  .theme-toggle { position: fixed; right: 16px; bottom: 16px; z-index: 40; }
+
+  /* 响应式 */
+  @media (max-width: 1080px) {
+    .stage { grid-template-columns: minmax(0, 62%) minmax(0, 38%); }
+    .attachments { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 880px) {
+    body { overflow: auto; }
+    .app, .workspace, .ai-panel { height: auto; }
+    .rail-collapsed, .bookmark-rail { display: none; }
+    .stage { grid-template-columns: 1fr; display: block; }
+    .ai-panel { min-height: 60vh; border-top: 1px solid var(--border-soft); }
+    .ws-scroll { padding: 20px; }
+  }
+</style>
+</head>
+<body data-view="immersive">
+
+<!-- ═══ 顶部栏 ═══ -->
+<header class="topbar">
+  <a class="topbar-back" href="#back" data-od-id="page-back" title="返回">
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+  </a>
+  <h1 class="tb-title">2024 CUMCM · 大学生医保与门诊数据建模</h1>
+  <span class="tb-tag" data-od-id="status-tag">精读中</span>
+  <div class="tb-spacer"></div>
+  <button class="icon-btn" data-od-id="view-toggle" title="切换主区视图">
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+  </button>
+  <button class="tb-save" data-od-id="save-btn">
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14v18l-7-5-7 5V3z"/></svg>
+    保存
+  </button>
+</header>
+
+<div class="app">
+
+  <!-- ═══ 左栏（已收起） ═══ -->
+  <aside class="rail-collapsed" data-od-id="collapsed-rail">
+    <button class="icon-btn" data-od-id="rail-home" title="首页">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5M5 9.5V21h14V9.5"/></svg>
+    </button>
+    <button class="icon-btn" data-od-id="rail-read" title="读题工作台">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM4 12h16M9 5v14"/></svg>
+    </button>
+    <button class="icon-btn" data-od-id="rail-model" title="模型设置">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3zM12 3v18M4 7.5l8 4.5M20 7.5l-8 4.5"/></svg>
+    </button>
+    <button class="icon-btn" data-od-id="rail-report" title="论文">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7zM14 3v5h5M10 13h5M10 17h5"/></svg>
+    </button>
+  </aside>
+
+  <div class="stage">
+
+    <!-- ═══════════ 主工作区 ═══════════ -->
+    <section class="workspace" data-od-id="main-workspace">
+      <div class="ws-scroll">
+        <button class="ai-btn" data-od-id="ai-overview-btn">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8L19 16z"/></svg>
+          AI 整体解读
+        </button>
+
+        <div class="passage-block">
+          <p class="section-label" data-od-id="passage-label">题干正文</p>
+          <div class="passage">
+            <p class="paragraph">
+              大学生医保制度是我国社会保障体系的重要组成部分。设某高校共有<span class="hl-goal" data-role="goal" data-od-id="hl-goal-1">20800 名在校学生</span>，
+              其中在校学生参保率为 <span class="hl-known" data-role="known" data-od-id="hl-known-1">92%</span>，全体大学生参保率为 78%。
+              试根据附件数据，<span class="hl-goal" data-role="goal" data-od-id="hl-goal-2">建立数学模型预测下一年度的门诊医疗总费用</span>。
+            </p>
+            <p class="paragraph">
+              已知学校门诊合作医疗定点机构共 <span class="hl-constraint" data-role="constraint" data-od-id="hl-constraint-1">签约住院治疗医院 3 家</span>、
+              <span class="hl-constraint" data-role="constraint" data-od-id="hl-constraint-2">门急诊协议单位 2 家</span>。
+              学生每学期需缴纳医疗保险费 <span class="hl-known" data-role="known" data-od-id="hl-known-2">120 元/人</span>，
+              报销比例随就诊医院级别变化，其中对辖区内定点医疗机构报销 <span class="hl-known" data-role="known" data-od-id="hl-known-3">80%</span>。
+            </p>
+            <p class="paragraph sel" tabindex="0" data-od-id="hl-select" role="button" aria-label="选中：建立数学模型预测下一年度门诊医疗总费用">
+              试根据附件中 2022–2023 两年的门诊就诊记录，<span class="hl-constraint" data-role="constraint">按月度统计就诊人次与医疗费用结构</span>，
+              建立数学模型，<span class="hl-goal" data-role="goal">预测下一年度的门诊医疗总费用</span>，并分析其影响因素。
+              <span class="toolbar">
+                <button class="toolbar-btn" data-od-id="toolbar-ai"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/></svg>AI解读</button>
+                <button class="toolbar-btn" data-od-id="toolbar-ask"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v12h-9l-5 4v-4H4z"/></svg>提问</button>
+                <button class="toolbar-btn" data-od-id="toolbar-copy"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 9h11v11H9zM15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></svg>复制</button>
+              </span>
+            </p>
+            <div class="legend">
+              <span class="legend-item"><span class="legend-dot rule-constraint"></span>约束限制</span>
+              <span class="legend-item"><span class="legend-dot rule-known"></span>已知数据</span>
+              <span class="legend-item"><span class="legend-dot rule-goal"></span>求解目标</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="attachments" data-od-id="attachments">
+          <div class="attach-card" data-od-id="attach-table-1">
+            <div class="attach-head">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" style="color:var(--muted)"><path d="M3 5h18v14H3zM3 9h18M3 15h18M9 5v14M15 5v14"/></svg>
+              <span class="attach-name">表 1 · 月度门诊就诊汇总</span>
+              <span class="attach-badge">附件</span>
+            </div>
+            <table class="tbl">
+              <thead><tr><th>月份</th><th class="num">就诊人次</th><th class="num">总费用(万)</th></tr></thead>
+              <tbody>
+                <tr><td>2022-01</td><td class="num">18,420</td><td class="num">216.4</td></tr>
+                <tr><td>2022-02</td><td class="num">12,108</td><td class="num">142.0</td></tr>
+                <tr><td>2022-03</td><td class="num">21,376</td><td class="num">251.8</td></tr>
+                <tr><td>2022-12</td><td class="num">24,905</td><td class="num">293.1</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="attach-card" data-od-id="attach-table-2">
+            <div class="attach-head">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" style="color:var(--muted)"><path d="M3 5h18v14H3zM3 9h18M3 15h18M9 5v14M15 5v14"/></svg>
+              <span class="attach-name">表 2 · 医保定点机构指标</span>
+              <span class="attach-badge">附件</span>
+            </div>
+            <table class="tbl">
+              <thead><tr><th>机构</th><th class="num">级别</th><th class="num">报销比例</th></tr></thead>
+              <tbody>
+                <tr><td>校门诊部</td><td class="num">一级</td><td class="num">80%</td></tr>
+                <tr><td>区中心医院</td><td class="num">二级</td><td class="num">70%</td></tr>
+                <tr><td>三甲医院</td><td class="num">三级</td><td class="num">55%</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ 主区空状态 ═══ -->
+      <div class="empty" data-od-id="empty-state">
+        <h2 class="empty-title">开始读题</h2>
+        <p class="empty-sub">上传题目与数据附件，AI 将自动标出约束、已知与目标。</p>
+        <div class="empty-grid">
+          <button class="drop-btn" data-od-id="drop-title">
+            <span class="drop-icon"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16M7 5l5 6 5-6M5 12h14v7H5z"/></svg></span>
+            <span class="drop-label">上传题干</span>
+            <span class="drop-hint">支持图片 / PDF / txt</span>
+          </button>
+          <button class="drop-btn" data-od-id="drop-attach">
+            <span class="drop-icon"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18v14H3zM3 9h18M3 15h18M9 5v14M15 5v14"/></svg></span>
+            <span class="drop-label">上传附件</span>
+            <span class="drop-hint">表格数据 Excel / CSV</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ 书签竖栏 ═══ -->
+    <aside class="bookmark-rail" data-od-id="bookmark-rail">
+      <button class="bm active" data-panel="reading" data-od-id="bm-reading">
+        选段精读
+      </button>
+      <button class="bm" data-panel="cards" data-od-id="bm-cards">
+        知识卡片
+      </button>
+      <button class="bm bm-more" data-panel="more" data-od-id="bm-more">
+        更多
+      </button>
+    </aside>
+
+    <!-- ═══ AI 面板 ═══ -->
+    <aside class="ai-panel" data-od-id="ai-panel">
+      <div class="panel-head" data-panel-target="reading">
+        <div class="panel-eyebrow">AI 精读</div>
+        <div class="panel-title" data-od-id="panel-reading-title">选段精读</div>
+        <div class="panel-sub" data-od-id="panel-reading-sub">针对「预测下一年度门诊总费用」这句的逐角色判定</div>
+      </div>
+
+      <div class="panel-scroll" data-slot="reading">
+        <!-- 角色判定卡 1 -->
+        <div class="role-card r-goal" data-od-id="role-card-goal">
+          <div class="role-top">
+            <span class="role-badge">目标</span>
+            <span class="conf"><span class="conf-track"><span class="conf-fill" style="width:96%"></span></span>96%</span>
+          </div>
+          <div class="role-impact">这是本题的<strong>求解目标</strong>：需输出「下一年度门诊医疗总费用」的数值预测。</div>
+          <div class="role-quote">“预测下一年度的门诊医疗总费用”</div>
+          <div class="role-actions">
+            <button class="mini-btn" data-od-id="doubt-goal"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a4 4 0 0 0-4 4H6l-2 4h16l-2-4h-2a4 4 0 0 0-4-4zM5 15a7 7 0 0 0 14 0"/></svg>质疑</button>
+            <button class="mini-btn" data-od-id="deepen-goal"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg>深挖</button>
+          </div>
+        </div>
+
+        <!-- 角色判定卡 2 -->
+        <div class="role-card r-constraint" data-od-id="role-card-constraint" style="margin-top:12px">
+          <div class="role-top">
+            <span class="role-badge">约束</span>
+            <span class="conf"><span class="conf-track"><span class="conf-fill" style="width:88%"></span></span>88%</span>
+          </div>
+          <div class="role-impact">「按月统计就诊人次与费用结构」决定了数据聚合口径，是建模的前提约束。</div>
+          <div class="role-quote">“按月度统计就诊人次与医疗费用结构”</div>
+          <div class="role-actions">
+            <button class="mini-btn" data-od-id="doubt-constraint"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a4 4 0 0 0-4 4H6l-2 4h16l-2-4h-2a4 4 0 0 0-4-4zM5 15a7 7 0 0 0 14 0"/></svg>质疑</button>
+            <button class="mini-btn" data-od-id="deepen-constraint"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg>深挖</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-head" data-panel-target="cards" style="display:none">
+        <div class="panel-eyebrow">知识库</div>
+        <div class="panel-title" data-od-id="panel-cards-title">知识卡片</div>
+        <div class="panel-sub">本题可能用到的建模方法</div>
+      </div>
+
+      <div class="panel-scroll" data-slot="cards" style="display:none">
+        <div class="card-list">
+          <div class="kcard open" data-od-id="kcard-tree">
+            <div class="kcard-head">
+              <span class="kcard-tag">树</span>
+              <div>
+                <div class="kcard-title">决策树</div>
+                <div class="kcard-desc">用于分类关键变量与特征重要性排序</div>
+              </div>
+              <svg class="icon chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <div class="kcard-body">
+              <ul>
+                <li>按就诊人次、费用结构等特征递归划分样本。</li>
+                <li>输出可解释的规则，辅助判断影响因素。</li>
+              </ul>
+            </div>
+          </div>
+          <div class="kcard" data-od-id="kcard-regression">
+            <div class="kcard-head">
+              <span class="kcard-tag">回</span>
+              <div>
+                <div class="kcard-title">线性回归</div>
+                <div class="kcard-desc">连续变量趋势拟合与加权最小二乘</div>
+              </div>
+              <svg class="icon chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <div class="kcard-body">
+              <ul>
+                <li>y = β₀ + β₁x₁ + … + βₖxₖ。</li>
+                <li>用历史月度数据拟合后再做外推预测。</li>
+              </ul>
+            </div>
+          </div>
+          <div class="kcard" data-od-id="kcard-kmeans">
+            <div class="kcard-head">
+              <span class="kcard-tag">聚</span>
+              <div>
+                <div class="kcard-title">K-means</div>
+                <div class="kcard-desc">不同就诊群体聚类与离散系数分析</div>
+              </div>
+              <svg class="icon chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <div class="kcard-body">
+              <ul>
+                <li>对就诊人次向量做标准化与聚类。</li>
+                <li>评估组间差异，识别异常波动月份。</li>
+              </ul>
+            </div>
+          </div>
+          <div class="kcard" data-od-id="kcard-lp">
+            <div class="kcard-head">
+              <span class="kcard-tag">规</span>
+              <div>
+                <div class="kcard-title">线性规划</div>
+                <div class="kcard-desc">预算分配与定点机构的成本优化</div>
+              </div>
+              <svg class="icon chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <div class="kcard-body">
+              <ul>
+                <li>目标函数：总费用最小化。</li>
+                <li>约束：定点容量、报销比例、预算上限。</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-scroll" data-slot="more" style="display:none">
+        <p style="color:var(--muted); font-size:13px">更多能力即将上线：公式推导草稿、变量清单、进度复盘。</p>
+      </div>
+
+      <div class="panel-foot">
+        <button class="foot-btn" data-od-id="ai-followup">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v12h-9l-5 4v-4H4z"/></svg>
+          追问 AI
+        </button>
+        <button class="foot-btn" data-od-id="ai-regen">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v12h-9l-5 4v-4H4zM12 8v5M9.5 10.5h5"/></svg>
+          重新解读
+        </button>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- 主题切换（示例：右下角固定，非沉浸 UI 常驻件） -->
+<button class="icon-btn theme-toggle" data-od-id="theme-toggle" title="切换深浅主题" aria-label="切换深浅主题">
+  <svg class="icon sun" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 3v2M12 19v2M5 5l1.4 1.4M17.6 17.6 19 19M3 12h2M19 12h2M5 19l1.4-1.4M17.6 6.4 19 5"/></svg>
+</button>
+
+<script>
+  /* 主题切换 */
+  const toggle = document.querySelector('[data-od-id="theme-toggle"]');
+  toggle.addEventListener('click', () => {
+    const html = document.documentElement;
+    const next = html.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    html.setAttribute('data-theme', next);
+    try { localStorage.setItem('readingwb-theme', next); } catch(e){}
+  });
+  try {
+    const saved = localStorage.getItem('readingwb-theme');
+    if (saved) document.documentElement.setAttribute('data-theme', saved);
+  } catch(e){}
+
+  /* 主区视图切换：沉浸态 ⇄ 空态 */
+  const viewToggle = document.querySelector('[data-od-id="view-toggle"]');
+  viewToggle.addEventListener('click', () => {
+    const body = document.body;
+    if (body.getAttribute('data-view') === 'immersive') {
+      body.setAttribute('data-view', 'empty');
+      document.querySelector('[data-od-id="panel-reading-title"]').textContent = '等待题目';
+      document.querySelector('[data-od-id="panel-reading-sub"]').textContent = '上传题干后开始角色化精读';
+    } else {
+      body.setAttribute('data-view', 'immersive');
+      document.querySelector('[data-od-id="panel-reading-title"]').textContent = '选段精读';
+      document.querySelector('[data-od-id="panel-reading-sub"]').textContent = '针对「预测下一年度门诊总费用」这句的逐角色判定';
+    }
+  });
+
+  /* 书签切换面板 */
+  const rail = document.querySelector('.bookmark-rail');
+  const slots = { reading: document.querySelector('[data-slot="reading"]'),
+                  cards: document.querySelector('[data-slot="cards"]'),
+                  more: document.querySelector('[data-slot="more"]') };
+  const heads = { reading: document.querySelector('[data-panel-target="reading"]'),
+                  cards: document.querySelector('[data-panel-target="cards"]') };
+  rail.querySelectorAll('.bm').forEach(bm => {
+    bm.addEventListener('click', () => {
+      rail.querySelectorAll('.bm').forEach(b => b.classList.toggle('active', b === bm));
+      const panel = bm.getAttribute('data-panel');
+      Object.keys(slots).forEach(k => {
+        slots[k].style.display = (k === panel) ? '' : 'none';
+        if (heads[k]) heads[k].style.display = (k === panel) ? '' : 'none';
+      });
+    });
+  });
+
+  /* 知识卡片展开/收起 */
+  document.querySelectorAll('.kcard-head').forEach(h => {
+    h.addEventListener('click', () => h.parentElement.classList.toggle('open'));
+  });
+</script>
+</body>
+</html>
