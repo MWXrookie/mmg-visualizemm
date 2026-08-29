@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "kind": "html",
+  "title": "model-settings.html",
+  "entry": "model-settings.html",
+  "renderer": "html",
+  "status": "complete",
+  "exports": [
+    "html",
+    "pdf",
+    "zip"
+  ],
+  "createdAt": "2026-08-29T09:20:24.685Z",
+  "updatedAt": "2026-08-29T09:20:24.685Z",
+  "metadata": {
+    "inferred": true,
+    "reconciled": true
+  }
+}

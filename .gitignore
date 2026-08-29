@@ -6,3 +6,6 @@ data/
 .env
 .env.local
 .dsh-vision-router/
+
+# OpenDesign 运行时缓存
+**/.od-skills/
