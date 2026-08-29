@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MMG_VisualizeMM · 数模 AI 辅导工具</title>
+<style>
+/* ===== MMG_VisualizeMM 门户（DESIGN.md tokens） ===== */
+:root {
+  --primary: #2563eb; --on-primary: #fff;
+  --accent: #ea580c; --bg: #f8fafc; --fg: #1e293b;
+  --card: #fff; --muted: #e9eff8; --muted-fg: #475569; --border: #e2e8f0;
+  --radius: 10px; --shadow: 0 1px 2px rgba(15,23,42,.06), 0 8px 24px rgba(15,23,42,.06);
+}
+:root[data-theme='dark'] {
+  --primary: #3b82f6; --on-primary: #0f172a;
+  --accent: #fb923c; --bg: #0f172a; --fg: #e2e8f0;
+  --card: #1e293b; --muted: #2b3a52; --muted-fg: #94a3b8; --border: #334155;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.4);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  background: var(--bg); color: var(--fg); font-size: 16px; line-height: 1.7;
+  transition: background .2s, color .2s;
+}
+a { color: var(--primary); text-decoration: none; }
+.container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+
+/* 导航 */
+.nav { position: sticky; top: 0; z-index: 20; background: var(--card); border-bottom: 1px solid var(--border); }
+.nav-inner { display: flex; align-items: center; gap: 24px; height: 60px; }
+.logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; }
+.logo-badge { width: 30px; height: 30px; border-radius: 8px; background: var(--primary); color: var(--on-primary); display: flex; align-items: center; justify-content: center; font-weight: 800; }
+.nav-links { display: flex; gap: 20px; margin-left: auto; }
+.nav-links a { color: var(--muted-fg); font-size: 14px; }
+.nav-links a:hover { color: var(--fg); }
+.theme-btn { width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--border); background: transparent; cursor: pointer; font-size: 15px; color: var(--fg); }
+.btn { display: inline-flex; align-items: center; justify-content: center; height: 42px; padding: 0 22px; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; border: 1px solid transparent; font-family: inherit; }
+.btn-primary { background: var(--primary); color: var(--on-primary); }
+.btn-primary:hover { filter: brightness(1.08); }
+.btn-accent { background: var(--accent); color: #fff; }
+.btn-accent:hover { filter: brightness(1.08); }
+.btn-ghost { background: transparent; color: var(--muted-fg); border-color: var(--border); }
+.btn-ghost:hover { background: var(--muted); }
+
+/* Hero */
+.hero { padding: 72px 0 56px; text-align: center; }
+.hero .eyebrow { display: inline-block; font-size: 13px; font-weight: 600; color: var(--primary); background: rgba(37,99,235,.1); padding: 4px 12px; border-radius: 999px; margin-bottom: 20px; letter-spacing: .02em; }
+.hero h1 { font-size: clamp(32px, 5vw, 48px); line-height: 1.25; font-weight: 800; margin-bottom: 18px; }
+.hero h1 .accent { color: var(--accent); }
+.hero p.sub { font-size: 18px; color: var(--muted-fg); max-width: 640px; margin: 0 auto 32px; }
+.hero .cta-row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+.hero .meta { margin-top: 18px; font-size: 13px; color: var(--muted-fg); }
+.hero-shot { margin: 44px auto 0; max-width: 920px; border-radius: 14px; border: 1px solid var(--border); box-shadow: var(--shadow); overflow: hidden; }
+.hero-shot img { display: block; width: 100%; height: auto; }
+
+/* 信任条 */
+.trust { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--card); }
+.trust-inner { display: flex; justify-content: center; gap: 48px; flex-wrap: wrap; padding: 20px 0; font-size: 14px; color: var(--muted-fg); }
+.trust-inner b { color: var(--fg); }
+
+/* 区块通用 */
+.section { padding: 64px 0; }
+.section-title { text-align: center; font-size: 28px; font-weight: 800; margin-bottom: 10px; }
+.section-desc { text-align: center; color: var(--muted-fg); max-width: 620px; margin: 0 auto 40px; font-size: 15px; }
+
+/* 功能卡 */
+.features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; }
+.fcard { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; box-shadow: 0 1px 2px rgba(15,23,42,.04); }
+.fcard .ic { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: rgba(37,99,235,.1); color: var(--primary); margin-bottom: 14px; }
+.fcard h3 { font-size: 16px; margin-bottom: 8px; }
+.fcard p { font-size: 14px; color: var(--muted-fg); }
+
+/* 截图展示 */
+.shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; }
+.shot { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: 0 1px 2px rgba(15,23,42,.04); }
+.shot img { width: 100%; display: block; }
+.shot .cap { padding: 12px 16px; font-size: 13px; color: var(--muted-fg); }
+
+/* 三步 */
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; counter-reset: step; }
+.step { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; }
+.step .num { width: 32px; height: 32px; border-radius: 999px; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; margin-bottom: 12px; }
+.step h3 { font-size: 15px; margin-bottom: 6px; }
+.step p { font-size: 13.5px; color: var(--muted-fg); }
+
+/* 隐私条 */
+.privacy { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--primary); border-radius: 0 10px 10px 0; padding: 18px 22px; font-size: 14px; }
+.privacy b { color: var(--fg); }
+
+/* Footer */
+.footer { border-top: 1px solid var(--border); padding: 28px 0 40px; text-align: center; color: var(--muted-fg); font-size: 13px; }
+.footer a { color: var(--muted-fg); text-decoration: underline; }
+.footer .love { margin-top: 8px; }
+
+@media (max-width: 720px) {
+  .nav-links { display: none; }
+  .hero { padding: 48px 0 36px; }
+  .section { padding: 44px 0; }
+}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="container nav-inner">
+    <div class="logo"><div class="logo-badge">M</div>MMG_VisualizeMM</div>
+    <div class="nav-links">
+      <a href="#features">功能</a>
+      <a href="#shots">演示</a>
+      <a href="#steps">上手</a>
+      <a href="#privacy">隐私</a>
+    </div>
+    <button class="theme-btn" onclick="toggleTheme()" title="切换深浅色">🌓</button>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="container">
+    <span class="eyebrow">面向数学建模新手的 AI 辅导工具 · 开源自托管</span>
+    <h1>AI 帮你看懂题<br /><span class="accent">建模由你主导</span></h1>
+    <p class="sub">上传题目和 Excel 附件，AI 辅助你读懂题意、划词精读、引导你自主建模——全程不代做，只用你自己的 API Key。</p>
+    <div class="cta-row">
+      <a class="btn btn-accent" href="#steps">🚀 开始使用</a>
+      <a class="btn btn-ghost" href="#shots">查看演示</a>
+    </div>
+    <p class="meta">免费 · 公益 · MIT 协议 · Key 只存本地浏览器</p>
+    <div class="hero-shot"><img src="portal-assets/shot-workbench.png" alt="读题工作台截图" /></div>
+  </div>
+</header>
+
+<div class="trust">
+  <div class="container trust-inner">
+    <span>🔒 <b>Key 只存本地</b>，AES-GCM 加密，服务器零 Key</span>
+    <span>🧩 <b>划词精读</b>：判定约束/目标/已知条件</span>
+    <span>📊 <b>Excel 数据联动</b>：列名↔题干术语自动关联</span>
+    <span>🆓 <b>免费公益</b>，无广告无收费</span>
+  </div>
+</div>
+
+<section class="section" id="features">
+  <div class="container">
+    <h2 class="section-title">为什么是它</h2>
+    <p class="section-desc">不是"AI 替你写论文"，而是"AI 帮你读懂题"——新手最痛的第一步，被拆解成可学习的动作。</p>
+    <div class="features">
+      <div class="fcard">
+        <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h10M4 18h7"/></svg></div>
+        <h3>划词精读</h3>
+        <p>选中任意一句题干，AI 判定它是约束、目标、已知条件还是假设，并解释对建模的影响，置信度可质疑。</p>
+      </div>
+      <div class="fcard">
+        <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></div>
+        <h3>Excel 数据联动</h3>
+        <p>上传 xlsx/csv/PDF，表格列名自动关联题干术语——"表 1 的需求量"对应"未来 5 年需求"。</p>
+      </div>
+      <div class="fcard">
+        <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg></div>
+        <h3>引导式对话</h3>
+        <p>AI 只给思路和反问："哪个量是你要决策的？"——引导你独立说出模型选型与理由，不代做。</p>
+      </div>
+      <div class="fcard">
+        <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15 9 22 9 17 14 19 21 12 17 5 21 7 14 2 9 9 9 12 2"/></svg></div>
+        <h3>知识卡片随题出现</h3>
+        <p>AI 方案里提到"线性规划/回归/聚类"，交互式知识卡片就地展开，动动手就懂。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="shots" style="background: var(--card); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+  <div class="container">
+    <h2 class="section-title">真实界面预览</h2>
+    <p class="section-desc">以下均为产品实际原型渲染（浅色+深色双主题）。</p>
+    <div class="shots">
+      <div class="shot"><img src="portal-assets/shot-workbench.png" alt="读题工作台" /><div class="cap">读题工作台：左题右 AI，划词精读 + 数据联动</div></div>
+      <div class="shot"><img src="portal-assets/shot-guided-chat.png" alt="对话深挖" /><div class="cap">对话深挖：AI 反问引导 + 概念卡片随方案出现</div></div>
+      <div class="shot"><img src="portal-assets/shot-startup.png" alt="新建会话" /><div class="cap">新建会话：三步上手 + 历史会话</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="steps">
+  <div class="container">
+    <h2 class="section-title">3 分钟上手</h2>
+    <p class="section-desc">部署在自己的电脑上，全程不经过任何第三方服务器。</p>
+    <div class="steps">
+      <div class="step"><div class="num">1</div><h3>下载部署</h3><p><code>npm install && npm start</code>，浏览器打开即用。</p></div>
+      <div class="step"><div class="num">2</div><h3>配置 Key</h3><p>填你自己的 DeepSeek/通义 API Key，测试连接，Key 只存本机（AES-GCM 加密）。</p></div>
+      <div class="step"><div class="num">3</div><h3>开始读题</h3><p>粘贴题目、上传附件，30 秒内获得整体解读与划词精读。</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="privacy">
+  <div class="container">
+    <div class="privacy">
+      <b>🔒 隐私与开源</b>：本工具为个人公益项目，代码开源（MIT）。你的 API Key 只保存在本机浏览器（AES-GCM 加密），所有请求由你直接发往所选模型服务商，服务器不持久化任何 Key 与数据。核心组件均选用 MIT/Apache-2.0 许可。
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="container">
+    <div>MMG_VisualizeMM · 面向数学建模新手的 AI 读题辅导工具</div>
+    <div class="love">非商业公益项目 · 欢迎下一届传承者参与（Issue / PR）</div>
+  </div>
+</footer>
+
+<script>
+function toggleTheme() {
+  const root = document.documentElement;
+  const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  root.setAttribute('data-theme', next);
+  try { localStorage.setItem('mmg_theme_v1', next); } catch (e) {}
+}
+(function () { try { if (localStorage.getItem('mmg_theme_v1') === 'dark') document.documentElement.setAttribute('data-theme', 'dark'); } catch (e) {} })();
+</script>
+</body>
+</html>
