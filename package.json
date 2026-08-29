@@ -4,6 +4,9 @@
   "private": true,
   "description": "面向数学建模新手的「AI 辅助读题 + 自主建模」辅导工具（开源自托管 + BYOK）",
   "type": "module",
+  "engines": {
+    "node": ">=23.4.0"
+  },
   "scripts": {
     "dev:web": "vite --config web/vite.config.js",
     "dev:server": "node --use-system-ca server/index.js",

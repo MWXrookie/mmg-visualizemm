@@ -8,6 +8,7 @@ marked.setOptions({ gfm: true, breaks: true })
 export function sanitize(html) {
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
     .replace(/<iframe[\s\S]*?<\/iframe>/gi, '')
     .replace(/<object[\s\S]*?<\/object>/gi, '')
     .replace(/<embed[\s\S]*?\/?>/gi, '')

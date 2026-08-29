@@ -16,7 +16,7 @@ const API_KEY = process.env.EVAL_API_KEY || ''
 const MODEL = process.env.EVAL_MODEL || 'qwen-plus'
 
 if (!API_KEY) {
-  console.error('缺少 EVAL_API_KEY 环境变量（或直接填入下方 API_KEY 常量）')
+  console.error('缺少 EVAL_API_KEY 环境变量（或用 EVAL_BASE_URL / EVAL_MODEL 指定模型）')
   process.exit(2)
 }
 
