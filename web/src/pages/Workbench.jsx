@@ -3,6 +3,7 @@ import { marked } from 'marked'
 import { chat, parseFile, attachSummary } from '../api.js'
 import { CONCEPT_KEYWORDS } from './Cards.jsx'
 import { saveSession, loadSession, clearSession } from '../store.js'
+import MD from '../components/MD.jsx'
 const READ_OVERVIEW_SYSTEM =
   '你是数学建模辅导助手。用户会给你一道数学建模题目（可能含数据说明），请做「整体解读」，输出四部分：\n' +
   '1) 题目在问什么（一句话+要点）\n' +
@@ -606,7 +607,7 @@ export default function Workbench({ settings, onOpenCards }) {
                   </div>
                 </>
               ) : (
-                <pre className="role-body">{selResult.raw}</pre>
+                <MD text={selResult.raw} className="role-body" />
               )}
             </div>
           )}
@@ -617,7 +618,7 @@ export default function Workbench({ settings, onOpenCards }) {
           {overview && (
             <div className="card ai-card">
               <div className="section-label">📖 整体解读</div>
-              <pre className="ai-content">{overview}</pre>
+              <MD text={overview} className="ai-content-md" />
             </div>
           )}
 
@@ -631,26 +632,30 @@ export default function Workbench({ settings, onOpenCards }) {
               )}
               {messages.map((m) => (
                 <div key={m.id ?? m.content} className={`msg ${m.role === 'user' ? 'user' : 'ai'}`}>
-                  <div className={`bubble ${m.role === 'user' ? '' : 'guide'}`}>{m.content}</div>
-                  {m.role === 'assistant' && (
-                    <div className="msg-actions">
-                      <button
-                        className={`mini-btn ${feedback[m.id] === 'up' ? 'on' : ''}`}
-                        onClick={() => setFeedback((f) => ({ ...f, [m.id]: 'up' }))}
-                        title="有帮助"
-                      >
-                        👍
-                      </button>
-                      <button
-                        className={`mini-btn ${feedback[m.id] === 'down' ? 'on' : ''}`}
-                        onClick={() => setFeedback((f) => ({ ...f, [m.id]: 'down' }))}
-                        title="没帮助"
-                      >
-                        👎
-                      </button>
-                      <button className="mini-btn" onClick={regenerate} title="重新生成">
-                        ↻
-                      </button>
+                  {m.role === 'user' ? (
+                    <div className="bubble">{m.content}</div>
+                  ) : (
+                    <div className="bubble guide">
+                      <MD text={m.content} />
+                      <div className="msg-actions">
+                        <button
+                          className={`mini-btn ${feedback[m.id] === 'up' ? 'on' : ''}`}
+                          onClick={() => setFeedback((f) => ({ ...f, [m.id]: 'up' }))}
+                          title="有帮助"
+                        >
+                          👍
+                        </button>
+                        <button
+                          className={`mini-btn ${feedback[m.id] === 'down' ? 'on' : ''}`}
+                          onClick={() => setFeedback((f) => ({ ...f, [m.id]: 'down' }))}
+                          title="没帮助"
+                        >
+                          👎
+                        </button>
+                        <button className="mini-btn" onClick={regenerate} title="重新生成">
+                          ↻
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
