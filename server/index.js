@@ -16,31 +16,32 @@ const require = createRequire(import.meta.url)
 const pdfParseMod = require('pdf-parse')
 const { PDFParse } = pdfParseMod
 
-/** 解析 PDF 提取文本（pdf-parse 2.x API） */
+/** 解析 PDF 提取文本（pdf-parse 2.x API；解析完销毁实例，避免连续上传累积 pdfjs 文档对象） */
 async function parsePdfText(buffer) {
   const parser = new PDFParse({ data: buffer })
-  await parser.load()
-  const result = await parser.getText()
-  return (result && result.text) || ''
+  try {
+    await parser.load()
+    const result = await parser.getText()
+    return (result && result.text) || ''
+  } finally {
+    await parser.destroy().catch(() => {})
+  }
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
 const PORT = process.env.PORT || 3088
 
+app.disable('x-powered-by') // 隐藏 Express 版本号
 app.use(express.json({ limit: '30mb' })) // base64 上传放大 ~33%，30mb ≈ 20MB 文件
 
 /* ---------- AI 中继 ---------- */
 
-// 归一化 baseUrl：允许用户填 https://api.deepseek.com 或带 /v1 或 /v1/chat/completions
+// 归一化 baseUrl：允许用户填 https://api.deepseek.com、带 /v1 或完整 /chat/completions 端点
 function normalizeBase(baseUrl) {
-  let u = (baseUrl || '').trim().replace(/\/+$/, '')
+  const u = (baseUrl || '').trim().replace(/\/+$/, '')
   if (!u) return null
-  if (/\/chat\/completions$/.test(u)) u = u.replace(/\/chat\/completions$/, '')
-  if (/\/v\d+$/.test(u)) u = u
-  else if (/\/compatible-mode$/.test(u)) u = u
-  else u = u // 保持原样，由调用方拼 /chat/completions
-  return u
+  return u.replace(/\/chat\/completions$/, '') // 去掉完整端点后缀，由调用方统一拼 /chat/completions
 }
 
 async function callChat({ baseUrl, apiKey, model, messages, maxTokens }) {
@@ -288,8 +289,15 @@ app.get('/api/health', (_req, res) => {
 /* ---------- 静态托管 ---------- */
 const distDir = path.join(__dirname, '..', 'web', 'dist')
 if (fs.existsSync(distDir)) {
-  app.use(express.static(distDir))
+  // Vite 产物带内容指纹，可长缓存；index.html 与 SPA 回退页不缓存
+  app.use(express.static(distDir, {
+    maxAge: '7d',
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('index.html')) res.setHeader('Cache-Control', 'no-cache')
+    },
+  }))
   app.get(/^\/(?!api\/).*/, (_req, res) => {
+    res.setHeader('Cache-Control', 'no-cache')
     res.sendFile(path.join(distDir, 'index.html'))
   })
   console.log(`[static] 托管 ${distDir}`)
