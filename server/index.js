@@ -11,10 +11,18 @@ import fs from 'fs'
 import { createRequire } from 'module'
 import ExcelJS from 'exceljs'
 
-// pdf-parse 是 CJS 模块，ESM 下用 createRequire 加载；2.x 导出结构不同，兼容处理
+// pdf-parse 2.x：导出 { PDFParse } 类（ESM 下用 createRequire 加载）
 const require = createRequire(import.meta.url)
 const pdfParseMod = require('pdf-parse')
-const pdfParse = typeof pdfParseMod === 'function' ? pdfParseMod : pdfParseMod.default || pdfParseMod
+const { PDFParse } = pdfParseMod
+
+/** 解析 PDF 提取文本（pdf-parse 2.x API） */
+async function parsePdfText(buffer) {
+  const parser = new PDFParse({ data: buffer })
+  await parser.load()
+  const result = await parser.getText()
+  return (result && result.text) || ''
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -257,8 +265,7 @@ app.post('/api/parse', async (req, res) => {
       return res.json({ ok: true, ...r, name })
     }
     if (ext === '.pdf') {
-      const r = await pdfParse(buf)
-      const text = r.text.trim()
+      const text = (await parsePdfText(buf)).trim()
       if (!text) return res.status(400).json({ ok: false, message: 'PDF 未能提取到文本（可能是扫描件，暂不支持 OCR）' })
       return res.json({ ok: true, type: 'text', text: text.slice(0, 20000), name })
     }
