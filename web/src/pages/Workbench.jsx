@@ -109,6 +109,7 @@ export default function Workbench({ settings, onOpenCards }) {
   const [problemText, setProblemText] = useState('')
   const [loaded, setLoaded] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [problemLoading, setProblemLoading] = useState(false)
   const [overview, setOverview] = useState('')
   const [error, setError] = useState('')
 
@@ -116,6 +117,7 @@ export default function Workbench({ settings, onOpenCards }) {
   const [attachments, setAttachments] = useState([]) // {name, status: parsing|done|error, type, headers, rows, text, message}
   const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef(null)
+  const problemFileInputRef = useRef(null)
 
   // 划词
   const [floatSel, setFloatSel] = useState(null) // {text, x, top}
@@ -206,6 +208,29 @@ export default function Workbench({ settings, onOpenCards }) {
 
   function removeAttachment(id) {
     setAttachments((prev) => prev.filter((a) => a.id !== id))
+  }
+
+  // 上传题干文件（PDF/MD/TXT/DOCX）→ 自动填入题干区
+  async function handleProblemFile(file) {
+    if (!file) return
+    setError('')
+    setProblemLoading(true)
+    try {
+      const r = await parseFile(file)
+      if (r.type === 'text' && r.text) {
+        setProblemText((prev) => (prev.trim() ? prev + '\n\n' + r.text : r.text))
+        setTitle(file.name.replace(/\.(pdf|md|txt|docx)$/i, ''))
+      } else if (r.type === 'table') {
+        setError(`「${file.name}」是表格文件，请作为数据附件上传；题干请上传 PDF/MD/TXT`)
+      } else {
+        setError(`「${file.name}」未能提取到文本`)
+      }
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setProblemLoading(false)
+      if (problemFileInputRef.current) problemFileInputRef.current.value = ''
+    }
   }
 
   function buildReadPayload(extraUserContent) {
@@ -339,6 +364,12 @@ export default function Workbench({ settings, onOpenCards }) {
     clearSession()
   }
 
+  // 编辑当前题干（保留已输入内容返回编辑态）
+  function editProblem() {
+    setLoaded(false)
+    setError('')
+  }
+
   // 会话自动保存/恢复（刷新后不丢失）
   useEffect(() => {
     const s = loadSession()
@@ -406,10 +437,25 @@ export default function Workbench({ settings, onOpenCards }) {
 
           <textarea
             className="problem-input"
-            placeholder={'在此粘贴题目全文…\n\n示例：\n某市计划在未来 5 年内分批完成公交车辆的新能源更新替换……\n表 1 给出了各线路未来 5 年的日均需求量……'}
+            placeholder={'在此粘贴题目全文，或点击上方「上传题干文件」直接导入 PDF/MD…\n\n示例：\n某市计划在未来 5 年内分批完成公交车辆的新能源更新替换……\n表 1 给出了各线路未来 5 年的日均需求量……'}
             value={problemText}
             onChange={(e) => setProblemText(e.target.value)}
           />
+          <div className="problem-file-row">
+            <input
+              ref={problemFileInputRef}
+              type="file"
+              accept=".pdf,.md,.txt,.docx"
+              style={{ display: 'none' }}
+              onChange={(e) => handleProblemFile(e.target.files[0])}
+            />
+            <button className="btn btn-ghost btn-sm" onClick={() => problemFileInputRef.current?.click()} disabled={problemLoading}>
+              {problemLoading ? '解析中…' : '📄 上传题干文件（PDF/MD/TXT）'}
+            </button>
+            {problemText.trim() && (
+              <span className="attach-meta">已载入 {problemText.length} 字</span>
+            )}
+          </div>
           <div className="actions">
             <button className="btn btn-accent btn-lg" onClick={loadProblem}>
               开始读题
@@ -446,7 +492,10 @@ export default function Workbench({ settings, onOpenCards }) {
       <div className="workbench-head">
         <h2 className="doc-title">{title}</h2>
         <div className="attach-row">
-          <span className="attach">📄 题目文本（粘贴）</span>
+          <span className="attach">📄 题目文本（{problemText.length} 字）</span>
+          <button className="btn btn-ghost btn-sm" onClick={editProblem}>
+            编辑题干
+          </button>
           <button className="btn btn-ghost btn-sm" onClick={newProblem}>
             换一道题
           </button>

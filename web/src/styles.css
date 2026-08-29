@@ -165,6 +165,7 @@ body {
   padding: 12px; font-size: 14px; line-height: 1.7; font-family: inherit; margin-top: 12px; resize: vertical;
 }
 .problem-input:focus { outline: none; border-color: var(--color-ring); box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2); }
+.problem-file-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
 
 .split { display: flex; gap: 24px; align-items: flex-start; }
 .col-left { flex: 3; min-width: 0; }
