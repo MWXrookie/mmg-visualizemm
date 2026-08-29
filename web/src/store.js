@@ -163,3 +163,21 @@ export function saveTheme(t) {
     localStorage.setItem(THEME_KEY, t)
   } catch { /* ignore */ }
 }
+
+/* ---------- 当前工作区（三台共用，后端 SQLite 为准，这里只记 id 便于刷新恢复） ---------- */
+const CURRENT_WS_KEY = 'mmg_current_ws_v1'
+
+export function getCurrentWsId() {
+  try {
+    return localStorage.getItem(CURRENT_WS_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
+export function setCurrentWsId(id) {
+  try {
+    if (id) localStorage.setItem(CURRENT_WS_KEY, id)
+    else localStorage.removeItem(CURRENT_WS_KEY)
+  } catch { /* ignore */ }
+}

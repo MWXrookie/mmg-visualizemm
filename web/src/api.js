@@ -116,3 +116,49 @@ export function attachSummary(attachments) {
   }
   return parts.join('\n\n')
 }
+
+/* ================= 工作区（三台共用，B1/B3） ================= */
+
+/** 列出工作区（轻量：id/标题/时间） */
+export async function listWorkspaces() {
+  const res = await fetch('/api/workspaces')
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok || json.ok === false) throw new Error(json.message || '读取工作区失败')
+  return json.workspaces || []
+}
+
+/** 新建/更新工作区（部分更新：只覆盖传入字段） */
+export async function saveWorkspace(ws) {
+  return post('/api/workspaces', ws)
+}
+
+/** 读取工作区（含题目/附件/拆解块/代码） */
+export async function loadWorkspace(id) {
+  const res = await fetch(`/api/workspaces/${id}`)
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok || json.ok === false) throw new Error(json.message || '读取工作区失败')
+  return json.workspace
+}
+
+/** 删除工作区 */
+export async function deleteWorkspace(id) {
+  const res = await fetch(`/api/workspaces/${id}`, { method: 'DELETE' })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok || json.ok === false) throw new Error(json.message || '删除工作区失败')
+  return json
+}
+
+/** 附件表数据 → CSV 下载/文本（B3 数据注入） */
+export async function fetchAttachmentCsv(wsId, idx) {
+  const res = await fetch(`/api/workspaces/${wsId}/attachments/${idx}/data.csv`)
+  if (!res.ok) throw new Error('附件数据获取失败')
+  return res.text()
+}
+
+/** 附件表数据 → JSON（Pyodide 直用） */
+export async function fetchAttachmentJson(wsId, idx) {
+  const res = await fetch(`/api/workspaces/${wsId}/attachments/${idx}/data.json`)
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok || json.ok === false) throw new Error(json.message || '附件数据获取失败')
+  return json
+}

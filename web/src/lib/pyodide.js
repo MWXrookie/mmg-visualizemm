@@ -6,6 +6,23 @@ const PYODIDE_URL = 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js'
 
 let pyPromise = null
 
+/* ---------- 加载状态通知（供 UI 提示"正在下载 Python 环境"） ---------- */
+let pyState = 'idle' // idle | loading-script | loading-pyodide | ready | error
+const stateListeners = new Set()
+function setState(s) {
+  pyState = s
+  stateListeners.forEach((fn) => fn(s))
+}
+/** 订阅 Pyodide 加载状态；返回取消订阅函数。立即回调当前状态 */
+export function onPyodideState(fn) {
+  stateListeners.add(fn)
+  fn(pyState)
+  return () => stateListeners.delete(fn)
+}
+export function isPyodideReady() {
+  return pyState === 'ready'
+}
+
 function loadScript(src) {
   return new Promise((resolve, reject) => {
     if (document.querySelector(`script[src="${src}"]`)) return resolve()
@@ -19,9 +36,18 @@ function loadScript(src) {
 
 export function getPyodide() {
   if (!pyPromise) {
+    setState('loading-script')
     pyPromise = (async () => {
-      await loadScript(PYODIDE_URL)
-      return window.loadPyodide()
+      try {
+        await loadScript(PYODIDE_URL)
+        setState('loading-pyodide')
+        const py = await window.loadPyodide()
+        setState('ready')
+        return py
+      } catch (e) {
+        setState('error')
+        throw e
+      }
     })()
   }
   return pyPromise

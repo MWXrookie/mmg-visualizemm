@@ -369,6 +369,11 @@ db.exec(`
     updated_at INTEGER
   )
 `)
+// 轻量迁移：旧库补充 overview 列（整体解读缓存）
+const wsCols = db.prepare(`PRAGMA table_info(workspaces)`).all().map((c) => c.name)
+if (!wsCols.includes('overview')) {
+  db.exec(`ALTER TABLE workspaces ADD COLUMN overview TEXT DEFAULT ''`)
+}
 
 function parseJsonField(s) {
   try { return JSON.parse(s || '[]') } catch { return [] }
@@ -396,18 +401,21 @@ app.post('/api/workspaces', (req, res) => {
       title: has('title') ? String(b.title ?? '') : (existing?.title ?? ''),
       problem_text: has('problemText') ? String(b.problemText ?? '') : (existing?.problem_text ?? ''),
       attachments: has('attachments') ? JSON.stringify(Array.isArray(b.attachments) ? b.attachments : []) : (existing?.attachments ?? '[]'),
-      breakdown: has('breakdown') ? JSON.stringify(Array.isArray(b.breakdown) ? b.breakdown : []) : (existing?.breakdown ?? '[]'),
+      breakdown: has('breakdown')
+        ? (typeof b.breakdown === 'string' ? b.breakdown : JSON.stringify(Array.isArray(b.breakdown) ? b.breakdown : []))
+        : (existing?.breakdown ?? '[]'),
       code: has('code') ? String(b.code ?? '') : (existing?.code ?? ''),
+      overview: has('overview') ? String(b.overview ?? '') : (existing?.overview ?? ''),
     }
     const createdAt = existing ? existing.created_at : now
     db.prepare(`
-      INSERT INTO workspaces (id, title, problem_text, attachments, breakdown, code, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO workspaces (id, title, problem_text, attachments, breakdown, code, overview, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         title=excluded.title, problem_text=excluded.problem_text,
         attachments=excluded.attachments, breakdown=excluded.breakdown,
-        code=excluded.code, updated_at=excluded.updated_at
-    `).run(id, merged.title, merged.problem_text, merged.attachments, merged.breakdown, merged.code, createdAt, now)
+        code=excluded.code, overview=excluded.overview, updated_at=excluded.updated_at
+    `).run(id, merged.title, merged.problem_text, merged.attachments, merged.breakdown, merged.code, merged.overview, createdAt, now)
     res.json({ ok: true, id })
   } catch (e) {
     res.status(500).json({ ok: false, message: `保存失败：${e.message}` })
@@ -428,6 +436,7 @@ app.get('/api/workspaces/:id', (req, res) => {
         attachments: parseJsonField(row.attachments),
         breakdown: parseJsonField(row.breakdown),
         code: row.code,
+        overview: row.overview || '',
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       },
@@ -444,6 +453,49 @@ app.delete('/api/workspaces/:id', (req, res) => {
     res.json({ ok: true })
   } catch (e) {
     res.status(500).json({ ok: false, message: `删除失败：${e.message}` })
+  }
+})
+
+/* ---------- 数据→代码注入（B3：附件表数据转 CSV，供编程台一键取用） ---------- */
+
+function rowsToCsv(headers, rows) {
+  const esc = (v) => {
+    const s = String(v ?? '')
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
+  }
+  const lines = [headers.map(esc).join(',')]
+  for (const r of rows) lines.push(headers.map((_, i) => esc(r[i])).join(','))
+  return lines.join('\n')
+}
+
+// GET /api/workspaces/:id/attachments/:idx/data.csv —— 附件表数据转 CSV（编程台注入用）
+app.get('/api/workspaces/:id/attachments/:idx/data.csv', (req, res) => {
+  try {
+    const row = db.prepare('SELECT attachments FROM workspaces WHERE id = ?').get(req.params.id)
+    if (!row) return res.status(404).json({ ok: false, message: '工作区不存在' })
+    const attachments = parseJsonField(row.attachments)
+    const att = attachments[Number(req.params.idx)]
+    if (!att || att.type !== 'table') return res.status(404).json({ ok: false, message: '附件不存在或非表格' })
+    const csv = rowsToCsv(att.headers || [], att.rows || [])
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+    res.setHeader('Content-Disposition', `attachment; filename="data-${req.params.idx}.csv"`)
+    res.send('\uFEFF' + csv) // BOM 兼容 Excel
+  } catch (e) {
+    res.status(500).json({ ok: false, message: `导出失败：${e.message}` })
+  }
+})
+
+// GET /api/workspaces/:id/attachments/:idx/data.json —— 结构化 JSON（前端/Pyodide 直用）
+app.get('/api/workspaces/:id/attachments/:idx/data.json', (req, res) => {
+  try {
+    const row = db.prepare('SELECT attachments FROM workspaces WHERE id = ?').get(req.params.id)
+    if (!row) return res.status(404).json({ ok: false, message: '工作区不存在' })
+    const attachments = parseJsonField(row.attachments)
+    const att = attachments[Number(req.params.idx)]
+    if (!att || att.type !== 'table') return res.status(404).json({ ok: false, message: '附件不存在或非表格' })
+    res.json({ ok: true, name: att.name, headers: att.headers || [], rows: att.rows || [] })
+  } catch (e) {
+    res.status(500).json({ ok: false, message: `导出失败：${e.message}` })
   }
 })
 
