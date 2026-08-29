@@ -146,3 +146,20 @@ export function saveFavorites(list) {
     localStorage.setItem(FAV_KEY, JSON.stringify(list))
   } catch { /* ignore */ }
 }
+
+/* ---------- 主题（light / dark） ---------- */
+const THEME_KEY = 'mmg_theme_v1'
+
+export function loadTheme() {
+  try {
+    return localStorage.getItem(THEME_KEY) || 'light'
+  } catch {
+    return 'light'
+  }
+}
+
+export function saveTheme(t) {
+  try {
+    localStorage.setItem(THEME_KEY, t)
+  } catch { /* ignore */ }
+}

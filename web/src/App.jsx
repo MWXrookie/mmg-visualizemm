@@ -3,16 +3,23 @@ import Workbench from './pages/Workbench.jsx'
 import Settings from './pages/Settings.jsx'
 import Cards from './pages/Cards.jsx'
 import Coding from './pages/Coding.jsx'
-import { loadSettings } from './store.js'
+import { loadSettings, loadTheme, saveTheme } from './store.js'
 
 export default function App() {
   const [view, setView] = useState('workbench')
   const [settings, setSettings] = useState(null)
+  const [theme, setTheme] = useState(loadTheme)
 
   // 设置含解密（AES-GCM），需异步加载
   useEffect(() => {
     loadSettings().then(setSettings)
   }, [])
+
+  // 主题：应用到根节点并持久化
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    saveTheme(theme)
+  }, [theme])
 
   if (!settings) {
     return <div className="app booting"><div className="boot-hint">加载本地设置…</div></div>
@@ -40,6 +47,14 @@ export default function App() {
           </button>
         </div>
         <div className="nav-status">
+          <button
+            className="theme-toggle"
+            onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+            title={theme === 'dark' ? '切换到浅色模式' : '切换到深色模式'}
+            aria-label="切换深浅色主题"
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
           {settings.apiKey ? (
             <span className="status-chip ok">● Key 已配置</span>
           ) : (
