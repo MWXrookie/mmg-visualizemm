@@ -3,7 +3,7 @@ import { marked } from 'marked'
 import { chat, parseFile, attachSummary } from '../api.js'
 import { CONCEPT_KEYWORDS } from './Cards.jsx'
 import { saveSession, loadSession, clearSession } from '../store.js'
-import MD from '../components/MD.jsx'
+import MD, { sanitize } from '../components/MD.jsx'
 const READ_OVERVIEW_SYSTEM =
   '你是数学建模辅导助手。用户会给你一道数学建模题目（可能含数据说明），请做「整体解读」，输出四部分：\n' +
   '1) 题目在问什么（一句话+要点）\n' +
@@ -45,18 +45,27 @@ function roleKey(role) {
   return map[role] || 'bg'
 }
 
-/** 题干 Markdown 渲染（含双向引用高亮） */
+/** 题干 Markdown 渲染（先安全清理，再双向引用高亮：命中全部出现处，首个带 id 供定位滚动） */
 function renderProblem(problemText, quoteHl) {
   let html = ''
   try {
-    html = marked.parse(problemText || '')
+    html = sanitize(marked.parse(problemText || ''))
   } catch {
     html = problemText || ''
   }
   if (quoteHl) {
     const esc = quoteHl.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     if (html.includes(esc)) {
-      html = html.split(esc).join(`<mark class="quote-hl">${esc}</mark>`)
+      let first = true
+      html = html
+        .split(esc)
+        .map((part, i) => {
+          if (i === 0) return part
+          const attrs = first ? ' id="quote-hl"' : ''
+          first = false
+          return `<mark class="quote-hl"${attrs}>${esc}</mark>${part}`
+        })
+        .join('')
     }
   }
   return html
@@ -199,18 +208,26 @@ export default function Workbench({ settings, onOpenCards }) {
       setError('请先输入题目内容')
       return
     }
-    setTitle('未命名题目')
+    // 保留已由题干文件命名的标题，仅空标题时兜底
+    setTitle((t) => t || '未命名题目')
     setLoaded(true)
     setError('')
   }
 
-  // 上传并解析附件
+  // 上传并解析附件（单个 ≤20MB，超出直接标记错误不上传）
   async function handleFiles(fileList) {
     const files = Array.from(fileList || [])
     if (files.length === 0) return
     setError('')
     for (const file of files) {
       const id = file.name + '-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6)
+      if (file.size > 20 * 1024 * 1024) {
+        setAttachments((prev) => [
+          ...prev,
+          { id, name: file.name, status: 'error', message: '文件超过 20MB，请压缩或拆分后重试' },
+        ])
+        continue
+      }
       setAttachments((prev) => [...prev, { id, name: file.name, status: 'parsing' }])
       try {
         const r = await parseFile(file)
@@ -338,6 +355,34 @@ export default function Workbench({ settings, onOpenCards }) {
     explainSelection(true)
   }
 
+  // 双向引用：点击引用原文 → 滚动到题干高亮处并闪烁
+  function scrollToQuote(quote) {
+    const el = textRef.current
+    if (!el || !quote) return
+    const flash = (node) => {
+      node.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      node.classList.add('flash')
+      setTimeout(() => node.classList.remove('flash'), 1600)
+    }
+    const mark = document.getElementById('quote-hl')
+    if (mark) return flash(mark)
+    // 兜底：高亮渲染失败时，在 DOM 文本节点中查找并包裹高亮
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+    while (walker.nextNode()) {
+      const node = walker.currentNode
+      const idx = node.textContent.indexOf(quote)
+      if (idx >= 0) {
+        const range = document.createRange()
+        range.setStart(node, idx)
+        range.setEnd(node, idx + quote.length)
+        const span = document.createElement('mark')
+        span.className = 'quote-hl'
+        try { range.surroundContents(span) } catch { continue }
+        return flash(span)
+      }
+    }
+  }
+
   // 连续深挖：把选中段作为锚点带入对话
   function deepDiveSelection() {
     const anchor = selResult?.quote || floatSel?.text || ''
@@ -389,7 +434,7 @@ export default function Workbench({ settings, onOpenCards }) {
     setError('')
   }
 
-  // 会话自动保存/恢复（刷新后不丢失）
+  // 会话自动保存/恢复（刷新后不丢失题目/解读/对话/附件）
   useEffect(() => {
     const s = loadSession()
     if (s && s.problemText) {
@@ -397,15 +442,29 @@ export default function Workbench({ settings, onOpenCards }) {
       setProblemText(s.problemText)
       setOverview(s.overview || '')
       setMessages(s.messages || [])
+      // 恢复已解析附件（仅 done 状态，防止恢复半途解析的条目）
+      if (Array.isArray(s.attachments)) {
+        setAttachments(s.attachments.map((a) => ({ ...a, status: 'done' })))
+      }
       setLoaded(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   useEffect(() => {
     if (loaded) {
-      saveSession({ title, problemText, overview, messages })
+      const s = { title, problemText, overview, messages }
+      const doneAtts = attachments.filter((a) => a.status === 'done')
+      if (doneAtts.length > 0) {
+        const pick = ({ id, name, type, headers, rows, text, sheets, totalRows }) => ({ id, name, type, headers, rows, text, sheets, totalRows })
+        const withAtts = { ...s, attachments: doneAtts.map(pick) }
+        try {
+          // localStorage 约 5MB 上限：附件数据过大时放弃附件、保留会话核心
+          if (JSON.stringify(withAtts).length < 2_500_000) s.attachments = withAtts.attachments
+        } catch { /* 静默降级为不存附件 */ }
+      }
+      saveSession(s)
     }
-  }, [loaded, title, problemText, overview, messages])
+  }, [loaded, title, problemText, overview, messages, attachments])
 
   /* ---------- 未加载题目：输入态 ---------- */
   if (!loaded) {
@@ -426,12 +485,12 @@ export default function Workbench({ settings, onOpenCards }) {
               ref={fileInputRef}
               type="file"
               multiple
-              accept=".xlsx,.xls,.csv,.pdf,.txt,.md"
+              accept=".xlsx,.csv,.pdf,.txt,.md"
               style={{ display: 'none' }}
               onChange={(e) => { handleFiles(e.target.files); e.target.value = '' }}
             />
             <div className="dropzone-main">📎 点击选择或拖拽数据附件到此处</div>
-            <div className="hint">支持多文件：表1_需求量.xlsx、运营数据.pdf…</div>
+            <div className="hint">支持多文件（单个 ≤20MB）：表1_需求量.xlsx、运营数据.pdf…</div>
           </div>
 
           {attachments.length > 0 && (
@@ -464,7 +523,7 @@ export default function Workbench({ settings, onOpenCards }) {
             <input
               ref={problemFileInputRef}
               type="file"
-              accept=".pdf,.md,.txt,.docx"
+              accept=".pdf,.md,.txt"
               style={{ display: 'none' }}
               onChange={(e) => handleProblemFile(e.target.files[0])}
             />
@@ -593,8 +652,12 @@ export default function Workbench({ settings, onOpenCards }) {
                     {selResult.impact || '—'}
                   </div>
                   {selResult.quote && (
-                    <div className="role-quote">
-                      <b>引用原文：</b>「{selResult.quote}」<span className="hint">（已在左栏原文高亮）</span>
+                    <div
+                      className="role-quote locatable"
+                      onClick={() => scrollToQuote(selResult.quote)}
+                      title="点击滚动到原文高亮位置"
+                    >
+                      <b>引用原文：</b>「{selResult.quote}」<span className="hint">📍 点击定位原文</span>
                     </div>
                   )}
                   <div className="role-actions">

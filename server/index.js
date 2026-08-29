@@ -11,15 +11,16 @@ import fs from 'fs'
 import { createRequire } from 'module'
 import ExcelJS from 'exceljs'
 
-// pdf-parse 是 CJS 模块，ESM 下用 createRequire 加载
+// pdf-parse 是 CJS 模块，ESM 下用 createRequire 加载；2.x 导出结构不同，兼容处理
 const require = createRequire(import.meta.url)
-const pdfParse = require('pdf-parse')
+const pdfParseMod = require('pdf-parse')
+const pdfParse = typeof pdfParseMod === 'function' ? pdfParseMod : pdfParseMod.default || pdfParseMod
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
 const PORT = process.env.PORT || 3088
 
-app.use(express.json({ limit: '2mb' }))
+app.use(express.json({ limit: '30mb' })) // base64 上传放大 ~33%，30mb ≈ 20MB 文件
 
 /* ---------- AI 中继 ---------- */
 
@@ -198,16 +199,21 @@ async function parseXlsx(buffer) {
 }
 
 function parseCsv(text) {
+  // 剥离 UTF-8 BOM（Excel 导出的 CSV 常带，会导致首列表头出现 \uFEFF）
+  text = text.replace(/^\uFEFF/, '')
   const lines = text.split(/\r?\n/).filter((l) => l.trim() !== '')
   if (lines.length === 0) return { ok: false, error: 'CSV 为空' }
   const split = (line) => {
-    // 简单 CSV 拆分（支持引号包裹的逗号）
+    // 简单 CSV 拆分（支持引号包裹的逗号与转义引号 ""）
     const out = []
     let cur = ''
     let inQ = false
-    for (const ch of line) {
-      if (ch === '"') inQ = !inQ
-      else if (ch === ',' && !inQ) { out.push(cur); cur = '' }
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i]
+      if (ch === '"') {
+        if (inQ && line[i + 1] === '"') { cur += '"'; i++ }
+        else inQ = !inQ
+      } else if (ch === ',' && !inQ) { out.push(cur); cur = '' }
       else cur += ch
     }
     out.push(cur)
@@ -236,7 +242,11 @@ app.post('/api/parse', async (req, res) => {
     return res.status(400).json({ ok: false, message: '数据格式错误' })
   }
   try {
-    if (ext === '.xlsx' || ext === '.xls') {
+    if (ext === '.xls') {
+      // ExcelJS 仅支持 .xlsx；旧版 .xls 给出可操作提示而非 500
+      return res.status(400).json({ ok: false, message: '暂不支持旧版 .xls 格式：请用 Excel/WPS 将文件「另存为 .xlsx」或转存 CSV 后重试' })
+    }
+    if (ext === '.xlsx') {
       const r = await parseXlsx(buf)
       if (!r.ok) return res.status(400).json({ ok: false, message: r.error })
       return res.json({ ok: true, ...r, name })
@@ -283,6 +293,14 @@ if (fs.existsSync(distDir)) {
       .send('<h3>MMG_VisualizeMM 后端已运行</h3><p>前端未构建：先执行 <code>npm run build</code>，或开发时运行 <code>npm run dev</code>（Vite 代理到本服务）。</p>')
   })
 }
+
+/* ---------- 错误处理（413 超大请求体返回 JSON 而非默认 HTML） ---------- */
+app.use((err, _req, res, next) => {
+  if (err && (err.type === 'entity.too.large' || err.status === 413)) {
+    return res.status(413).json({ ok: false, code: 'TOO_LARGE', message: '文件过大：单次上传请控制在 20MB 以内（可将大表拆分为多个附件）' })
+  }
+  next(err)
+})
 
 app.listen(PORT, () => {
   console.log(`[server] MMG_VisualizeMM 后端已启动: http://127.0.0.1:${PORT}`)
