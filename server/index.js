@@ -351,6 +351,102 @@ app.post('/api/parse', async (req, res) => {
   }
 })
 
+/* ---------- 工作区存储（三台共用数据层，SQLite，零依赖 node:sqlite） ---------- */
+import { DatabaseSync } from 'node:sqlite'
+
+const dataDir = path.join(__dirname, '..', 'data')
+fs.mkdirSync(dataDir, { recursive: true })
+const db = new DatabaseSync(path.join(dataDir, 'mmg.db'))
+db.exec(`
+  CREATE TABLE IF NOT EXISTS workspaces (
+    id TEXT PRIMARY KEY,
+    title TEXT DEFAULT '',
+    problem_text TEXT DEFAULT '',
+    attachments TEXT DEFAULT '[]',
+    breakdown TEXT DEFAULT '[]',
+    code TEXT DEFAULT '',
+    created_at INTEGER,
+    updated_at INTEGER
+  )
+`)
+
+function parseJsonField(s) {
+  try { return JSON.parse(s || '[]') } catch { return [] }
+}
+
+// 列表（不含正文，轻量）
+app.get('/api/workspaces', (_req, res) => {
+  try {
+    const rows = db.prepare('SELECT id, title, updated_at FROM workspaces ORDER BY updated_at DESC').all()
+    res.json({ ok: true, workspaces: rows.map((r) => ({ id: r.id, title: r.title, updatedAt: r.updated_at })) })
+  } catch (e) {
+    res.status(500).json({ ok: false, message: `读取失败：${e.message}` })
+  }
+})
+
+// 新建/更新（部分更新：只覆盖 body 中出现的字段，其余保留）
+app.post('/api/workspaces', (req, res) => {
+  try {
+    const b = req.body || {}
+    const id = typeof b.id === 'string' && b.id ? b.id : `ws-${Date.now()}`
+    const now = Date.now()
+    const existing = db.prepare('SELECT * FROM workspaces WHERE id = ?').get(id)
+    const has = (k) => Object.prototype.hasOwnProperty.call(b, k)
+    const merged = {
+      title: has('title') ? String(b.title ?? '') : (existing?.title ?? ''),
+      problem_text: has('problemText') ? String(b.problemText ?? '') : (existing?.problem_text ?? ''),
+      attachments: has('attachments') ? JSON.stringify(Array.isArray(b.attachments) ? b.attachments : []) : (existing?.attachments ?? '[]'),
+      breakdown: has('breakdown') ? JSON.stringify(Array.isArray(b.breakdown) ? b.breakdown : []) : (existing?.breakdown ?? '[]'),
+      code: has('code') ? String(b.code ?? '') : (existing?.code ?? ''),
+    }
+    const createdAt = existing ? existing.created_at : now
+    db.prepare(`
+      INSERT INTO workspaces (id, title, problem_text, attachments, breakdown, code, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        title=excluded.title, problem_text=excluded.problem_text,
+        attachments=excluded.attachments, breakdown=excluded.breakdown,
+        code=excluded.code, updated_at=excluded.updated_at
+    `).run(id, merged.title, merged.problem_text, merged.attachments, merged.breakdown, merged.code, createdAt, now)
+    res.json({ ok: true, id })
+  } catch (e) {
+    res.status(500).json({ ok: false, message: `保存失败：${e.message}` })
+  }
+})
+
+// 读取单个
+app.get('/api/workspaces/:id', (req, res) => {
+  try {
+    const row = db.prepare('SELECT * FROM workspaces WHERE id = ?').get(req.params.id)
+    if (!row) return res.status(404).json({ ok: false, message: '工作区不存在' })
+    res.json({
+      ok: true,
+      workspace: {
+        id: row.id,
+        title: row.title,
+        problemText: row.problem_text,
+        attachments: parseJsonField(row.attachments),
+        breakdown: parseJsonField(row.breakdown),
+        code: row.code,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      },
+    })
+  } catch (e) {
+    res.status(500).json({ ok: false, message: `读取失败：${e.message}` })
+  }
+})
+
+// 删除
+app.delete('/api/workspaces/:id', (req, res) => {
+  try {
+    db.prepare('DELETE FROM workspaces WHERE id = ?').run(req.params.id)
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(500).json({ ok: false, message: `删除失败：${e.message}` })
+  }
+})
+
 /* ---------- 健康检查 ---------- */
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, name: 'mmg-visualizemm', time: new Date().toISOString() })
