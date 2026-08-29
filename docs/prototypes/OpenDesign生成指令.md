@@ -1,7 +1,8 @@
 # OpenDesign 原型生成指令 v3（覆盖当前产品功能集）
 
+> ⚠️ **2026-08-29 标注**：本文档各页面 prompt 对应**旧 UI**（读题工作台/对话深挖等），全新 UI 定稿后需重写；保留作为 OpenDesign 用法与 prompt 结构参考。
 > 用法：在 OpenDesign 中先加载设计系统 `design-systems/mmg_visualizemm/DESIGN.md`，选择「Web Prototype」，粘贴对应页面 prompt 生成。
-> 产物归档至 `docs/prototypes/`。
+> 产物落盘至 `docs/prototypes/generated/`（工具绑定路径）。
 > **v3 变更（2026-08-29 产品决策）**：知识卡片不再作为独立可浏览页面（无导航入口），降级为**读题/建模流程中的上下文附属内容**——AI 输出（整体解读/对话/建模方案）提到建模概念时，内嵌卡片就地出现在该内容下方。
 >
 > **通用要求（所有页面）**：
@@ -92,4 +93,4 @@
 
 ## 生成后回填
 
-产出后请：①截图归档对应版本的 `screenshots/`（新版 `byok/screenshots/`）；②如有与 DESIGN.md 冲突的视觉选择，单独列出待决策；③本目录 `legacy/一致性检查报告.md` 同步更新。
+产出后请：①截图归档到 `generated/screenshots/`；②如有与 DESIGN.md 冲突的视觉选择，单独列出待决策。

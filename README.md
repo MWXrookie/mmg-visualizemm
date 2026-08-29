@@ -10,10 +10,9 @@
 - ✅ 产品定义与需求：见 [docs/01-产品/PRD.md](docs/01-产品/PRD.md)
 - ✅ 竞品调研（5 维度）：见 [docs/01-产品/竞品调研报告.md](docs/01-产品/竞品调研报告.md)
 - ✅ 技术选型定案：见 [docs/01-产品/技术框架与架构.md](docs/01-产品/技术框架与架构.md)
-- ✅ UI/UX 设计：见 [docs/02-设计/UI-UX设计.md](docs/02-设计/UI-UX设计.md)
+- 🔄 UI/UX 设计：旧设计文档已清理，**全新 UI 设计中**（设计规范最终裁判见 [design-systems/mmg_visualizemm/DESIGN.md](design-systems/mmg_visualizemm/DESIGN.md)）
 - ✅ 开发规划与验收：见 [docs/03-开发/开发规划与验收.md](docs/03-开发/开发规划与验收.md)
-- ✅ 系统架构图：见 [docs/03-开发/architecture.png](docs/03-开发/architecture.png)（源文件 [docs/03-开发/architecture.html](docs/03-开发/architecture.html)）
-- ✅ OpenDesign 设计系统：见 [design-systems/mmg_visualizemm/DESIGN.md](design-systems/mmg_visualizemm/DESIGN.md)
+- ✅ OpenDesign 设计系统：见 [design-systems/mmg_visualizemm/DESIGN.md](design-systems/mmg_visualizemm/DESIGN.md)（工具绑定勿移）
 - ✅ **功能开发**：M1 附件解析 / M2 划词精读 / M3 对话引导 / M4 知识卡片 / M5 编程+会话保存
 
 ## 🚀 快速开始
@@ -48,16 +47,13 @@ npm run dev          # Vite(5173) + 后端(3088)
 ```
 MMG_VisualizeMM/
 ├── web/ server/ scripts/       # 源码（前端 / 后端 / 工具脚本）
-├── design-system/              # 设计 tokens 源（ui-ux-pro-max 生成，工具绑定勿移）
-├── design-systems/             # OpenDesign 设计系统（DESIGN.md，驱动原型生成，工具绑定勿移）
+├── design-systems/             # OpenDesign 设计系统（DESIGN.md 最终裁判，工具绑定勿移）
 ├── docs/                       # 全部文档与素材（分类归档，入口见 docs/README.md）
 │   ├── 01-产品/                # PRD / 竞品调研 / 技术框架 / 原始调研 research/
-│   ├── 02-设计/                # UI-UX设计 / UI偏差清单 / UI渲染描述 / wireframes 线框
-│   ├── 03-开发/                # 开发规划与验收 / 验收报告 / 评测集 / 架构图
-│   ├── prototypes/             # 原型（byok 新版 / legacy 归档 / generated 落盘区）
-│   ├── 05-门户/                # portal.html 门户 + 素材
+│   ├── 02-设计/                # 全新 UI 设计文档（建设中）
+│   ├── 03-开发/                # 开发规划与验收 / 验收报告 / 评测集
+│   ├── prototypes/             # OpenDesign 工作流 + 原型落盘区（generated/）
 │   └── 06-素材/                # 真题 / PDF / Excel 附件
-└── PRD.md → docs/01-产品/PRD.md
 ```
 
 > 📌 完整文档地图见 [docs/README.md](docs/README.md)。
@@ -69,8 +65,8 @@ MMG_VisualizeMM/
 ## 🔑 技术要点（定案）
 
 - 开源自托管 Web 应用，用户下载部署、**自带 API Key（BYOK）**，Key 只存浏览器本地
-- React + TypeScript + Node.js + SQLite
-- 代码执行双轨：Pyodide（浏览器内）/ Docker 沙箱
+- React 18 + JavaScript（Vite）+ Node.js（Express）+ localStorage 持久化 —— **实现现状**（原定案 TS+SQLite 未落地，全新架构将重定，见 [docs/01-产品/技术框架与架构.md](docs/01-产品/技术框架与架构.md)）
+- 代码执行：Pyodide（浏览器内，已实现）/ Docker 沙箱（规划中）
 - 可视化双通道：matplotlib→base64 + Plotly/ECharts 交互图
 
 ## ⚠️ 非商业公益项目

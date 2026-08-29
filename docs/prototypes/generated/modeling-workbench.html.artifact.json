@@ -1,8 +1,8 @@
 {
   "version": 1,
   "kind": "html",
-  "title": "reading-workbench.html",
-  "entry": "reading-workbench.html",
+  "title": "modeling-workbench.html",
+  "entry": "modeling-workbench.html",
   "renderer": "html",
   "status": "complete",
   "exports": [
@@ -10,8 +10,8 @@
     "pdf",
     "zip"
   ],
-  "createdAt": "2026-08-29T14:22:57.023Z",
-  "updatedAt": "2026-08-29T14:22:57.023Z",
+  "createdAt": "2026-08-29T14:27:53.616Z",
+  "updatedAt": "2026-08-29T14:27:53.616Z",
   "metadata": {
     "inferred": true,
     "reconciled": true

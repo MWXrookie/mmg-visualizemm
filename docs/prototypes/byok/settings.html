@@ -1,527 +1,552 @@
 <!doctype html>
 <html lang="zh-CN" data-theme="light">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>模型设置 · 数学建模 AI 辅导</title>
-  <style>
-    /* ─── theme tokens ───────────────────────────────────────────────── */
-    :root {
-      /* light (default) */
-      --bg:        #F8FAFC;
-      --surface:   #FFFFFF;
-      --fg:        #1E293B;
-      --muted:     #475569;
-      --border:    #E2E8F0;
-      --accent:    #2563EB;
-      --accent-2:  #EA580C;
-      --radius-sm: 6px;
-      --radius-md: 10px;
-    }
-    html[data-theme="dark"] {
-      --bg:        #0F172A;
-      --surface:   #1E293B;
-      --fg:        #E2E8F0;
-      --muted:     #94A3B8;
-      --border:    #334155;
-      --accent:    #3B82F6;
-      --accent-2:  #FB923C;
-    }
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>模型设置 · 数学建模 AI 辅导</title>
+<style>
+  :root {
+    --bg: #f6f8fb;
+    --surface: #ffffff;
+    --surface-2: #eef3fa;
+    --fg: #16202e;
+    --muted: #5b6b81;
+    --faint: #93a2b6;
+    --border: #dfe6f0;
+    --border-strong: #c6d2e4;
+    --accent: #3b82f6;
+    --accent-2: #2563eb;
+    --accent-grad: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    --accent-soft: #eaf2ff;
+    --success: #16a34a;
+    --success-bg: #e8f7ee;
+    --danger: #dc2626;
+    --danger-bg: #fdeaeb;
+    --sidebar: #ffffff;
+    --shadow: 0 1px 2px rgba(22,32,46,.04), 0 8px 24px rgba(22,32,46,.06);
+    --shadow-pop: 0 12px 40px rgba(22,32,46,.12);
+    --radius: 10px;
+    --radius-sm: 8px;
+    --ease: cubic-bezier(.4,0,.2,1);
+  }
+  html[data-theme="dark"] {
+    --bg: #0e1420;
+    --surface: #161f2e;
+    --surface-2: #1d2839;
+    --fg: #eef2f8;
+    --muted: #a8b6c8;
+    --faint: #76879c;
+    --border: #263344;
+    --border-strong: #3a4a60;
+    --accent: #60a5fa;
+    --accent-2: #3b82f6;
+    --accent-grad: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+    --accent-soft: #12233f;
+    --success: #4ade80;
+    --success-bg: #14301f;
+    --danger: #f87171;
+    --danger-bg: #3a1d20;
+    --sidebar: #121a27;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 28px rgba(0,0,0,.35);
+    --shadow-pop: 0 16px 48px rgba(0,0,0,.5);
+  }
 
-    /* derived — do not add new tokens (var() values resolve per theme) */
-    :root {
-      --accent-soft: color-mix(in oklch, var(--accent) 13%, transparent);
-      --accent-strong: color-mix(in oklch, var(--accent) 86%, transparent);
-      --success: #16A34A;
-      --success-soft: color-mix(in oklch, #16A34A 12%, transparent);
-      --danger: #DC2626;
-      --danger-soft: color-mix(in oklch, #DC2626 12%, transparent);
-      --fg-soft: color-mix(in oklch, var(--fg) 6%, transparent);
-
-      /* type — body + mono; no decorative serif needed for a utility settings page */
-      --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
-      --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
-
-      /* spacing — 4px rhythm */
-      --ru: 4px;
-      --container: 720px;
-      --gutter: 20px;
-
-      /* form sizing per spec */
-      --ctl-h: 36px;
-      --btn-s: 32px;
-      --btn-m: 36px;
-    }
-  *, *::before, *::after { box-sizing: border-box; }
-  html { -webkit-text-size-adjust: 100%; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
   body {
-    margin: 0;
+    font-family: "Avenir Next", "Segoe UI", "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
     background: var(--bg);
     color: var(--fg);
-    font-family: var(--font-body);
-    font-size: 14px;
+    font-size: 15px;
     line-height: 1.6;
-    text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    transition: background .3s var(--ease), color .3s var(--ease);
   }
-  svg { display: block; }
-  button { font: inherit; cursor: pointer; color: inherit; }
-  p { margin: 0; }
-  h1, h2, h3 { margin: 0; text-wrap: balance; }
+  a { color: inherit; text-decoration: none; }
+  button { font: inherit; font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+  input, select { font: inherit; font-family: inherit; color: var(--fg); }
 
-  /* ─── layout ──────────────────────────────────────────────────────── */
-  .container { max-width: var(--container); margin-inline: auto; padding-inline: var(--gutter); }
-  .stack { display: flex; flex-direction: column; }
-  .row { display: flex; align-items: center; }
-  .page-body { padding-block: 36px 64px; }
-
-  /* ─── topnav ──────────────────────────────────────────────────────── */
-  .topnav { position: sticky; top: 0; z-index: 20; background: color-mix(in oklch, var(--bg) 88%, transparent); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
-  .topnav-inner { display: flex; align-items: center; gap: var(--gutter); height: 56px; }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; color: var(--fg); white-space: nowrap; }
-  .brand-mark { width: 26px; height: 26px; border-radius: 7px; background: var(--accent); color: #fff; display: grid; place-items: center; }
-  .brand-mark svg { width: 15px; height: 15px; }
-  .nav-links { display: flex; align-items: center; gap: 6px; margin-inline: auto; }
-  .nav-link {
-    appearance: none; background: transparent; border: 0; border-radius: var(--radius-sm);
-    padding: 7px 12px; font-size: 14px; font-weight: 500; color: var(--muted);
-    text-decoration: none; white-space: nowrap; transition: background .15s ease, color .15s ease;
+  /* ---------- Layout shell ---------- */
+  .shell { display: flex; min-height: 100vh; width: 100%; }
+  .sidebar {
+    width: 236px; flex: 0 0 236px;
+    background: var(--sidebar);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    padding: 22px 16px 18px;
+    position: sticky; top: 0; height: 100vh;
+    transition: background .3s var(--ease);
   }
-  .nav-link:hover { color: var(--fg); background: var(--fg-soft); }
-  .nav-link[aria-current="page"] { color: var(--accent); background: var(--accent-soft); }
-  .nav-link[aria-current="page"]:hover { color: var(--accent); }
-  .topnav-right { display: flex; align-items: center; gap: 10px; }
+  .main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
 
-  /* key status pill */
-  .key-pill {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 5px 10px; border: 1px solid var(--border); border-radius: 999px;
-    font-size: 12px; color: var(--muted); background: color-mix(in oklch, var(--surface) 70%, transparent); white-space: nowrap;
+  /* ---------- Sidebar: brand ---------- */
+  .brand { display: flex; align-items: center; gap: 10px; padding: 2px 8px 20px; }
+  .brand-mark {
+    width: 34px; height: 34px; flex: 0 0 34px; border-radius: 9px;
+    background: var(--accent-grad);
+    display: grid; place-items: center;
+    box-shadow: 0 4px 12px rgba(59,130,246,.35);
   }
-  .key-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent-2); }
+  .brand-mark svg { width: 19px; height: 19px; stroke: #fff; }
+  .brand-name { font-size: 15px; font-weight: 700; letter-spacing: .2px; line-height: 1.2; }
+  .brand-name small { display: block; font-size: 10.5px; color: var(--faint); font-weight: 500; letter-spacing: .4px; }
 
-  /* theme toggle */
+  /* ---------- Sidebar: nav ---------- */
+  .nav-label {
+    font-size: 11px; font-weight: 600; letter-spacing: .8px;
+    color: var(--faint); text-transform: uppercase;
+    padding: 10px 10px 8px;
+  }
+  .nav { display: flex; flex-direction: column; gap: 2px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 11px;
+    padding: 9px 10px; border-radius: var(--radius-sm);
+    color: var(--muted); font-size: 14px; font-weight: 500;
+    position: relative; transition: background .18s var(--ease), color .18s var(--ease);
+  }
+  .nav-item svg { width: 18px; height: 18px; stroke: currentColor; flex: 0 0 18px; }
+  .nav-item:hover { background: var(--surface-2); color: var(--fg); }
+  .nav-item.active {
+    background: var(--accent-soft); color: var(--accent-2);
+    font-weight: 600;
+  }
+  html[data-theme="dark"] .nav-item.active { color: var(--accent); }
+  .nav-item.active::before {
+    content: ""; position: absolute; left: -16px; top: 50%; transform: translateY(-50%);
+    width: 3px; height: 20px; border-radius: 2px; background: var(--accent-grad);
+  }
+  .nav-more {
+    border: 1.5px dashed var(--border-strong);
+    background: transparent; color: var(--faint);
+  }
+  .nav-more:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+
+  /* ---------- Sidebar: bottom ---------- */
+  .sidebar-foot { margin-top: auto; display: flex; flex-direction: column; gap: 2px; padding-top: 16px; border-top: 1px solid var(--border); }
   .theme-toggle {
-    width: var(--ctl-h); height: var(--ctl-h); display: grid; place-items: center;
-    border: 1px solid var(--border); border-radius: var(--radius-sm);
-    background: var(--surface); color: var(--muted); transition: all .15s ease;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 10px; border-radius: var(--radius-sm);
+    color: var(--muted); font-size: 13.5px; font-weight: 500;
+    transition: background .18s var(--ease);
   }
-  .theme-toggle:hover { color: var(--fg); border-color: color-mix(in oklch, var(--fg) 40%, var(--border)); }
-  .theme-toggle:active { transform: translateY(1px); }
-  .theme-toggle svg { width: 17px; height: 17px; }
-  html[data-theme="dark"] .theme-toggle .icon-sun { display: block; }
-  html[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
-  html[data-theme="light"] .theme-toggle .icon-sun { display: none; }
-  html[data-theme="light"] .theme-toggle .icon-moon { display: block; }
+  .theme-toggle:hover { background: var(--surface-2); color: var(--fg); }
+  .theme-toggle .icon { width: 18px; height: 18px; stroke: currentColor; }
+  .theme-toggle .row { display: flex; align-items: center; gap: 11px; }
 
-  /* ─── page header ─────────────────────────────────────────────────── */
-  .page-head { margin-bottom: 28px; }
-  .page-head h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.3; }
-  .page-head p { margin-top: 8px; color: var(--muted); font-size: 14px; max-width: 60ch; }
-  .page-head .lock-tip { display: inline-flex; align-items: center; gap: 6px; }
+  /* switch */
+  .switch { width: 40px; height: 22px; border-radius: 999px; background: var(--border-strong); position: relative; flex: 0 0 40px; cursor: pointer; transition: background .2s var(--ease); }
+  .switch .knob { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .22s var(--ease); }
+  html[data-theme="dark"] .switch { background: var(--accent-2); }
+  html[data-theme="dark"] .switch .knob { transform: translateX(18px); }
 
-  /* ─── card ────────────────────────────────────────────────────────── */
-  .card {
-    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md);
-    padding: 24px; margin-bottom: var(--gutter);
-  }
-  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
-  .card-head h2 { font-size: 16px; font-weight: 600; letter-spacing: -0.005em; }
-  .card-head .badge { font-size: 12px; color: var(--muted); font-weight: 500; }
+  /* ---------- Content ---------- */
+  .content { padding: 56px clamp(28px, 5vw, 72px) 72px; width: 100%; max-width: 1020px; }
 
-  /* ─── form ────────────────────────────────────────────────────────── */
-  .field { display: flex; flex-direction: column; gap: 6px; }
-  .field + .field { margin-top: 16px; }
-  .field label { font-size: 13px; font-weight: 500; color: var(--fg); }
-  .field label .hint { font-weight: 400; color: var(--muted); }
-  .ctl {
-    width: 100%; height: var(--ctl-h);
-    padding: 0 12px;
-    border: 1px solid var(--border); border-radius: var(--radius-sm);
-    background: var(--bg); color: var(--fg);
-    font: inherit; font-size: 13.5px;
-    transition: border-color .15s ease, box-shadow .15s ease;
+  .page-head { max-width: 760px; margin-left: auto; margin-right: auto; margin-bottom: 28px; }
+  .eyebrow {
+    font-family: ui-monospace, "SFMono-Regular", "Roboto Mono", Menlo, monospace;
+    font-size: 11.5px; letter-spacing: 2px; color: var(--accent-2);
+    text-transform: uppercase; font-weight: 600; margin-bottom: 12px;
   }
-  .ctl::placeholder { color: color-mix(in oklch, var(--muted) 72%, transparent); }
-  .ctl:hover { border-color: color-mix(in oklch, var(--fg) 30%, var(--border)); }
-  .ctl:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-  select.ctl { appearance: none; -webkit-appearance: none; padding-right: 36px; cursor: pointer;
-    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-    background-repeat: no-repeat; background-position: right 10px center; }
-  @supports (-webkit-mask: none) {
-    select.ctl { background-color: transparent; }
-    html[data-theme="light"] select.ctl {
-      background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%231E293B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-    }
-    html[data-theme="dark"] select.ctl {
-      background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23E2E8F0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-    }
-  }
+  html[data-theme="dark"] .eyebrow { color: var(--accent); }
+  .page-head h1 { font-size: 30px; font-weight: 750; letter-spacing: -.4px; line-height: 1.25; }
+  .page-sub { color: var(--muted); font-size: 14.5px; margin-top: 10px; max-width: 560px; }
+  .page-sub strong { color: var(--fg); font-weight: 600; }
 
-  .seg {
-    display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
-    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 3px; gap: 3px;
+  /* ---------- Form card ---------- */
+  .form-card {
+    max-width: 760px; margin-left: auto; margin-right: auto;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: clamp(24px, 3vw, 34px);
+    transition: background .3s var(--ease);
   }
-  .seg button {
-    height: 28px; border: 0; border-radius: calc(var(--radius-sm) - 3px);
-    background: transparent; color: var(--muted); font-size: 13px; font-weight: 500;
-    transition: all .15s ease;
-  }
-  .seg button:hover { color: var(--fg); }
-  .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
-  .seg button[aria-pressed="true"]:hover { color: #fff; background: var(--accent-strong); }
+  .field { margin-bottom: 22px; }
+  .field:last-of-type { margin-bottom: 0; }
+  .field .lbl { display: flex; align-items: center; gap: 7px; font-size: 13.5px; font-weight: 600; margin-bottom: 9px; }
+  .field .lbl .req { color: var(--danger); }
+  .field .hint { font-size: 12.5px; color: var(--faint); margin-top: 7px; line-height: 1.5; }
 
-  /* input with trailing action (show/hide eye) */
-  .input-group { position: relative; display: flex; align-items: center; }
-  .input-group .ctl { padding-right: 44px; }
-  .icon-btn {
-    position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
-    width: 30px; height: 30px; display: grid; place-items: center;
-    border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted);
-    transition: color .15s ease, background .15s ease;
+  /* provider cards */
+  .provider-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .provider-card {
+    border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--surface); padding: 13px 12px;
+    display: flex; flex-direction: column; gap: 8px; align-items: flex-start;
+    cursor: pointer; text-align: left;
+    transition: border-color .18s var(--ease), background .18s var(--ease), box-shadow .18s var(--ease), transform .18s var(--ease);
   }
-  .icon-btn:hover { color: var(--fg); background: var(--fg-soft); }
-  .icon-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
-  .icon-btn svg { width: 17px; height: 17px; }
-  .icon-btn .on, .icon-btn.showing .off { display: none; }
-  .icon-btn.showing .on { display: block; }
+  .provider-card:hover { border-color: var(--border-strong); background: var(--surface-2); }
+  .provider-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .provider-card .radio-dot {
+    width: 18px; height: 18px; border-radius: 50%; flex: 0 0 18px;
+    border: 2px solid var(--border-strong); position: relative; transition: border-color .18s var(--ease), box-shadow .18s var(--ease);
+  }
+  .provider-card .p-name { font-size: 13.5px; font-weight: 600; line-height: 1.3; }
+  .provider-card .p-desc { font-size: 11.5px; color: var(--faint); line-height: 1.4; }
+  .provider-card.selected {
+    border-color: var(--accent);
+    background: linear-gradient(180deg, var(--accent-soft), transparent 85%);
+    box-shadow: 0 0 0 1px var(--accent), 0 6px 16px rgba(59,130,246,.12);
+  }
+  .provider-card.selected .radio-dot { border-color: var(--accent); box-shadow: inset 0 0 0 4px var(--surface), 0 0 0 1px var(--accent); }
+  .provider-card.selected .p-name { color: var(--accent-2); }
+  html[data-theme="dark"] .provider-card.selected .p-name { color: var(--accent); }
 
-  /* ─── buttons ─────────────────────────────────────────────────────── */
-  .btn {
-    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-    border: 1px solid transparent; border-radius: var(--radius-sm);
-    font-size: 13.5px; font-weight: 500; text-decoration: none;
-    transition: all .15s ease; white-space: nowrap;
-  }
-  .btn:active { transform: translateY(1px); }
-  .btn-primary { background: var(--accent); color: #fff; }
-  .btn-primary:hover { background: var(--accent-strong); }
-  .btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
-  .btn-primary:disabled { background: color-mix(in oklch, var(--accent) 45%, var(--bg)); color: #fff; cursor: not-allowed; transform: none; }
-  .btn-ghost { background: transparent; color: var(--fg); border-color: var(--border); }
-  .btn-ghost:hover { border-color: color-mix(in oklch, var(--fg) 40%, var(--border)); background: var(--fg-soft); }
-  .btn-ghost:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
-  .btn-m { height: var(--btn-m); padding: 0 16px; min-width: 88px; }
-  .btn-s { height: var(--btn-s); padding: 0 12px; }
+  /* text inputs */
+  .input-wrap { position: relative; display: block; }
+  .input { width: 100%; padding: 11px 13px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--bg); font-size: 14px; transition: border-color .18s var(--ease), box-shadow .18s var(--ease), background .18s var(--ease); }
+  .input::placeholder { color: var(--faint); }
+  .input:hover { border-color: var(--border-strong); }
+  .input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); background: var(--surface); }
+  .input[disabled] { opacity: .5; cursor: not-allowed; }
+  .input-wrap .toggle-eye { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); width: 34px; height: 34px; display: grid; place-items: center; border-radius: 7px; color: var(--faint); transition: color .15s var(--ease), background .15s var(--ease); }
+  .input-wrap .toggle-eye:hover { color: var(--accent); background: var(--accent-soft); }
+  .input-wrap .toggle-eye:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .input-wrap .toggle-eye svg { width: 19px; height: 19px; }
+  .input-wrap .input { padding-right: 52px; }
+
+  /* actions */
+  .actions { display: flex; align-items: center; gap: 14px; margin-top: 26px; flex-wrap: wrap; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: var(--radius-sm); font-size: 14px; font-weight: 600; letter-spacing: .1px; transition: transform .15s var(--ease), box-shadow .15s var(--ease), opacity .15s var(--ease); }
   .btn svg { width: 16px; height: 16px; }
+  .btn-primary { background: var(--accent-grad); color: #fff; box-shadow: 0 6px 14px rgba(37,99,235,.32); }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 10px 22px rgba(37,99,235,.4); }
+  .btn-primary:active { transform: translateY(0); box-shadow: 0 4px 10px rgba(37,99,235,.3); }
+  .btn-primary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn-primary:disabled { opacity: .55; cursor: not-allowed; transform: none; box-shadow: none; }
+  .btn-ghost { background: transparent; color: var(--muted); border: 1.5px solid var(--border-strong); }
+  .btn-ghost:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+  .btn-ghost:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn-ghost:disabled { opacity: .5; cursor: not-allowed; }
 
-  /* ─── switch ──────────────────────────────────────────────────────── */
-  .pref-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 4px 0; }
-  .pref-row + .pref-row { border-top: 1px solid var(--border); margin-top: 18px; padding-top: 18px; }
-  .pref-text strong { display: block; font-size: 14px; font-weight: 500; }
-  .pref-text p { margin-top: 3px; color: var(--muted); font-size: 13px; max-width: 46ch; }
-  .switch {
-    flex-shrink: 0; width: 40px; height: 22px; border: 0; border-radius: 999px;
-    background: color-mix(in oklch, var(--fg) 18%, var(--border)); position: relative;
-    transition: background .2s ease; margin-top: 2px;
-  }
-  .switch::after {
-    content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
-    border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); transition: transform .2s ease;
-  }
-  .switch[aria-checked="true"] { background: var(--accent); }
-  .switch[aria-checked="true"]::after { transform: translateX(18px); }
-  .switch:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+  /* result toast */
+  .result { display: none; align-items: flex-start; gap: 9px; margin-top: 16px; padding: 11px 14px; border-radius: var(--radius-sm); font-size: 13.5px; line-height: 1.5; width: 100%; }
+  .result svg { width: 17px; height: 17px; flex: 0 0 17px; margin-top: 2px; }
+  .result.ok { background: var(--success-bg); color: var(--success); display: flex; }
+  .result.err { background: var(--danger-bg); color: var(--danger); display: flex; }
+  .result .r-title { font-weight: 700; }
 
-  /* ─── result notice ───────────────────────────────────────────────── */
-  .notice {
-    display: flex; align-items: flex-start; gap: 10px;
-    padding: 10px 12px; border-radius: var(--radius-sm); border-left: 3px solid; font-size: 13.5px;
-  }
-  .notice svg { width: 16px; height: 16px; margin-top: 1px; flex-shrink: 0; }
-  .notice p { line-height: 1.55; }
-  .notice-success { background: var(--success-soft); border-left-color: var(--success); color: var(--fg); }
-  .notice-success svg { color: var(--success); }
-  .notice-error { background: var(--danger-soft); border-left-color: var(--danger); color: var(--fg); }
-  .notice-error svg { color: var(--danger); }
-  .notice[hidden] { display: none; }
+  .divider { height: 1px; background: var(--border); margin: 24px 0; }
 
-  /* ─── guide steps ─────────────────────────────────────────────────── */
-  .guide-card { background: color-mix(in oklch, var(--accent) 6%, var(--surface)); }
-  .guide-head { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
-  .guide-head h2 { font-size: 16px; font-weight: 600; }
-  .guide-head .time { font-size: 12px; color: var(--muted); background: var(--accent-soft); color: var(--accent); padding: 3px 8px; border-radius: 999px; font-weight: 500; }
-  .guide-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-  .gstep { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 16px; }
-  .gstep .num {
-    width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #fff;
-    display: grid; place-items: center; font-size: 13px; font-weight: 600; margin-bottom: 12px;
-  }
-  .gstep strong { display: block; font-size: 14px; font-weight: 600; margin-bottom: 5px; }
-  .gstep p { font-size: 13px; color: var(--muted); line-height: 1.55; }
-  .guide-foot { margin-top: 16px; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
-  .guide-foot svg { width: 15px; height: 15px; color: var(--accent-2); flex-shrink: 0; }
+  .save-msg { font-size: 12.5px; color: var(--success); display: none; align-items: center; gap: 6px; }
+  .save-msg.show { display: inline-flex; }
+  .save-msg svg { width: 14px; height: 14px; }
 
-  /* mobile reflow — no horizontal scroll */
-  @media (max-width: 640px) {
-    .page-body { padding-top: 24px; }
-    .topnav .key-pill { display: none; }
-    .guide-steps { grid-template-columns: 1fr; }
-    .brand .brand-label { display: none; }
+  /* spinner */
+  .spinner { width: 15px; height: 15px; border: 2px solid rgba(255,255,255,.35); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .btn-ghost .spinner { border-color: var(--border-strong); border-top-color: var(--accent); }
+
+  /* ---------- Responsive ---------- */
+  @media (max-width: 1024px) {
+    .provider-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 768px) {
+    .shell { flex-direction: column; }
+    .sidebar { width: 100%; flex: none; height: auto; position: static; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 6px; padding: 14px 16px; border-right: none; border-bottom: 1px solid var(--border); }
+    .brand { padding: 0; margin-right: 8px; }
+    .brand-name small { display: none; }
+    .nav { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+    .nav-label, .nav-item.active::before { display: none; }
+    .nav-item { padding: 7px 10px; font-size: 13px; }
+    .sidebar-foot { margin-top: 0; margin-left: auto; border-top: none; padding-top: 0; }
+    .theme-toggle { padding: 6px 8px; }
+    .theme-toggle .lbl { display: none; }
+    .theme-toggle .row { gap: 6px; }
+    .content { padding: 32px 20px 56px; }
+    .page-head h1 { font-size: 25px; }
   }
   @media (max-width: 480px) {
-    .nav-link { padding: 7px 9px; font-size: 13px; }
-    .card { padding: 20px; }
-    .card-actions { flex-direction: column; align-items: stretch; }
-    .card-actions .btn { width: 100%; }
+    .provider-grid { grid-template-columns: 1fr; }
+    .actions { flex-direction: column; align-items: stretch; }
+    .btn { justify-content: center; }
   }
-  .card-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
 
-  /* focus visible ring for all focusable */
-  a:focus-visible, button:focus-visible { outline: none; }
+/* === 浅色模式区块分隔增强（追加） === */
+:root{
+  --border:#ccd5e2;
+  --shadow-soft:0 1px 3px rgba(15,23,42,.08),0 4px 14px rgba(15,23,42,.05);
+}
+:root[data-theme='dark']{ --border:#263449; }
+.app > *, .main > *, .panel, aside, nav, section, .card {
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.rail, .sidebar { box-shadow: inset -1px 0 0 var(--border); }
+
 </style>
 </head>
 <body>
-  <header class="topnav" data-od-id="model-settings-topnav">
-    <div class="container topnav-inner">
-      <a class="brand" href="#" data-od-id="brand">
-        <span class="brand-mark">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="7" rx="2"/><rect x="13" y="3" width="8" height="4" rx="2"/><rect x="13" y="10" width="8" height="11" rx="2"/></svg>
-        </span>
-        <span class="brand-label">数学建模 AI</span>
-      </a>
-      <nav class="nav-links" data-od-id="main-nav">
-        <a class="nav-link" href="#">读题工作台</a>
-        <a class="nav-link" href="#">编程工作台</a>
-        <a class="nav-link" href="#" aria-current="page">模型设置</a>
+  <div class="shell">
+
+    <!-- ============ LEFT FUNCTION BAR ============ -->
+    <aside class="sidebar" data-od-id="sidebar">
+      <div class="brand" data-od-id="brand">
+        <div class="brand-mark">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 4v5c0 4.6-3.2 7.8-7 9-3.8-1.2-7-4.4-7-9V7l7-4z"/><path d="M9.5 12l1.8 1.8 3.2-3.6"/></svg>
+        </div>
+        <div class="brand-name">数模助研<span>Math AI Tutor</span></div>
+      </div>
+
+      <div class="nav-label">工作台</div>
+      <nav class="nav" data-od-id="workspace-nav">
+        <a class="nav-item" data-od-id="nav-read" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V5a2 2 0 0 0-2-2H6.5A2.5 2.5 0 0 0 4 5.5v14z"/><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H18a2 2 0 0 1 2 2"/></svg>
+          读题工作台
+        </a>
+        <a class="nav-item" data-od-id="nav-outline" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5v13M15 5v4M15 13v5M9 9h6"/><rect x="4" y="3" width="16" height="18" rx="2"/></svg>
+          建模思路梳理台
+        </a>
+        <a class="nav-item" data-od-id="nav-coding" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 8l-4 4 4 4M16 8l4 4-4 4M14 5l-4 14"/></svg>
+          编程工作台
+        </a>
+        <button class="nav-item nav-more" data-od-id="nav-more">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          更多
+        </button>
       </nav>
-      <div class="topnav-right">
-        <span class="key-pill" data-od-id="key-status">
-          <span class="dot" aria-hidden="true"></span>
-          Key 已连接
-        </span>
-        <button class="theme-toggle" id="theme-toggle" data-od-id="theme-toggle" aria-label="切换主题" title="切换主题">
-          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
-          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+
+      <div class="sidebar-foot">
+        <button class="nav-item active" data-od-id="nav-settings" href="#">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06A2 2 0 1 1 7.04 4.3l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          模型设置
+        </button>
+        <button class="theme-toggle" id="themeToggle" data-od-id="theme-toggle" aria-pressed="false">
+          <span class="row">
+            <svg class="icon sun" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+            <svg class="icon moon" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+            <span class="lbl">深色模式</span>
+          </span>
+          <span class="switch" role="switch" aria-checked="false"><span class="knob"></span></span>
         </button>
       </div>
-    </div>
-  </header>
+    </aside>
 
-  <main id="content" class="container page-body">
-
-    <section class="page-head" data-od-id="model-settings-header">
-      <h1>模型设置</h1>
-      <p class="lock-tip">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
-        Key 只保存在本浏览器（AES-GCM 加密），不会上传服务器
-      </p>
-    </section>
-
-    <!-- 模型接入 -->
-    <section class="card" data-od-id="model-access-card">
-      <div class="card-head">
-        <h2>模型接入</h2>
-        <span class="badge">Provider &amp; API</span>
-      </div>
-
-      <div class="stack">
-        <div class="field" data-od-id="field-provider">
-          <label for="provider">Provider</label>
-          <select class="ctl" id="provider" data-od-id="provider-select">
-            <option value="qwen">通义百炼（qwen-plus）</option>
-            <option value="deepseek" selected>DeepSeek（deepseek-chat）</option>
-            <option value="openai">OpenAI（gpt-4o-mini）</option>
-            <option value="custom">自定义</option>
-          </select>
+    <!-- ============ RIGHT CONTENT ============ -->
+    <main class="main">
+      <div class="content" data-od-id="content">
+        <div class="page-head" data-od-id="page-head">
+          <div class="eyebrow">Settings</div>
+          <h1>模型设置</h1>
+          <p class="page-sub">配置数学建模模型 API，用于全程的读题、思路梳理与编程辅导。<strong>Key 只保存在本浏览器（加密存储），不会上传服务器。</strong></p>
         </div>
 
-        <div class="field" data-od-id="field-api-key">
-          <label for="api-key">API Key</label>
-          <div class="input-group">
-            <input class="ctl" type="password" id="api-key" placeholder="sk-••••••••••••••••••••••" autocomplete="off" />
-            <button class="icon-btn" id="toggle-key" data-od-id="toggle-key" aria-label="显示/隐藏 Key" aria-pressed="false">
-              <svg class="off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
-              <svg class="on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="3" y1="3" x2="21" y2="21"/></svg>
-            </button>
+        <form class="form-card" id="settingsForm" data-od-id="settings-form" novalidate>
+
+          <!-- Provider -->
+          <div class="field" data-od-id="provider-field">
+            <label class="lbl">模型服务商<span class="req">*</span></label>
+            <div class="provider-grid" role="radiogroup" data-od-id="provider-grid">
+              <button type="button" class="provider-card selected" data-od-id="provider-qwen" data-provider="qwen" data-model="qwen-plus" data-base="https://dashscope.aliyuncs.com/compatible-mode/v1" role="radio" aria-checked="true">
+                <span class="radio-dot"></span>
+                <span class="p-name">通义百炼</span>
+                <span class="p-desc">阿里 Qwen 系列</span>
+              </button>
+              <button type="button" class="provider-card" data-od-id="provider-deepseek" data-provider="deepseek" data-model="deepseek-chat" data-base="https://api.deepseek.com/v1" role="radio" aria-checked="false">
+                <span class="radio-dot"></span>
+                <span class="p-name">DeepSeek</span>
+                <span class="p-desc">推理模型 R1</span>
+              </button>
+              <button type="button" class="provider-card" data-od-id="provider-openai" data-provider="openai" data-model="gpt-4o" data-base="https://api.openai.com/v1" role="radio" aria-checked="false">
+                <span class="radio-dot"></span>
+                <span class="p-name">OpenAI</span>
+                <span class="p-desc">GPT 系列</span>
+              </button>
+              <button type="button" class="provider-card" data-od-id="provider-custom" data-provider="custom" data-model="" data-base="https://api.example.com/v1" role="radio" aria-checked="false">
+                <span class="radio-dot"></span>
+                <span class="p-name">自定义</span>
+                <span class="p-desc">OpenAI 兼容</span>
+              </button>
+            </div>
           </div>
-        </div>
 
-        <div class="field" data-od-id="field-base-url">
-          <label for="base-url">Base URL</label>
-          <input class="ctl" type="url" id="base-url" placeholder="https://api.deepseek.com/v1" />
-        </div>
+          <!-- API Key -->
+          <div class="field" data-od-id="key-field">
+            <label class="lbl" for="apiKey">API Key<span class="req">*</span></label>
+            <div class="input-wrap">
+              <input class="input" id="apiKey" name="apiKey" type="password" placeholder="sk-••••••••••••••••" autocomplete="off" spellcheck="false" data-od-id="api-key" />
+              <button type="button" class="toggle-eye" id="toggleKey" data-od-id="toggle-key" aria-label="显示 / 隐藏 Key">
+                <svg class="ic-eyes-open" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg class="ic-eyes-closed" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M3 3l18 18"/><path d="M10.6 10.7a3 3 0 0 0 4.1 4.2"/><path d="M6.6 6.9A17 17 0 0 0 2 12s3.5 7 10 7a10 10 0 0 0 4-.8"/><path d="M17.4 8.1A17 17 0 0 1 22 12s-3.5 7-10 7"/></svg>
+              </button>
+            </div>
+            <div class="hint">加密存储于本机浏览器，仅用于发起模型请求，绝不外传。</div>
+          </div>
 
-        <div class="field" data-od-id="field-model">
-          <label for="model-name">模型名</label>
-          <input class="ctl" id="model-name" placeholder="deepseek-chat" />
-        </div>
+          <!-- Base URL (custom only) -->
+          <div class="field" data-od-id="base-field" id="baseField" style="display:none">
+            <label class="lbl" for="baseUrl">Base URL</label>
+            <div class="input-wrap">
+              <input class="input" id="baseUrl" name="baseUrl" type="url" placeholder="https://api.deepseek.com/v1" spellcheck="false" data-od-id="base-url" />
+            </div>
+            <div class="hint">OpenAI 兼容接口的 API 根地址，自定义服务商时需填写。</div>
+          </div>
+
+          <!-- Base URL hint when preset (non-custom) -->
+          <div class="field" data-od-id="base-field" id="presetBaseField" style="display:none">
+            <label class="lbl" for="baseUrlPreset">Base URL</label>
+            <div class="input-wrap">
+              <input class="input" id="baseUrlPreset" type="text" value="https://dashscope.aliyuncs.com/compatible-mode/v1" readonly disabled data-od-id="base-url" />
+            </div>
+            <div class="hint">已由服务商预设，自定义时可编辑。</div>
+          </div>
+
+          <!-- Model name -->
+          <div class="field" data-od-id="model-field">
+            <label class="lbl" for="modelName">模型名<span class="req">*</span></label>
+            <div class="input-wrap">
+              <input class="input" id="modelName" name="modelName" type="text" placeholder="qwen-plus" spellcheck="false" data-od-id="model-name" />
+            </div>
+            <div class="hint">例如 <strong>qwen-plus</strong> / <strong>deepseek-chat</strong>。</div>
+          </div>
+
+          <!-- Actions -->
+          <div class="actions" data-od-id="form-actions">
+            <button type="button" class="btn btn-primary" id="testBtn" data-od-id="test-connection">
+              <span>测试连接</span>
+            </button>
+
+            <div class="result" id="resultToast" data-od-id="result-toast" role="status" aria-live="polite"></div>
+
+            <div style="flex:1"></div>
+            <button type="submit" class="btn btn-ghost" id="saveBtn" data-od-id="save-settings">保存设置</button>
+          </div>
+
+          <div class="divider"></div>
+          <div class="save-msg" id="saveMsg" data-od-id="save-msg">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+            设置已保存到本浏览器
+          </div>
+        </form>
       </div>
+    </main>
+  </div>
 
-      <div class="card-actions" data-od-id="model-actions">
-        <button class="btn btn-primary btn-m" id="test-btn" data-od-id="test-connection">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
-          测试连接
-        </button>
-        <button class="btn btn-ghost btn-m" data-od-id="save-setting">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
-          保存设置
-        </button>
-      </div>
+<script>
+(function () {
+  var theme = localStorage.getItem('model-settings-theme') || 'light';
+  var root = document.documentElement;
+  root.setAttribute('data-theme', theme);
+  syncThemeUI();
 
-      <div class="notice notice-success" data-od-id="test-result" id="test-result" hidden>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
-        <p>连接成功（模型 <span id="result-model">deepseek-chat</span>）</p>
-      </div>
-      <div class="notice notice-error" data-od-id="test-result-error" id="test-result-error" hidden>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-        <p id="result-error-msg">Key 无效：请检查 API Key 是否复制完整、无误。</p>
-      </div>
-    </section>
+  function syncThemeUI() {
+    var dark = root.getAttribute('data-theme') === 'dark';
+    document.getElementById('themeToggle').setAttribute('aria-pressed', String(dark));
+    var sw = document.getElementById('themeToggle').querySelector('.switch');
+    sw.setAttribute('aria-checked', String(dark));
+  }
+  document.getElementById('themeToggle').addEventListener('click', function () {
+    var cur = root.getAttribute('data-theme');
+    var next = cur === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    localStorage.setItem('model-settings-theme', next);
+    syncThemeUI();
+  });
 
-    <!-- 偏好 -->
-    <section class="card" data-od-id="preferences-card">
-      <div class="card-head">
-        <h2>偏好</h2>
-      </div>
+  /* ---------- Provider selection ---------- */
+  var cards = Array.prototype.slice.call(document.querySelectorAll('.provider-card'));
+  var baseField = document.getElementById('baseField');
+  var presetField = document.getElementById('presetBaseField');
+  var modelInput = document.getElementById('modelName');
+  var presetInput = document.getElementById('baseUrlPreset');
 
-      <div class="pref-row" data-od-id="pref-theme">
-        <div class="pref-text">
-          <strong>主题</strong>
-          <p>选择浅色或深色界面。</p>
-        </div>
-        <div class="seg" role="group" aria-label="主题" data-od-id="theme-segmented">
-          <button type="button" aria-pressed="true" data-theme="light">浅色</button>
-          <button type="button" aria-pressed="false" data-theme="dark">深色</button>
-        </div>
-      </div>
-
-      <div class="pref-row" data-od-id="pref-guide">
-        <div class="pref-text">
-          <strong>引导模式</strong>
-          <p>开启后 AI 只给思路与反问，不直接给出完整成品答案。</p>
-        </div>
-        <button class="switch" id="guide-switch" role="switch" aria-checked="true" data-od-id="guide-mode-switch" aria-label="引导模式"></button>
-      </div>
-    </section>
-
-    <!-- 新手指引 -->
-    <section class="card guide-card" data-od-id="get-started-card">
-      <div class="guide-head">
-        <h2>还没有 API Key？</h2>
-        <span class="time">3 分钟搞定</span>
-      </div>
-      <div class="guide-steps">
-        <div class="gstep" data-od-id="guide-step-1">
-          <span class="num">1</span>
-          <strong>注册平台</strong>
-          <p>在通义百炼或 DeepSeek 官网注册账号，进入「API-KEY」管理页面。</p>
-        </div>
-        <div class="gstep" data-od-id="guide-step-2">
-          <span class="num">2</span>
-          <strong>创建 Key</strong>
-          <p>点击「创建 API Key」，复制生成的密钥字符，妥善保存。</p>
-        </div>
-        <div class="gstep" data-od-id="guide-step-3">
-          <span class="num">3</span>
-          <strong>粘贴测试</strong>
-          <p>把 Key 粘贴到上方输入框，点击「测试连接」即可开始使用。</p>
-        </div>
-      </div>
-      <p class="guide-foot" data-od-id="guide-tip">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18l-7 9v8l-4 2v-10L3 3z"/></svg>
-        国内平台充值 10 元即可用很久，日常题目用量几乎可以忽略不计。
-      </p>
-    </section>
-
-  </main>
-
-  <script>
-    var $ = function (sel, ctx) { return (ctx || document).querySelector(sel); };
-
-    /* ── theme ── */
-    var THEME_KEY = 'mm-model-settings-theme';
-    function applyTheme(theme) {
-      document.documentElement.setAttribute('data-theme', theme);
-      var segBtns = document.querySelectorAll('.seg [data-theme]');
-      segBtns.forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-theme') === theme)); });
+  function applyProvider(card) {
+    cards.forEach(function (c) {
+      var sel = c === card;
+      c.classList.toggle('selected', sel);
+      c.setAttribute('aria-checked', String(sel));
+    });
+    if (card.dataset.provider === 'custom') {
+      baseField.style.display = 'block';
+      presetField.style.display = 'none';
+    } else {
+      baseField.style.display = 'none';
+      presetField.style.display = 'block';
+      presetInput.value = card.dataset.base || '';
     }
-    function toggleTheme() {
-      var cur = document.documentElement.getAttribute('data-theme');
-      applyTheme(cur === 'dark' ? 'light' : 'dark');
-      try { localStorage.setItem(THEME_KEY, document.documentElement.getAttribute('data-theme')); } catch (e) {}
+    if (card.dataset.model) {
+      modelInput.placeholder = card.dataset.model;
+      if (!modelInput.value || /^(qwen|deepseek|gpt)/.test(modelInput.value)) {
+        modelInput.value = '';
+        modelInput.placeholder = card.dataset.model;
+      }
     }
-    (function initTheme() {
-      var saved = null;
-      try { saved = localStorage.getItem(THEME_KEY); } catch (e) {}
-      applyTheme(saved === 'dark' ? 'dark' : 'light');
-    })();
-    $('#theme-toggle').addEventListener('click', toggleTheme);
-    document.querySelectorAll('.seg [data-theme]').forEach(function (b) {
-      b.addEventListener('click', function () { applyTheme(b.getAttribute('data-theme')); try { localStorage.setItem(THEME_KEY, b.getAttribute('data-theme')); } catch (e) {} });
-    });
-    document.documentElement.addEventListener('keydown', function (e) {
-      if (e.altKey && (e.key === 't' || e.key === 'T')) toggleTheme();
-    });
+    hideResult();
+  }
+  cards.forEach(function (card) {
+    card.addEventListener('click', function () { applyProvider(card); });
+  });
+  applyProvider(cards[0]);
 
-    /* ── show/hide key ── */
-    $('#toggle-key').addEventListener('click', function () {
-      var input = $('#api-key');
-      var showing = input.type === 'text';
-      input.type = showing ? 'password' : 'text';
-      this.classList.toggle('showing', !showing);
-      this.setAttribute('aria-pressed', String(!showing));
-      this.setAttribute('aria-label', showing ? '显示 Key' : '隐藏 Key');
-    });
+  /* ---------- Key show / hide ---------- */
+  var keyInput = document.getElementById('apiKey');
+  var toggleKey = document.getElementById('toggleKey');
+  toggleKey.addEventListener('click', function () {
+    var hidden = keyInput.type === 'password';
+    keyInput.type = hidden ? 'text' : 'password';
+    toggleKey.querySelector('.ic-eyes-open').style.display = hidden ? 'none' : 'block';
+    toggleKey.querySelector('.ic-eyes-closed').style.display = hidden ? 'block' : 'none';
+    toggleKey.setAttribute('aria-label', hidden ? '隐藏 Key' : '显示 Key');
+  });
 
-    /* ── provider presets ── */
-    var PRESETS = {
-      qwen:     { baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus' },
-      deepseek: { baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
-      openai:   { baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
-      custom:   { baseUrl: 'https://api.example.com/v1', model: '' }
-    };
-    $('#provider').addEventListener('change', function () {
-      var p = PRESETS[this.value];
-      if (!p) return;
-      $('#base-url').placeholder = p.baseUrl;
-      $('#model-name').placeholder = p.model || 'your-model-name';
-      if (this.value !== 'custom') { $('#base-url').value = p.baseUrl; $('#model-name').value = p.model; }
-    });
+  function hideResult() {
+    var r = document.getElementById('resultToast');
+    r.className = 'result';
+    r.innerHTML = '';
+  }
 
-    /* ── switch ── */
-    $('#guide-switch').addEventListener('click', function () {
-      var on = this.getAttribute('aria-checked') === 'true';
-      this.setAttribute('aria-checked', String(!on));
-    });
+  /* ---------- Test connection (simulated) ---------- */
+  var testBtn = document.getElementById('testBtn');
+  var baseBtn = testBtn;
 
-    /* ── test connection (demo) ── cycles success → 3 error categories ── */
-    var failures = {
-      'Key 无效': 'Key 无效：请检查 API Key 是否复制完整、无误。',
-      '额度不足': '额度不足：当前账号余额不足，请前往平台充值后重试。',
-      '网络错误': '网络错误：无法连接服务，请检查网络或 Base URL 后重试。'
-    };
-    var demo = ['success', 'Key 无效', '额度不足', '网络错误'];
-    var stepIdx = 0;
-    $('#test-btn').addEventListener('click', function (e) {
-      e.preventDefault();
-      var btn = this, orig = btn.innerHTML;
-      btn.disabled = true;
-      btn.innerHTML = '<svg class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>连接中…';
-      setTimeout(function () {
-        $('#test-result-error').hidden = true;
-        $('#test-result').hidden = true;
-        var state = demo[stepIdx % demo.length];
-        if (state === 'success') {
-          $('#result-model').textContent = $('#model-name').value || $('#model-name').placeholder;
-          $('#test-result').hidden = false;
-        } else {
-          $('#result-error-msg').textContent = failures[state];
-          $('#test-result-error').hidden = false;
-        }
-        stepIdx++;
-        btn.disabled = false;
-        btn.innerHTML = orig;
-      }, 700);
-    });
+  function setTesting(on) {
+    testBtn.disabled = on;
+    if (on) {
+      testBtn.innerHTML = '<span class="spinner"></span><span>正在测试…</span>';
+    } else {
+      testBtn.innerHTML = '<span>测试连接</span>';
+    }
+  }
 
-    /* ── save ── */
-    $('#save-setting').addEventListener('click', function (e) {
-      e.preventDefault();
-      var btn = this, orig = btn.innerHTML;
-      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>已保存';
-      setTimeout(function () { btn.innerHTML = orig; }, 1400);
-    });
-  </script>
+  testBtn.addEventListener('click', function () {
+    var provider = (document.querySelector('.provider-card.selected') || {}).dataset;
+    var key = keyInput.value.trim();
+    if (!key) { showResult('err', '未填写 API Key', '请在下方输入有效密钥后再试。'); return; }
+    if (provider && provider.provider === 'custom' && !document.getElementById('baseUrl').value.trim()) {
+      showResult('err', '缺少 Base URL', '自定义服务商需要填写 API 根地址。'); return;
+    }
+    setTesting(true);
+    hideResult();
+    setTimeout(function () {
+      setTesting(false);
+      // simulated connection success
+      var model = modelInput.value.trim() || document.getElementById('modelName').placeholder;
+      var providerName = (document.querySelector('.provider-card.selected .p-name') || {}).textContent || '服务商';
+      showResult('ok', '连接成功', '已连通 ' + providerName + '，可用模型：' + model);
+    }, 1400);
+  });
+
+  function showResult(kind, title, msg) {
+    var r = document.getElementById('resultToast');
+    var icon = kind === 'ok'
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>';
+    r.className = 'result ' + kind;
+    r.innerHTML = icon + '<span><span class="r-title">' + title + '</span> — ' + msg + '</span>';
+  }
+
+  /* ---------- Save ---------- */
+  document.getElementById('settingsForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (!keyInput.value.trim()) { showResult('err', '未填写 API Key', '保存前请先填写密钥。'); return; }
+    var msg = document.getElementById('saveMsg');
+    msg.classList.add('show');
+    setTimeout(function () { msg.classList.remove('show'); }, 3000);
+  });
+})();
+</script>
 </body>
 </html>

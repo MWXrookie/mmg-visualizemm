@@ -1,793 +1,874 @@
 <!doctype html>
+<!--- reading-workbench · 数学建模 AI 辅导工具 — 读题工作台（沉浸态） -->
 <html lang="zh-CN" data-theme="light">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>读题工作台 · 数模 AI 辅导</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>读题工作台 · 数学建模 AI 辅导工具</title>
 <style>
-  :root {
-    --bg: #F8FAFC;
-    --surface: #FFFFFF;
-    --fg: #1E293B;
-    --muted: #475569;
-    --border: #E2E8F0;
-    --accent: #2563EB;
-    --accent-strong: #1D4ED8;
-    --accent-soft: rgba(37,99,235,.15);
-    --orange: #EA580C;
-    --orange-soft: rgba(234,88,12,.14);
-    --blue-role: #0EA5E9;
-    --blue-role-bg: rgba(14,165,233,.15);
-    --amber-role: #D97706;
-    --amber-role-bg: rgba(217,119,6,.15);
-    --green-role: #059669;
-    --green-role-bg: rgba(5,150,105,.15);
-    --shadow: 0 1px 2px rgba(15,23,42,.06);
-    --shadow-md: 0 6px 20px rgba(15,23,42,.10);
-    --ok-bg: rgba(5,150,105,.12);
-    --ok-fg: #047857;
-    --crumb-bg: #F1F5F9;
-    --radius-sm: 6px;
-    --radius-md: 10px;
-    --r: 4px;
-  }
-  html[data-theme="dark"] {
-    --bg: #0F172A;
-    --surface: #1E293B;
-    --fg: #E2E8F0;
-    --muted: #94A3B8;
-    --border: #334155;
-    --accent: #3B82F6;
-    --accent-strong: #60A5FA;
-    --accent-soft: rgba(59,130,246,.20);
-    --orange: #FB923C;
-    --orange-soft: rgba(251,146,60,.18);
-    --blue-role: #38BDF8;
-    --blue-role-bg: rgba(56,189,248,.16);
-    --amber-role: #FBBF24;
-    --amber-role-bg: rgba(251,191,36,.16);
-    --green-role: #34D399;
-    --green-role-bg: rgba(52,211,153,.16);
-    --shadow: 0 1px 2px rgba(0,0,0,.30);
-    --shadow-md: 0 8px 24px rgba(0,0,0,.45);
-    --ok-bg: rgba(52,211,153,.15);
-    --ok-fg: #6EE7B7;
-    --crumb-bg: #16233B;
-  }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; }
-  body {
-    background: var(--bg);
-    color: var(--fg);
-    font-family: "PingFang SC","Microsoft YaHei","Source Han Sans SC",-apple-system,"Segoe UI",Roboto,sans-serif;
-    font-size: 15px;
-    line-height: 1.6;
-    -webkit-font-smoothing: antialiased;
-  }
-  button { font-family: inherit; }
-  a { color: var(--accent); text-decoration: none; }
+/* ─── design tokens ───────────────────────────────────────────────
+   两套主题：浅色（默认）与深色，via html[data-theme]。渐变蓝为主色系。 */
+:root {
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --rail-w: 52px;
+  --bookmark-w: 44px;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+               'Hiragino Sans GB', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+}
 
-  /* ---------- Top nav ---------- */
-  .nav {
-    position: sticky; top: 0; z-index: 50;
-    height: 56px;
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 0 20px;
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-  }
-  .nav-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
-  .brand-logo { color: var(--accent); flex: 0 0 auto; display: flex; }
-  .brand-name { font-size: 15px; font-weight: 600; letter-spacing: .01em; white-space: nowrap; }
-  .brand-tag { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; }
-  .nav-tabs { display: flex; gap: 4px; margin-left: 28px; }
-  .nav-tab {
-    background: transparent; border: none; cursor: pointer;
-    color: var(--muted); font-size: 14px; font-weight: 500;
-    padding: 8px 12px; border-radius: var(--r);
-    transition: background .15s ease, color .15s ease;
-  }
-  .nav-tab:hover { background: var(--crumb-bg); color: var(--fg); }
-  .nav-tab.active { color: var(--accent); background: var(--accent-soft); }
-  .nav-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .nav-right { display: flex; align-items: center; gap: 12px; }
-  .status-pill {
-    display: inline-flex; align-items: center; gap: 6px;
-    font-size: 12px; font-weight: 500; color: var(--ok-fg);
-    background: var(--ok-bg);
-    padding: 5px 10px; border-radius: 999px;
-    white-space: nowrap;
-  }
-  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ok-fg); }
-  .icon-btn {
-    width: 36px; height: 36px; border-radius: var(--r);
-    border: 1px solid transparent; background: transparent; color: var(--fg);
-    display: flex; align-items: center; justify-content: center; cursor: pointer;
-    transition: background .15s ease, border-color .15s ease;
-  }
-  .icon-btn:hover { background: var(--crumb-bg); }
-  .icon-btn:active { transform: translateY(1px); }
-  .icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* 浅色 */
+html[data-theme="light"] {
+  --bg:      #F6F8FB;
+  --surface: #FFFFFF;
+  --surface-2:#F1F5F9;
+  --fg:      #1E293B;
+  --muted:   #5B6B80;
+  --border:  #E3E9F0;
+  --accent:  #3B82F6;
+  --accent-2:#2563EB;
+  --ok:      #16A34A;
+  --amber:   #B45309;
+  --err:     #DC2626;
+}
 
-  /* ---------- Step indicator ---------- */
-  .steps {
-    display: flex; align-items: center; justify-content: center; flex-wrap: wrap;
-    gap: 12px; padding: 16px 20px;
-  }
-  .step { display: flex; align-items: center; gap: 8px; }
-  .step-node {
-    width: 26px; height: 26px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 13px; font-weight: 600;
-    border: 1px solid var(--border); color: var(--muted); background: var(--surface);
-  }
-  .step.done .step-node { background: var(--green-role); border-color: var(--green-role); color: #fff; }
-  .step.active .step-node { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .step-label { font-size: 14px; color: var(--muted); font-weight: 500; }
-  .step.done .step-label { color: #047857; }
-  .step.active .step-label { color: var(--accent); font-weight: 600; }
-  html[data-theme="dark"] .step.done .step-label { color: var(--green-role); }
-  .step-arrow { color: var(--muted); display: flex; opacity: .7; }
+/* 深色 */
+html[data-theme="dark"] {
+  --bg:      #0B1220;
+  --surface: #131C2E;
+  --surface-2:#1B2740;
+  --fg:      #E3E9F2;
+  --muted:   #93A2B8;
+  --border:  #26334D;
+  --accent:  #60A5FA;
+  --accent-2:#3B82F6;
+  --ok:      #22C55E;
+  --amber:   #F59E0B;
+  --err:     #F87171;
+}
 
-  /* ---------- Layout ---------- */
-  .workbench {
-    max-width: 1280px; margin: 0 auto;
-    padding: 20px 20px 64px;
-    display: grid; grid-template-columns: 60% 40%; gap: 24px;
-    align-items: start;
-  }
-  @media (max-width: 980px) { .workbench { grid-template-columns: 1fr; } }
-  .panel {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-  }
+/* 派生（仅用 color-mix，不改语义变量） */
+html[data-theme] {
+  --accent-soft: color-mix(in oklch, var(--accent) 15%, transparent);
+  --accent-softer: color-mix(in oklch, var(--accent) 9%, transparent);
+  --accent-ink: #fff;
+  --accent-grad: linear-gradient(135deg, var(--accent), var(--accent-2));
+  --fg-soft: color-mix(in oklch, var(--fg) 7%, transparent);
+  --ok-soft: color-mix(in oklch, var(--ok) 13%, transparent);
+  --ok-border: color-mix(in oklch, var(--ok) 55%, transparent);
+  --amber-soft: color-mix(in oklch, var(--amber) 14%, transparent);
+  --amber-border: color-mix(in oklch, var(--amber) 55%, transparent);
+  --shadow: 0 10px 30px -18px rgba(2, 8, 23, .28);
+  --golden: 0 0 0 0 rgba(59,130,246,.0);
+}
+html[data-theme="dark"] {
+  --accent-ink: #fff;
+  --shadow: 0 14px 34px -20px rgba(0,0,0,.65);
+}
 
-  /* ---------- Left problem panel ---------- */
-  .problem-head { padding: 20px 20px 14px; border-bottom: 1px solid var(--border); }
-  .title-row { display: flex; align-items: flex-start; gap: 12px; justify-content: space-between; }
-  h3.title { margin: 0; font-size: 19px; font-weight: 600; line-height: 1.35; letter-spacing: -.01em; }
-  .ops { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
-  .attach {
-    display: inline-flex; align-items: center; gap: 6px;
-    background: var(--crumb-bg); border: 1px solid var(--border);
-    border-radius: 999px; padding: 4px 11px;
-    font-size: 12px; color: var(--fg); font-weight: 500;
-  }
-  .attach svg { color: var(--accent); }
-  .attach .tick { color: var(--ok-fg); }
-  .ghost-btn {
-    display: inline-flex; align-items: center; gap: 6px;
-    background: transparent; border: 1px solid var(--border);
-    color: var(--muted); font-size: 13px; font-weight: 500;
-    padding: 5px 11px; border-radius: var(--r); cursor: pointer;
-    transition: background .15s ease, border-color .15s ease, color .15s ease;
-  }
-  .ghost-btn:hover { background: var(--crumb-bg); color: var(--fg); border-color: var(--border); }
-  .ghost-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-  .ghost-btn:disabled { opacity: .5; cursor: not-allowed; color: var(--muted); }
-  .ghost-btn:disabled:hover { background: transparent; color: var(--muted); }
+/* ─── base ─────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--fg);
+  line-height: 1.6;
+  font-size: 14px;
+  overflow: hidden;
+  height: 100vh;
+}
+button { font-family: inherit; }
+::selection { background: var(--accent-soft); }
 
-  .problem-body { padding: 18px 20px 8px; }
-  .problem-text { font-size: 16px; line-height: 1.8; color: var(--fg); max-width: 75ch; }
-  .problem-text p { margin: 0 0 16px; }
-  .problem-text p:last-child { margin-bottom: 4px; }
+/* scrollbars */
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: color-mix(in oklch, var(--accent) 45%, transparent); background-clip: padding-box; }
+::-webkit-scrollbar-track { background: transparent; }
 
-  /* role highlight chips */
-  .chip { border-radius: var(--r); padding: 2px 4px; font-size: 13px; }
-  .chip .tag { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; margin-right: 6px; vertical-align: 1px; }
-  .tag-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
-  .chip.constraint { background: var(--blue-role-bg); color: inherit; }
-  .chip.constraint .tag, .chip.constraint .tag-dot { color: var(--blue-role); }
-  .chip.constraint .tag-dot { background: var(--blue-role); }
-  .chip.known { background: var(--amber-role-bg); }
-  .chip.known .tag, .chip.known .tag-dot { color: var(--amber-role); }
-  .chip.known .tag-dot { background: var(--amber-role); }
-  .chip.goal { background: var(--green-role-bg); }
-  .chip.goal .tag, .chip.goal .tag-dot { color: var(--green-role); }
-  .chip.goal .tag-dot { background: var(--green-role); }
+/* ─── focus ring ───────────────────────────────────────────────── */
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
 
-  /* selection + float toolbar */
-  .stab { position: relative; }
-  .stab .sel-src { border-radius: var(--r); background: transparent; transition: background .15s ease; padding: 1px 2px; margin: -1px -2px; }
-  .stab .sel-src.selected { background: var(--accent-soft); outline: 1px solid var(--accent); }
-  .float-toolbar {
-    position: absolute; top: 0; left: 0; z-index: 20;
-    transform: translateY(-100%) translateY(-8px);
-    display: flex; gap: 4px; align-items: center;
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 8px; padding: 5px; box-shadow: var(--shadow-md);
-    opacity: 0; pointer-events: none; transition: opacity .15s ease;
-    white-space: nowrap;
-  }
-  .stab .sel-src.selected ~ .float-toolbar, .sel-src.selected + .float-toolbar { opacity: 1; pointer-events: auto; }
-  .fbtn {
-    font-size: 12px; font-weight: 600; border: none; border-radius: 6px;
-    padding: 6px 11px; cursor: pointer;
-  }
-  .fbtn.primary { background: var(--accent); color: #fff; }
-  .fbtn.primary:hover { background: var(--accent-strong); }
-  .fbtn.ghost { background: transparent; color: var(--muted); }
-  .fbtn.ghost:hover { background: var(--crumb-bg); color: var(--fg); }
-  .fbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* ─── layout: 4 columns ───────────────────────────────────────── */
+.app {
+  display: grid;
+  grid-template-columns: var(--rail-w) 45fr var(--bookmark-w) 30fr;
+  grid-template-rows: 100vh;
+  height: 100vh;
+  width: 100%;
+}
+.app.is-empty .main { display:none; }
+.app.is-empty .hero-empty { display:flex; }
+.app.is-empty .bookmarks { grid-column: 3; }
+.app.is-empty .ai-panel { grid-column: 4; }
 
-  /* table preview */
-  .table-preview { margin: 18px 20px 20px; border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
-  .tp-cap { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--crumb-bg); border-bottom: 1px solid var(--border); }
-  .tp-cap b { font-size: 13px; font-weight: 600; }
-  .tp-cap .rowcount { font-size: 12px; color: var(--muted); }
-  .tp-scroll { overflow-x: auto; }
-  table.tp { border-collapse: collapse; width: max-content; min-width: 100%; font-size: 13px; }
-  table.tp thead th {
-    position: sticky; top: 0; background: var(--crumb-bg); z-index: 1;
-    color: var(--muted); font-size: 13px; font-weight: 600;
-    padding: 9px 12px; border: 1px solid var(--border); text-align: left; white-space: nowrap;
-  }
-  table.tp td { padding: 8px 12px; border: 1px solid var(--border); white-space: nowrap; }
-  table.tp .num { text-align: right; font-variant-numeric: tabular-nums; }
-  td.empty, th.empty { color: var(--muted); text-align: center; }
-  td.first, th.first { position: sticky; left: 0; background: var(--surface); z-index: 2; }
-  table.tp thead th.first { z-index: 3; background: var(--crumb-bg); }
-  table.tp tr:hover td { background: var(--crumb-bg); }
-  table.tp tr:hover td.first { background: var(--crumb-bg); }
+/* ─── col 1 · icon rail (collapsed) ───────────────────────────── */
+.rail {
+  grid-column: 1;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 0;
+  gap: 10px;
+}
+.rail-btn {
+  width: 36px; height: 36px;
+  display: grid; place-items: center;
+  background: transparent;
+  border: none; border-radius: var(--radius-md);
+  color: var(--muted);
+  cursor: pointer;
+}
+.rail-btn svg { width: 19px; height: 19px; }
+.rail-btn:hover { background: var(--surface-2); color: var(--fg); }
+.rail-btn[data-active="true"] { background: var(--accent-soft); color: var(--accent); }
+.rail-return { margin-top: auto; }
 
-  /* ---------- Right AI panel ---------- */
-  .ai-col { display: flex; flex-direction: column; gap: 16px; }
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
-  .card-head { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
-  .card-head .kicker { font-size: 13px; font-weight: 600; letter-spacing: .02em; }
-  .card-body { padding: 16px 18px; }
+/* ─── col 3 · bookmark vertical rail ──────────────────────────── */
+.bookmarks {
+  grid-column: 3;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 0;
+  gap: 18px;
+  overflow-y: auto;
+}
+.bm {
+  writing-mode: vertical-rl;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 8px;
+  font-size: 13px;
+  letter-spacing: .12em;
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+}
+.bm svg { width: 16px; height: 16px; transform: rotate(90deg); }
+.bm:hover { color: var(--fg); background: var(--surface-2); }
+.bm[data-active="true"] {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: color-mix(in oklch, var(--accent) 30%, transparent);
+}
+.bm b { font-weight: 600; }
+.bm span { font-size: 12px; opacity: .9; }
+.bm[data-active="true"] b::after {
+  content: "";
+  position: absolute;
+  top: 8px; left: 50%;
+  transform: translateX(-50%);
+  width: 4px; height: 4px; border-radius: 99px;
+  background: var(--accent);
+}
+.bm-add { writing-mode: vertical-rl; font-weight: 600; }
 
-  .sec-label { font-size: 12.5px; font-weight: 600; letter-spacing: .02em; text-transform: none; color: var(--muted); margin: 14px 0 8px; }
-  .sec-label:first-child { margin-top: 0; }
-  .sec-label::after { content: ""; }
+/* ─── col 2 · main workspace ──────────────────────────────────── */
+.main {
+  grid-column: 2;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+.wb-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 22px;
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.wb-back {
+  width: 34px; height: 34px; flex: 0 0 auto;
+  display: grid; place-items: center;
+  background: transparent; border: none; border-radius: var(--radius-md);
+  color: var(--muted); cursor: pointer;
+}
+.wb-back svg { width: 18px; height: 18px; }
+.wb-back:hover { background: var(--surface); color: var(--fg); }
+.wb-title {
+  flex: 1; min-width: 0;
+}
+.wb-title h1 {
+  margin: 0; font-size: 16px; font-weight: 650;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  letter-spacing: .01em;
+}
+.wb-title p { margin: 0; font-size: 12px; color: var(--muted); }
+.btn-save {
+  flex: 0 0 auto;
+  height: 34px; padding: 0 16px;
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--accent-grad); color: var(--accent-ink);
+  border: none; border-radius: var(--radius-md);
+  font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.btn-save svg { width: 15px; height: 15px; }
+.btn-save:hover { filter: brightness(1.07); }
 
-  .ai-text { font-size: 14px; line-height: 1.75; color: var(--fg); }
-  .ai-text p { margin: 0 0 10px; }
-  .ai-text p:last-child { margin-bottom: 0; }
+/* scenario scroll area */
+.scenario {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 14px 22px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  min-height: 0;
+}
+.overview-toggle {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px; padding: 0 18px;
+  background: var(--accent-grad);
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  font-size: 13.5px; font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+}
+.overview-toggle svg { width: 16px; height: 16px; }
+.overview-toggle:hover { filter: brightness(1.08); transform: translateY(-1px); }
 
-  .cursor { display: inline-block; width: 2px; height: 1em; background: var(--accent); vertical-align: -2px; margin-left: 2px; animation: blink 1s steps(1) infinite; border-radius: 1px; }
-  @keyframes blink { 50% { opacity: 0; } }
+/* problem text */
+.problem-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 22px 24px;
+  box-shadow: var(--shadow);
+  position: relative;
+}
+.problem-card header {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 14px;
+}
+.problem-label {
+  font-size: 12px; letter-spacing: .16em; color: var(--muted);
+  text-transform: uppercase; font-family: var(--font-mono);
+}
+.problem-body { font-size: 14.5px; line-height: 1.85; color: var(--fg); }
 
-  /* knowledge card */
-  .kcard { margin-top: 14px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--crumb-bg); overflow: hidden; }
-  .kcard-bar { display: flex; align-items: center; gap: 8px; padding: 10px 12px; cursor: pointer; border-left: 3px solid var(--orange); user-select: none; }
-  .kchip { display: inline-flex; align-items: center; background: var(--orange-soft); color: var(--orange); font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
-  .kname { font-size: 13px; font-weight: 600; color: var(--fg); }
-  .kcat { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; }
-  .k-spacer { flex: 1; }
-  .k-expand, .k-fav {
-    background: transparent; border: none; cursor: pointer; color: var(--muted);
-    display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500;
-    padding: 4px 6px; border-radius: var(--r);
-    transition: background .15s ease, color .15s ease;
-  }
-  .k-expand:hover, .k-fav:hover { background: var(--border); color: var(--fg); }
-  .k-fav.on { color: var(--orange); }
-  .k-fav svg { fill: currentColor; }
-  .k-fav.on svg { fill: currentColor; color: var(--orange); }
-  .k-expand:focus-visible, .k-fav:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-  .k-body { display: none; padding: 4px 14px 14px; }
-  .kcard.open .k-body { display: block; }
-  .kdef { font-size: 13px; line-height: 1.7; color: var(--muted); margin: 10px 0 12px; }
-  .kdemo { background: var(--muted); border-radius: 8px; padding: 14px; color: var(--muted); }
-  .kdemo h6 { margin: 0 0 10px; font-size: 12.5px; font-weight: 600; color: var(--fg); }
-  .slider-row { margin-top: 12px; display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--fg); }
-  .slider-row input[type=range] { flex: 1; accent-color: var(--orange); }
-  .val-out { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 34px; color: var(--orange); }
-  .tryme { margin-top: 12px; background: var(--accent-soft); border: 1px dashed var(--accent); color: var(--accent); border-radius: 8px; padding: 10px 12px; font-size: 12.5px; line-height: 1.7; }
+/* inline annotation roles */
+.role-constraint, .role-given, .role-goal { position: relative; border-radius: 4px; padding: 2px 1px; cursor: default; }
 
-  /* role judgment card */
-  .judge { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 2px 0 0; }
-  .j-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--blue-role-bg); color: var(--blue-role); font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; }
-  .j-chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--blue-role); }
-  .j-conf { font-size: 13px; font-weight: 700; color: var(--fg); font-variant-numeric: tabular-nums; }
-  .j-query { font-size: 12px; color: var(--muted); border-bottom: 1px dashed currentColor; background: none; border-top: none; border-left: none; border-right: none; padding: 0; cursor: pointer; }
-  .j-query:hover { color: var(--accent); }
-  .j-quote { font-size: 12px; color: var(--muted); }
-  .j-locate { font-size: 12px; color: var(--accent); cursor: pointer; background: none; border: none; padding: 0; display: inline-flex; align-items: center; gap: 4px; font-weight: 500; }
-  .j-locate:hover { text-decoration: underline; }
+.hl-chip {
+  position: absolute;
+  top: -9px; left: 6px;
+  font-size: 10px; font-weight: 600; letter-spacing: .06em;
+  padding: 1px 7px; border-radius: 999px;
+  pointer-events: none; white-space: nowrap;
+}
+.hl-chip.constraint { background: var(--accent); color: #fff; }
+.hl-chip.given { background: var(--amber); color: #fff; }
+.hl-chip.goal { background: var(--ok); color: #fff; }
+html[data-theme] .role-constraint { background: color-mix(in oklch, var(--accent) 16%, transparent); }
+html[data-theme] .role-given { background: color-mix(in oklch, var(--amber) 16%, transparent); }
+html[data-theme] .role-goal { background: color-mix(in oklch, var(--ok) 16%, transparent); }
 
-  /* dialogue */
-  .msg { display: flex; margin-bottom: 14px; }
-  .msg:last-child { margin-bottom: 0; }
-  .msg.user { justify-content: flex-end; }
-  .msg.ai { justify-content: flex-start; }
-  .bubble {
-    max-width: 82%; padding: 10px 13px; font-size: 14px; line-height: 1.7;
-    border-top-right-radius: 10px; border-bottom-right-radius: 10px; border-bottom-left-radius: 10px;
-  }
-  .msg.user .bubble {
-    background: var(--accent); color: #fff; border-top-left-radius: 10px; border-top-right-radius: 2px;
-  }
-  .msg.ai .bubble {
-    background: var(--surface); color: var(--fg); border: 1px solid var(--border);
-    border-left: 3px solid var(--accent); border-top-left-radius: 2px;
-  }
-  .ai-flags { display: flex; gap: 6px; margin-top: 6px; }
-  .mini {
-    display: inline-flex; align-items: center; gap: 4px;
-    font-size: 12px; color: var(--muted); background: transparent; border: none; padding: 3px 6px;
-    border-radius: var(--r); cursor: pointer; transition: background .15s ease, color .15s ease;
-  }
-  .mini:hover { background: var(--crumb-bg); color: var(--fg); }
-  .mini:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-  .mini.voted { color: var(--accent); }
-  .typing { display: inline-block; color: var(--orange); animation: blink 1s steps(1) infinite; font-size: 13px; }
+/* floating tool bar on selection */
+.selection-tools {
+  position: relative;
+  margin: 10px 0 2px;
+  max-width: 100%;
+}
+.sel-toolbar {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow);
+  animation: pop .15s ease;
+}
+@keyframes pop { from { opacity: 0; transform: translateY(3px) scale(.98); } to { opacity: 1; } }
+.sel-tool {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 30px; padding: 0 11px;
+  background: transparent; border: none; border-radius: 7px;
+  font-size: 12.5px; color: var(--muted); cursor: pointer;
+}
+.sel-tool svg { width: 14px; height: 14px; }
+.sel-tool:hover { background: var(--surface-2); color: var(--fg); }
+.sel-tool[data-kind="ai"] { color: var(--accent); font-weight: 600; }
+.sel-tool[data-kind="ai"]:hover { background: var(--accent-soft); }
 
-  /* input */
-  .composer { display: flex; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--border); }  .composer input {
-    flex: 1; height: 40px; border: 1px solid var(--border); border-radius: var(--radius-sm);
-    background: var(--surface); color: var(--fg); padding: 0 13px; font-size: 14px;
-    transition: border-color .15s ease, box-shadow .15s ease;
-  }
-  .composer input::placeholder { color: var(--muted); }
-  .composer input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-  .send-btn {
-    height: 40px; min-width: 64px; border: none; border-radius: 8px;
-    background: var(--accent); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer;
-    padding: 0 16px; transition: background .15s ease;
-  }
-  .send-btn:hover { background: var(--accent-strong); }
-  .send-btn:active { transform: translateY(1px); }
-  .send-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .send-btn:disabled { background: var(--accent-soft); color: var(--accent); cursor: not-allowed; }
-  .send-btn:disabled:hover { background: var(--accent-soft); }
+/* attachment tables */
+.attach-block { display: flex; flex-direction: column; gap: 18px; }
+.attach-title {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 13px; font-weight: 650;
+}
+.attach-title svg { width: 17px; height: 17px; color: var(--accent); }
+.table-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.table-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+}
+.table-card figcaption {
+  font-size: 12px; color: var(--muted); margin-bottom: 10px;
+  font-weight: 600;
+}
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th {
+  text-align: left; font-weight: 600; color: var(--muted);
+  padding: 7px 8px; border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: .02em;
+}
+td { padding: 7px 8px; border-bottom: 1px solid color-mix(in oklch, var(--border) 60%, transparent); font-family: var(--font-mono); color: var(--fg); }
+tr:last-child td { border-bottom: none; }
+td.accent { color: var(--accent); font-weight: 600; }
 
-  .ai-tags-row { display: flex; gap: 6px; flex-wrap: wrap; padding: 12px 18px; border-top: 1px solid var(--border); }
-  .tag-pill { font-size: 12px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; cursor: pointer; background: transparent; transition: background .15s ease, color .15s ease; }
-  .tag-pill:hover { background: var(--crumb-bg); color: var(--fg); }
+/* ─── col 4 · AI panel ────────────────────────────────────────── */
+.ai-panel {
+  grid-column: 4;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ai-head {
+  flex: 0 0 auto;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.ai-head h2 { margin: 0 0 2px; font-size: 14.5px; font-weight: 680; display:flex; align-items:center; gap:8px; }
+.ai-head h2 svg { width: 16px; height: 16px; color: var(--accent); }
+.ai-head p { margin: 0; font-size: 12px; color: var(--muted); }
+.ai-body { flex: 1 1 auto; overflow-y: auto; padding: 16px 18px; display: none; flex-direction: column; gap: 16px; min-height: 0; }
+.ai-body.active { display: flex; }
 
-  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+/* role verdict card */
+.verdict {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px 15px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.verdict-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.v-role { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 650; }
+.v-role .dot { width: 8px; height: 8px; border-radius: 99px; }
+.v-role.constraint .dot { background: var(--accent); }
+.v-role.given .dot { background: var(--amber); }
+.v-role.goal .dot { background: var(--ok); }
+.v-conf { font-family: var(--font-mono); font-size: 11px; color: var(--muted); letter-spacing: .02em; }
+.conf-bar { height: 5px; border-radius: 99px; background: var(--surface-2); overflow: hidden; margin: 8px 0 10px; }
+.conf-fill { height: 100%; border-radius: 99px; background: var(--accent-grad); }
+.verdict .impact { font-size: 13px; line-height: 1.7; margin: 0 0 12px; color: var(--fg); }
+.verdict .impact b { color: var(--accent); font-weight: 650; }
+.quote {
+  font-size: 12px; line-height: 1.65; color: var(--muted);
+  border-left: 2px solid var(--border);
+  padding-left: 11px; margin: 0 0 12px;
+  font-style: normal;
+}
+.quote i { font-style: normal; background: var(--accent-soft); color: var(--accent); padding: 0 3px; border-radius: 3px; }
+.verdict-actions { display: flex; gap: 8px; }
+.verdict-actions .vbtn {
+  flex: 1;
+  height: 34px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  background: var(--surface-2); color: var(--fg);
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  font-size: 12.5px; cursor: pointer; font-weight: 550;
+}
+.verdict-actions .vbtn svg { width: 14px; height: 14px; }
+.verdict-actions .vbtn:hover { background: color-mix(in oklch, var(--accent) 12%, var(--surface)); border-color: color-mix(in oklch, var(--accent) 35%, var(--border)); color: var(--accent); }
 
-  @media (max-width: 720px) {
-    .nav { padding: 0 12px; }
-    .nav-tabs { display: none; }
-    .brand-tag { display: none; }
-    .workbench { padding: 14px 12px 48px; gap: 16px; }
-    .title-row { flex-direction: column; }
-    .bubble { max-width: 92%; }
-  }
+/* related verdicts list */
+.subheading {
+  font-size: 12px; letter-spacing: .08em; color: var(--muted);
+  font-weight: 650;
+}
+.related { display: flex; flex-direction: column; gap: 10px; }
+.rel-item {
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  padding: 10px 13px; font-size: 12.5px; line-height: 1.6;
+  color: var(--fg); background: var(--surface);
+  cursor: pointer; text-align: left;
+}
+.rel-item:hover { border-color: color-mix(in oklch, var(--accent) 35%, var(--border)); }
+.rel-head { display: flex; align-items: center; gap: 7px; font-weight: 650; margin-bottom: 3px; }
+.rel-head .dot { width: 7px; height: 7px; border-radius: 99px; }
+.rel-head.constraint .dot { background: var(--accent); }
+.rel-head.given .dot { background: var(--amber); }
+.rel-head.goal .dot { background: var(--ok); }
+.rel-meta { font-size: 11.5px; color: var(--muted); }
+
+/* knowledge cards */
+.kcard {
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  overflow: hidden; background: var(--surface); box-shadow: var(--shadow);
+}
+.kcard-head {
+  width: 100%;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 13px 14px;
+  background: transparent; border: none;
+  cursor: pointer; text-align: left; color: var(--fg);
+}
+.kcard-head .kc-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.kcard-head .kc-ic { width: 30px; height: 30px; flex: 0 0 auto; border-radius: 8px; display: grid; place-items: center; color: var(--accent); background: var(--accent-soft); }
+.kcard-head .kc-ic svg { width: 16px; height: 16px; }
+.kcard-head .kc-t { font-weight: 650; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kcard-head .kc-sub { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+.kcard-head .chev { width: 16px; height: 16px; color: var(--muted); transition: transform .18s ease; flex: 0 0 auto; }
+.kcard.open .kcard-head .chev { transform: rotate(180deg); color: var(--accent); }
+.kcard-body {
+  display: grid; grid-template-rows: 0fr; transition: grid-template-rows .22s ease;
+}
+.kcard.open .kcard-body { grid-template-rows: 1fr; }
+.kcard-inner { overflow: hidden; }
+.kcard-content { padding: 2px 14px 14px; font-size: 12.5px; line-height: 1.7; color: var(--muted); }
+.kcard-content ul { margin: 6px 0 0; padding-left: 16px; }
+.kcard-content li { margin-bottom: 3px; }
+.kcard-content b { color: var(--fg); }
+
+/* ─── empty state ─────────────────────────────────────────────── */
+.hero-empty {
+  display: none;
+  grid-column: 2;
+  background: var(--bg);
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  flex-direction: column;
+}
+.empty-box { width: 100%; max-width: 640px; }
+.empty-entries { display: flex; gap: 18px; margin-top: 30px; }
+.empty-ic { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; color: var(--accent); }
+.empty-ap:first-child .empty-ic { background: var(--accent-soft); }
+.empty-ap:last-child .empty-ic { background: color-mix(in oklch, var(--accent) 7%, transparent); border: 1px dashed var(--border); }
+.empty-ic svg { width: 21px; height: 21px; }
+.empty-entry {
+  flex: 1;
+  min-height: 190px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in oklch, var(--surface) 60%, transparent);
+  cursor: pointer;
+  transition: border-color .15s ease, transform .15s ease, background .15s ease;
+}
+.empty-entry:hover { border-color: var(--accent); background: var(--surface); transform: translateY(-2px); box-shadow: var(--shadow); }
+.empty-entry h3 { margin: 0; font-size: 15px; font-weight: 650; }
+.empty-entry p { margin: 0; font-size: 12px; color: var(--muted); text-align: center; padding: 0 20px; }
+.empty-entry.primary { border-style: solid; border-color: color-mix(in oklch, var(--accent) 50%, var(--border)); }
+.empty-entry.primary { background: var(--accent-softer); }
+
+/* theme toggle floating */
+.theme-toggle {
+  position: fixed; right: 16px; bottom: 16px; z-index: 50;
+  width: 38px; height: 38px;
+  display: grid; place-items: center;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 999px; cursor: pointer; color: var(--muted);
+  box-shadow: var(--shadow);
+}
+.theme-toggle svg { width: 17px; height: 17px; }
+.theme-toggle:hover { color: var(--accent); border-color: var(--accent); }
+
+/* ─── breakpoint: collapse AI panel width drivers ─────────────── */
+@media (max-width: 1180px) {
+  body { --bookmark-w: 40px; }
+}
+
+/* === 浅色模式区块分隔增强（追加） === */
+:root{
+  --border:#ccd5e2;
+  --shadow-soft:0 1px 3px rgba(15,23,42,.08),0 4px 14px rgba(15,23,42,.05);
+}
+:root[data-theme='dark']{ --border:#263449; }
+.app > *, .main > *, .panel, aside, nav, section, .card {
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.rail, .sidebar { box-shadow: inset -1px 0 0 var(--border); }
+
 </style>
 </head>
 <body>
+<div class="app" id="app" data-od-id="reading-workbench" data-empty="false">
 
-<!-- ================= NAV ================= -->
-<header class="nav" data-od-id="top-nav">
-  <div class="nav-brand">
-    <span class="brand-logo" aria-hidden="true">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M17 5.6l-1.4 1.4M5.6 18.4l1.4-1.4"/><circle cx="12" cy="12" r="3.2"/></svg>
-    </span>
-    <span class="brand-name">数模 Mentor</span>
-    <span class="brand-tag">AI 辅导</span>
-  </div>
-  <nav class="nav-tabs" data-od-id="nav-tabs" aria-label="主导航">
-    <button class="nav-tab active" data-od-id="nav-reading">读题工作台</button>
-    <button class="nav-tab" data-od-id="nav-coding">编程工作台</button>
-    <button class="nav-tab" data-od-id="nav-settings">模型设置</button>
-  </nav>
-  <div class="nav-right">
-    <span class="status-pill" data-od-id="key-status"><span class="status-dot"></span>Key 已配置</span>
-    <button class="icon-btn" id="themeToggle" data-od-id="theme-toggle" aria-label="切换深浅主题">
-      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/></svg>
+  <!-- ── col 1 · icon rail (collapsed) ─────────────────────────── -->
+  <aside class="rail" data-od-id="icon-rail">
+    <button class="rail-btn" data-od-id="rail-expand" aria-label="展开全局左栏" title="展开全局左栏">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>
     </button>
-  </div>
-</header>
+    <button class="rail-btn" data-od-id="rail-empty" aria-label="预览空状态" title="预览空状态（无题目主区）">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 9 9A9 9 0 0 0 12 3z"/><path d="M12 8v5l3 2"/></svg>
+    </button>
+    <button class="rail-btn" data-od-id="rail-ready" aria-label="读题就绪" title="读题就绪">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6-4.5-6-10a6 6 0 0 1 12 0c0 5.5-6 10-6 10z"/><circle cx="12" cy="11" r="2.2"/></svg>
+    </button>
+    <button class="rail-btn" data-od-id="rail-settings" aria-label="设置" title="设置">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+    <button class="rail-btn rail-return" data-od-id="rail-return" aria-label="返回" title="返回题目列表">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    </button>
+  </aside>
 
-<!-- ================= STEPS ================= -->
-<div class="steps" data-od-id="step-indicator">
-  <div class="step done" data-od-id="step-1">
-    <span class="step-node">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-    </span>
-    <span class="step-label">读题理解</span>
-  </div>
-  <span class="step-arrow" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
-  <div class="step active" data-od-id="step-2">
-    <span class="step-node">②</span>
-    <span class="step-label">精读深挖</span>
-  </div>
-  <span class="step-arrow" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
-  <div class="step" data-od-id="step-3">
-    <span class="step-node">③</span>
-    <span class="step-label">建模方向</span>
-  </div>
-</div>
-
-<!-- ================= WORKBENCH ================= -->
-<main class="workbench">
-
-  <!-- ============ LEFT: problem ============ -->
-  <section class="panel" data-od-id="problem-panel">
-    <div class="problem-head">
-      <div class="title-row">
-        <h3 class="title" data-od-id="problem-title">2022 国赛 C 题 · 古代玻璃制品的成分分析与鉴别</h3>
+  <!-- ── col 2 · main workspace ────────────────────────────────── -->
+  <main class="main" data-od-id="main-workspace">
+    <div class="wb-head">
+      <button class="wb-back" data-od-id="back-button" aria-label="返回" title="返回题目列表">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      </button>
+      <div class="wb-title">
+        <h1 data-od-id="problem-title">2024 ×全国大学生数学建模竞赛 B 题</h1>
+        <p data-od-id="problem-meta">读题工作台 · 已识别 3 类角色条件 · 附件 2 份</p>
       </div>
-      <div class="ops" data-od-id="problem-ops">
-        <span class="attach" data-od-id="attach-table1">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
-          表1.xlsx
-          <svg class="tick" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-        </span>
-        <span class="attach" data-od-id="attach-table2">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
-          表2.pdf
-          <svg class="tick" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-        </span>
-        <div style="flex:1"></div>
-        <button class="ghost-btn" data-od-id="btn-edit"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>编辑题干</button>
-        <button class="ghost-btn" data-od-id="btn-swap"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg>换一道题</button>
-        <button class="ghost-btn" data-od-id="btn-save"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>保存会话</button>
-        <button class="ghost-btn" data-od-id="btn-export"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>导出 MD</button>
-      </div>
+      <button class="btn-save" data-od-id="save-btn" aria-label="保存">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
+        保存
+      </button>
     </div>
 
-    <div class="problem-body">
-      <div class="problem-text" data-od-id="problem-text">
-        <p>我国古代生产了一批玻璃制品并外销至沿线各国。现需对这些玻璃制品的化学组成进行系统分析，从而推断其<b>产地与制造工艺</b>。相关数据见附件，请据此建立数学模型，回答下列问题。</p>
+    <div class="scenario">
+      <button class="overview-toggle" data-od-id="ai-overview">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 4.6L18 9l-4.4 1.4L12 15l-1.6-4.6L6 9l4.4-1.4z"/><path d="M19 14l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/><path d="M5 17l.5 1.5L7 19l-1.5.5L5 21l-.5-1.5L3 19l1.5-.5z"/></svg>
+        AI 整体解读
+      </button>
 
-        <p>
-          <span class="chip goal"><span class="tag"><span class="tag-dot"></span>目标</span>依据表单中是否含氧化铅(PbO)与氧化钡(BaO)，将玻璃样品划分为<b>高钾玻璃、铅钡玻璃、钾钙玻璃</b>三类，并识别其风化规律。</span>
+      <section class="problem-card" data-od-id="problem-text">
+        <header>
+          <span class="problem-label">问题文本 · PROBLEM</span>
+        </header>
+        <p class="problem-body">
+          <span class="role-constraint" tabindex="0">某地区生产基地<span class="hl-chip constraint">约束</span></span> 准备向 5 个需求点调运救灾物资。已知各
+          <span class="role-goal" tabindex="0">需求点在不同时段的预测需求量，以及单位物资在运输途中的损耗率<span class="hl-chip goal">目标</span></span>。
+          每辆运输车<b>最大载重 10 吨</b>、每日<b>最多运营 8 小时</b>，各路段通行时间与
+          <span class="role-constraint" tabindex="0">拥塞风险等级<span class="hl-chip constraint">约束</span></span> 不同。
+          由于灾害路径存在不确定性，
+          <span class="role-given" tabindex="0">附件 1 提供了 72 小时内各时段的需求预测，附件 2 给出单位成本与车辆参数<span class="hl-chip given">已知</span></span>。
+          请你建立模型，在满足运力与时窗限制的前提下，<b>制定运输调度方案</b>，使累计到货量最大、总成本最小。
         </p>
 
-        <p>
-          <span class="chip known"><span class="tag"><span class="tag-dot"></span>已知条件</span>附件的「表1」给出 14 个样品的风化点与纹饰、颜色、表面风化等属性；「表2」给出各样品 23 种氧化物的含量百分比（部分缺失）。</span>
-        </p>
-
-        <p>
-          <span class="chip constraint"><span class="tag"><span class="tag-dot"></span>约束条件</span>含量数据存在缺失与噪声，风化样品无法直接量测原始成分；需在不破坏各属性<b>统计一致性</b>的前提下完成分类与反演。</span>
-        </p>
-
-        <p class="stab" data-od-id="selection-demo">
-          <span>请选择感受选中交互:</span>
-          <span class="sel-src" id="selSource" data-od-id="selection-target">「铅钡玻璃」中二氧化硅含量普遍超过 65%，且与氧化铅含量呈明显负相关</span>
-          <span class="float-toolbar" id="floatToolbar" data-od-id="selection-toolbar" role="toolbar" aria-label="选中操作">
-            <button class="fbtn primary" data-od-id="fbtn-ask">AI 解读</button>
-            <button class="fbtn ghost" data-od-id="fbtn-question">提问</button>
-            <button class="fbtn ghost" data-od-id="fbtn-copy">复制</button>
-          </span>
-        </p>
-      </div>
-    </div>
-
-    <div class="table-preview" data-od-id="table-preview">
-      <div class="tp-cap">
-        <b>附件：表1 · 古代玻璃类型与风化（节选）</b>
-        <span class="rowcount">14 行 · 可横向滚动</span>
-      </div>
-      <div class="tp-scroll">
-        <table class="tp">
-          <thead>
-            <tr>
-              <th class="first">样品编号</th>
-              <th>纹饰</th>
-              <th class="empty">类型</th>
-              <th>颜色</th>
-              <th class="num">风化点数</th>
-              <th class="num">PbO(%)</th>
-              <th class="num">SiO₂(%)</th>
-              <th class="num">BaO(%)</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr><td class="first">1</td><td>圆环纹</td><td class="empty">—</td><td>浅绿</td><td class="num">3</td><td class="num">29.31</td><td class="num">37.29</td><td class="empty">—</td></tr>
-            <tr><td class="first">2</td><td>弦纹</td><td class="empty">—</td><td>深绿</td><td class="num">5</td><td class="num">22.19</td><td class="num">40.99</td><td class="empty">—</td></tr>
-            <tr><td class="first">3</td><td>几何纹</td><td>高钾</td><td>浅紫</td><td class="num">1</td><td class="empty">—</td><td class="num">68.41</td><td class="num">0.08</td></tr>
-            <tr><td class="first">4</td><td>缠枝纹</td><td>铅钡</td><td>深蓝</td><td class="num">8</td><td class="num">52.01</td><td class="num">21.20</td><td class="num">16.07</td></tr>
-            <tr><td class="first">5</td><td>连珠纹</td><td>铅钡</td><td>浅蓝</td><td class="num">2</td><td class="num">45.80</td><td class="num">28.47</td><td class="num">12.30</td></tr>
-            <tr><td class="first">6</td><td>圆点纹</td><td class="empty">—</td><td>深紫</td><td class="num">6</td><td class="num">58.23</td><td class="num">14.19</td><td class="num">20.11</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </section>
-
-  <!-- ============ RIGHT: AI ============ -->
-  <aside class="ai-col" data-od-id="ai-panel">
-
-    <!-- overall interpretation -->
-    <div class="card" data-od-id="card-overview">
-      <div class="card-head"><span class="kicker">整体解读</span></div>
-      <div class="card-body">
-        <div class="sec-label" id="ov-1">题目在问什么</div>
-        <div class="ai-text"><p id="ovp1">本题要求根据化学组成推断玻璃<b>产地与工艺</b>，核心是「成分 → 类别 + 风化规律」的双层建模。<span class="cursor" aria-hidden="true"></span></p></div>
-
-        <div class="sec-label" id="ov-2">已知条件</div>
-        <div class="ai-text"><p id="ovp2">表1 分类属性、表2 的 23 维氧化物含量；样品分<b>高钾 / 铅钡 / 钾钙</b>三类，部分数据缺失。</p></div>
-
-        <div class="sec-label" id="ov-3">数据清单</div>
-        <div class="ai-text"><p id="ovp3">14 个样品 × 23 种氧化物 = 322 个含量值，缺失率约 14%，以 PbO/BaO/SiO₂ 三组为主。</p></div>
-
-        <div class="sec-label" id="ov-4">目标 / 输出要求</div>
-        <div class="ai-text"><p id="ovp4">输出：① 三类判别规则；② 风化对成分的影响程度；③ 对未风化的原始成分反演。</p></div>
-
-        <!-- embedded knowledge card : collapsed -->
-        <div class="kcard" data-od-id="kcard-linear" id="kcardLinear">
-          <div class="kcard-bar" id="kbarLinear" data-od-id="knowledge-bar-1" role="button" tabindex="0" aria-expanded="false">
-            <span class="kchip">相关概念</span>
-            <span class="kname">线性规划</span>
-            <span class="kcat">运筹 · 建模</span>
-            <span class="k-spacer"></span>
-            <span class="k-expand" id="kexpLinear">展开演示 <span style="display:inline-flex">▾</span></span>
-            <button class="k-fav" id="kfavLinear" aria-pressed="false" title="收藏">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M19 14c1.5-1.3 3-3.2 3-5.5A5.5 5.5 0 0 0 12 5.5 5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.2 3 5.5l7 6Z"/></svg>
+        <!-- floating selection tool bar -->
+        <div class="selection-tools" data-od-id="selection-tools">
+          <div class="sel-toolbar" role="group" aria-label="选中片段操作">
+            <button class="sel-tool" data-kind="ai" data-od-id="sel-ai">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 4.6L18 9l-4.4 1.4L12 15l-1.6-4.6L6 9l4.4-1.4z"/></svg>
+              AI 解读
+            </button>
+            <button class="sel-tool" data-od-id="sel-ask">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              提问
+            </button>
+            <button class="sel-tool" data-kind="copy" data-od-id="sel-copy">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              复制
             </button>
           </div>
-          <div class="k-body" id="kbodyLinear">
-            <p class="kdef">在满足约束的前提下，求出使目标函数达到最优的一组变量取值。可行域由所有约束的交集构成，最优点总落在顶点上。</p>
-            <div class="kdemo" data-od-id="linear-demo">
-              <h6>可行域演示 · max Z = x + t·y</h6>
-              <svg id="simplexSvg" width="100%" height="200" viewBox="0 0 300 200" role="img" aria-label="线性规划可行域示意"></svg>
-              <div class="slider-row">
-                <label for="t-slider">目标梯度系数 t</label>
-                <input type="range" id="t-slider" min="0" max="3" step="0.1" value="1">
-                <span class="val-out" id="t-val">1.0</span>
-              </div>
-              <p class="tryme">试一试：拖动滑块改变目标函数斜率，观察橙色的等值线与 <b>最优顶点</b> 如何移动 —— 最优解总在可行域顶点上取得。</p>
-            </div>
-          </div>
         </div>
+      </section>
 
-        <div class="sec-label" id="ov-5">潜在的建模提示</div>
-        <div class="ai-text"><p id="ovp5">「含量占比 ≈ 组分」天然满足归一化约束，可直接构造为线性规划或贝叶斯判别；请留意风化样品与原始成分的尺距差异。</p></div>
-      </div>
+      <!-- attachment tables -->
+      <section class="attach-block" data-od-id="attachment-tables">
+        <div class="attach-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>
+          附件数据预览
+        </div>
+        <div class="table-row">
+          <figure class="table-card" data-od-id="table-demand">
+            <figcaption>表 1 · 需求量（吨）</figcaption>
+            <table>
+              <thead><tr><th>时段</th><th>点 A</th><th>点 B</th><th>点 C</th><th>点 D</th><th>点 E</th></tr></thead>
+              <tbody>
+                <tr><td>T1 (0–8h)</td><td>3.2</td><td>4.1</td><td>2.8</td><td>5.0</td><td>3.6</td></tr>
+                <tr><td>T2 (8–24h)</td><td>5.6</td><td>6.3</td><td>4.4</td><td>7.1</td><td>5.2</td></tr>
+                <tr><td>T3 (24–48h)</td><td class="accent">8.0</td><td class="accent">7.5</td><td>6.1</td><td class="accent">8.8</td><td>6.0</td></tr>
+                <tr><td>T4 (48–72h)</td><td>4.9</td><td>5.5</td><td>5.2</td><td>6.0</td><td>4.3</td></tr>
+              </tbody>
+            </table>
+          </figure>
+          <figure class="table-card" data-od-id="table-cost">
+            <figcaption>表 2 · 单位运输成本（元/吨·公里）</figcaption>
+            <table>
+              <thead><tr><th>路段</th><th>成本</th><th>损耗率</th><th>拥塞</th></tr></thead>
+              <tbody>
+                <tr><td>基地 → A</td><td>2.4</td><td>1.2%</td><td>低</td></tr>
+                <tr><td>基地 → B</td><td>3.1</td><td>2.0%</td><td>中</td></tr>
+                <tr><td>基地 → C</td><td>2.8</td><td>1.5%</td><td>低</td></tr>
+                <tr><td>基地 → D</td><td>4.2</td><td>3.1%</td><td class="accent">高</td></tr>
+                <tr><td>基地 → E</td><td>3.6</td><td>2.6%</td><td>中</td></tr>
+              </tbody>
+            </table>
+          </figure>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- ── col 3 · bookmark vertical rail ────────────────────────── -->
+  <nav class="bookmarks" data-od-id="bookmark-rail" aria-label="书签切换">
+    <button class="bm" data-panel="reading" data-active="true" data-od-id="bm-reading">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2a2 2 0 0 0-2 2v18l6-4 6 4V4a2 2 0 0 0-2-2z"/></svg>
+      <b>选段精读</b><span>激活</span>
+    </button>
+    <button class="bm" data-panel="knowledge" data-active="false" data-od-id="bm-knowledge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v6c0 1.1 2.2 2 6 2s6-.9 6-2v-6"/></svg>
+      <b>知识卡片</b>
+    </button>
+    <button class="bm bm-add" data-od-id="bm-more" aria-label="添加更多" title="添加更多面板">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      ＋更多
+    </button>
+  </nav>
+
+  <!-- ── col 4 · AI panel ──────────────────────────────────────── -->
+  <aside class="ai-panel" data-od-id="ai-panel">
+    <div class="ai-head">
+      <h2 data-od-id="ai-panel-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 4.6L18 9l-4.4 1.4L12 15l-1.6-4.6L6 9l4.4-1.4z"/></svg>
+        选段精读
+      </h2>
+      <p data-od-id="ai-panel-sub">AI 对题干中各角色条件的判定与分析</p>
     </div>
 
-    <!-- role judgment card -->
-    <div class="card" data-od-id="card-judge">
-      <div class="card-body">
-        <div class="judge">
-          <span class="j-chip"><span class="dot"></span>约束条件</span>
-          <span class="j-conf">92% 置信度</span>
-          <span class="k-spacer"></span>
-          <button class="j-query" data-od-id="btn-query">质疑</button>
+    <!-- reading panel -->
+    <div class="ai-body active" data-panel-body="reading" data-od-id="panel-reading">
+      <div class="verdict" data-od-id="verdict-constraint">
+        <div class="verdict-head">
+          <span class="v-role constraint"><span class="dot"></span>约束条件</span>
+          <span class="v-conf">置信度 94%</span>
         </div>
-        <div class="j-quote" style="margin-top:10px">判定依据：PbO 与 BaO 含量存在 <b>29.31/45.80/58.23</b> 等大值，明显区别于高钾玻璃阈值。</div>
-        <button class="j-locate" data-od-id="btn-locate">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20Z"/></svg>
-          点击定位原文
+        <div class="conf-bar"><div class="conf-fill" style="width:94%"></div></div>
+        <p class="impact">本段界定了问题的<b>硬性限制</b>：最大载重 10 吨、每日运营 ≤ 8 小时。这类条件会直接进入调度模型约束矩阵，决定解的可行域。</p>
+        <p class="quote">“每辆运输车最大载重 10 吨、每日最多运营 8 小时”<i> —— 引用原文</i></p>
+        <div class="verdict-actions">
+          <button class="vbtn" data-od-id="verdict-question">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11a3 3 0 1 0 3-3 2.1 2.1 0 0 0-1.2 1.9"/><circle cx="12" cy="12" r="9"/><path d="M12 17h.01"/></svg>
+            质疑
+          </button>
+          <button class="vbtn" data-od-id="verdict-deep">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l-8 9v6l-3 3V9z"/></svg>
+            深挖此条件
+          </button>
+        </div>
+      </div>
+
+      <div class="subheading">同类角色识别</div>
+      <div class="related">
+        <button class="rel-item" data-od-id="rel-goal">
+          <span class="rel-head goal"><span class="dot"></span>目标函数</span>
+          <div class="rel-meta">使累计到货量最大、总成本最小 · 置信 91%</div>
+        </button>
+        <button class="rel-item" data-od-id="rel-given">
+          <span class="rel-head given"><span class="dot"></span>已知数据</span>
+          <div class="rel-meta">附件 2 · 单位成本与车辆参数 · 置信 96%</div>
+        </button>
+        <button class="rel-item" data-od-id="rel-constraint2">
+          <span class="rel-head constraint"><span class="dot"></span>约束条件</span>
+          <div class="rel-meta">时窗限制 · 各路段通行时间 · 置信 88%</div>
         </button>
       </div>
     </div>
 
-    <!-- dialogue -->
-    <div class="card" data-od-id="card-dialogue">
-      <div class="card-head"><span class="kicker">对话深挖</span></div>
-      <div class="card-body" id="chatBox">
-        <!-- user msg -->
-        <div class="msg user" data-od-id="msg-user-1">
-          <div class="bubble">为什么风化样品无法直接量测原始成分？</div>
-        </div>
-        <!-- AI complete msg -->
-        <div class="msg ai" data-od-id="msg-ai-1">
-          <div class="bubble">
-            风化会带走部分易溶性组分（如 Na₂O、K₂O），使留存组分的<b>相对百分比被人为放大</b>，因此测量值不能代表原始配比。常见处理是假设风化前后总量守恒，将观测值按丢失量反向归一。
-            <div class="ai-flags">
-              <button class="mini" data-od-id="btn-up" title="有帮助"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3Z"/><path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>有帮助</button>
-              <button class="mini" data-od-id="btn-down" title="没帮助"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3Z"/><path d="M17 2h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3"/></svg>没帮助</button>
-              <button class="mini" data-od-id="btn-regen"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>重新生成</button>
-            </div>
-          </div>
-        </div>
+    <!-- knowledge panel -->
+    <div class="ai-body" data-panel-body="knowledge" data-od-id="panel-knowledge">
+      <div class="kcard" data-od-id="kc-decision-tree">
+        <button class="kcard-head" data-od-id="kc-decision-tree-toggle">
+          <span class="kc-left">
+            <span class="kc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M6 9v6M6 12h12L15 9M15 15l2-1"/></svg></span>
+            <span>
+              <span class="kc-t">决策树</span>
+              <span class="kc-sub">分类 / 风险路径判定</span>
+            </span>
+          </span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="kcard-body"><div class="kcard-inner"><div class="kcard-content">
+          用于在拥塞风险等级不同的备选路段中，按时窗与到货优先序做<span><b>路径分级</b></span>。贪心划分可行调度，再以分支界定全局最优。
+        </div></div></div>
       </div>
 
-      <!-- second knowledge card: expanded -->
-      <div class="kcard" data-od-id="kcard-normalize" id="kcardNorm" style="margin:0 18px 16px">
-        <div class="kcard-bar" id="kbarNorm" data-od-id="knowledge-bar-2" role="button" tabindex="0" aria-expanded="true">
-          <span class="kchip">相关概念</span>
-          <span class="kname">归一化反演</span>
-          <span class="kcat">数据 · 预处理</span>
-          <span class="k-spacer"></span>
-          <span class="k-expand" id="kexpNorm">收起 ▴</span>
-          <button class="k-fav on" id="kfavNorm" aria-pressed="true" title="已收藏">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M19 14c1.5-1.3 3-3.2 3-5.5A5.5 5.5 0 0 0 12 5.5 5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.2 3 5.5l7 6Z"/></svg>
-          </button>
-        </div>
-        <div class="k-body" style="display:block">
-          <p class="kdef">以未风化样品为参照，拟合风化对组分总量的损失系数 k，再将风化样品各组分 <b>除以 (1 − k)</b> 还原到原始相对配比，消除结构性偏差。</p>
-          <div class="tryme">试一试：k 值固定后，一键对表中 14 个样品做批量归一，即可得到可直接进入判别模型的「原始成分」特征矩阵。</div>
-        </div>
+      <div class="kcard" data-od-id="kc-regression">
+        <button class="kcard-head" data-od-id="kc-regression-toggle">
+          <span class="kc-left">
+            <span class="kc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M6 16l4-5 3 3 5-7"/></svg></span>
+            <span>
+              <span class="kc-t">线性回归</span>
+              <span class="kc-sub">需求时序外推</span>
+            </span>
+          </span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="kcard-body"><div class="kcard-inner"><div class="kcard-content">
+          由附件 1 各时段需求做趋势外推，补齐<b>非整点时段</b>的预测量，作为调度输入的下界参考。
+        </div></div></div>
       </div>
 
-      <div class="composer" data-od-id="composer">
-        <input type="text" id="chatInput" placeholder="追问这道题、某个概念或表里的数据…" aria-label="输入问题">
-        <button class="send-btn" id="sendBtn" data-od-id="send-btn">发送</button>
+      <div class="kcard" data-od-id="kc-kmeans">
+        <button class="kcard-head" data-od-id="kc-kmeans-toggle">
+          <span class="kc-left">
+            <span class="kc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="10" r="2.6"/><circle cx="16" cy="8" r="2.2"/><circle cx="14" cy="17" r="2"/><circle cx="20" cy="15" r="1.6"/></svg></span>
+            <span>
+              <span class="kc-t">K-means 聚类</span>
+              <span class="kc-sub">需求点分组</span>
+            </span>
+          </span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="kcard-body"><div class="kcard-inner"><div class="kcard-content">
+          按<b>需求量与拥塞风险</b>对 5 个需求点聚类，作为整车合并运输、减少发车次数的依据。
+        </div></div></div>
+      </div>
+
+      <div class="kcard" data-od-id="kc-lp">
+        <button class="kcard-head" data-od-id="kc-lp-toggle">
+          <span class="kc-left">
+            <span class="kc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l7 4 9-4M4 12l7 4 9-4M4 18l7 4 9-4"/></svg></span>
+            <span>
+              <span class="kc-t">线性规划</span>
+              <span class="kc-sub">运力调度主模型</span>
+            </span>
+          </span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="kcard-body"><div class="kcard-inner"><div class="kcard-content">
+          核心决策模型：以<b>派车量、到货量</b>为决策变量，目标函数取成本最小与到货量大，纳入载重、时窗、损耗三类约束，用单纯形或内点求全局最优解。
+        </div></div></div>
       </div>
     </div>
-
   </aside>
-</main>
+
+  <!-- ── empty state (alternate main, hidden by default) ───────── -->
+  <section class="hero-empty" data-od-id="empty-state">
+    <div class="empty-box">
+      <div class="attach-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 4.6L18 9l-4.4 1.4L12 15l-1.6-4.6L6 9l4.4-1.4z"/></svg>
+        读题工作台 · 空状态
+      </div>
+      <div class="empty-entries">
+        <button class="empty-entry primary" data-od-id="empty-upload-problem">
+          <span class="empty-ic">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+          </span>
+          <h3>上传题干</h3>
+          <p>拖入或点击上传题目文本，AI 将自动识别角色条件</p>
+        </button>
+        <button class="empty-entry" data-od-id="empty-upload-attachment">
+          <span class="empty-ic">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>
+          </span>
+          <h3>上传附件</h3>
+          <p>补充数据表格（Excel / CSV），供与题干一同解析</p>
+        </button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<button class="theme-toggle" data-od-id="theme-toggle" aria-label="切换主题" title="切换浅色 / 深色主题">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg>
+</button>
 
 <script>
-  /* ---------- theme toggle ---------- */
-  (function(){
-    var root = document.documentElement;
-    var saved = null;
-    try { saved = localStorage.getItem('mmg-theme'); } catch(e){}
-    if (saved === 'dark' || saved === 'light') root.setAttribute('data-theme', saved);
-    var btn = document.getElementById('themeToggle');
-    function cur(){ return root.getAttribute('data-theme'); }
-    btn.addEventListener('click', function(){
-      var next = cur() === 'dark' ? 'light' : 'dark';
-      root.setAttribute('data-theme', next);
-      try { localStorage.setItem('mmg-theme', next); } catch(e){}
+(function () {
+  var html = document.documentElement;
+  var THEME_KEY = 'reading-workbench-theme';
+  var PANEL_KEY = 'reading-workbench-panel';
+
+  // persist theme
+  var savedTheme = localStorage.getItem(THEME_KEY);
+  if (savedTheme === 'dark' || savedTheme === 'light') html.setAttribute('data-theme', savedTheme);
+
+  var themeBtn = document.querySelector('[data-od-id="theme-toggle"]');
+  themeBtn.addEventListener('click', function () {
+    var next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-theme', next);
+    try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+  });
+
+  // switch AI panel via bookmark rail
+  var bmButtons = document.querySelectorAll('.bm[data-panel]');
+  var panelHeads = {
+    reading: { t: '选段精读', s: 'AI 对题干中各角色条件的判定与分析' },
+    knowledge: { t: '知识卡片', s: '解题方法库 · 按角色条件推荐' }
+  };
+  function activatePanel(name) {
+    bmButtons.forEach(function (b) {
+      b.setAttribute('data-active', b.getAttribute('data-panel') === name ? 'true' : 'false');
     });
-  })();
-
-  /* ---------- selection toolbar ---------- */
-  (function(){
-    var src = document.getElementById('selSource');
-    src.addEventListener('click', function(e){
-      e.stopPropagation();
-      var on = src.classList.contains('selected');
-      document.querySelectorAll('.stab .sel-src').forEach(function(s){ s.classList.remove('selected'); });
-      if(!on) src.classList.add('selected');
+    document.querySelectorAll('.ai-body').forEach(function (body) {
+      body.classList.toggle('active', body.getAttribute('data-panel-body') === name);
     });
-    document.addEventListener('click', function(e){
-      if(!e.target.closest('.stab')) {
-        document.querySelectorAll('.stab .sel-src').forEach(function(s){ s.classList.remove('selected'); });
-      }
+    var head = panelHeads[name];
+    if (head) {
+      document.querySelector('[data-od-id="ai-panel-title"]').lastChild.textContent = head.t;
+      document.querySelector('[data-od-id="ai-panel-sub"]').textContent = head.s;
+    }
+    try { localStorage.setItem(PANEL_KEY, name); } catch (e) {}
+  }
+  bmButtons.forEach(function (b) {
+    b.addEventListener('click', function () { activatePanel(b.getAttribute('data-panel')); });
+  });
+
+  // restore last panel (default reading)
+  var lastPanel = 'reading';
+  try {
+    var p = localStorage.getItem(PANEL_KEY);
+    if (p === 'reading' || p === 'knowledge') lastPanel = p;
+  } catch (e) {}
+  activatePanel(lastPanel);
+
+  // knowledge card expand
+  document.querySelectorAll('.kcard-head').forEach(function (head) {
+    head.addEventListener('click', function () {
+      head.closest('.kcard').classList.toggle('open');
     });
-    var tb = document.getElementById('floatToolbar');
-    tb.addEventListener('click', function(e){ e.stopPropagation(); });
-  })();
+  });
 
-  /* ---------- knowledge cards: expand/collapse + favorite ---------- */
-  (function(){
-    function bindCard(id){
-      var k = document.getElementById('kcard' + id);
-      var bar = document.getElementById('kbar' + id);
-      var body = document.getElementById('kbody' + id);
-      var exp = document.getElementById('kexp' + id);
-      if(!k || !bar || !body || !exp) return;
-      function sync(){
-        var open = k.classList.contains('open');
-        exp.innerHTML = open ? '收起 ▴' : '展开演示 <span style="display:inline-flex">▾</span>';
-        body.style.display = open ? 'block' : 'none';
-        bar.setAttribute('aria-expanded', open ? 'true' : 'false');
-      }
-      function toggle(){
-        k.classList.toggle('open');
-        sync();
-      }
-      bar.addEventListener('click', toggle);
-      bar.addEventListener('keydown', function(ev){
-        if(ev.key==='Enter'||ev.key===' '){ ev.preventDefault(); toggle(); }
-      });
-      sync();
-    }
-    bindCard('Linear');   // starts closed (no .open)
-    bindCard('Norm');     // starts open below
-    document.getElementById('kcardNorm').classList.add('open');
-    bindCard('Norm');     // re-sync label to open
-
-    function bindFav(btnId, svgFillWhenOn){
-      var btn = document.getElementById(btnId);
-      btn.addEventListener('click', function(e){
-        e.stopPropagation();
-        var on = btn.classList.toggle('on');
-        btn.setAttribute('aria-pressed', on);
-        var svg = btn.querySelector('svg');
-        if(on){ svg.setAttribute('fill','currentColor'); if(svgFillWhenOn) svg.setAttribute('stroke','none'); }
-        else { svg.setAttribute('fill','none'); if(svgFillWhenOn) svg.setAttribute('stroke','currentColor'); }
-      });
-    }
-    bindFav('kfavLinear', false);  // outline style
-    bindFav('kfavNorm', true);      // filled style
-  })();
-
-  /* ---------- simplex demo ---------- */
-  (function(){
-    var svg = document.getElementById('simplexSvg');
-    var slider = document.getElementById('t-slider');
-    var val = document.getElementById('t-val');
-    var W=300, H=200;
-    // feasible region (polygon points) map coords to svg coords
-    // vertices in "model space": A(10,0) B(60,0) C(60,30) D(40,60) E(0,50), plus F? define
-    var px=function(x){ return 20 + x* (250/70); };
-    var py=function(y){ return H - 20 - y* (180/70); };
-    function line(x1,y1,x2,y2){ return px(x1)+','+py(y1)+' '+px(x2)+','+py(y2); }
-    var pts = [[10,0],[60,0],[60,28],[36,60],[0,50]];
-    // acceptable region boundary drawn as polygon on axes
-    var poly = pts.map(function(p){ return px(p[0])+','+py(p[1]); }).join(' ');
-
-    function draw(){
-      var t = parseFloat(slider.value);
-      val.textContent = t.toFixed(1);
-      // objective line: y = (Z - x)/t  ; pick Z fixed, render iso-cost through point, dark orange
-      // tangent direction vector perpendicular to (1, t) ; normal = (t?, ...). Objective Z=x + t*y
-      // iso line passes through optimal vertex below:
-      // compute best vertex given t among pts
-      var best = pts[0], bv = best[0]+t*best[1];
-      pts.forEach(function(p){ var v=p[0]+t*p[1]; if(v>bv){ bv=v; best=p; } });
-      // iso line through best with normal (1,t): points p +/- dir*scale where dir=(t, -1)
-      var sx = t, sy = -1;
-      var nx = px(best[0]) - sx*80, ny = py(best[1]) + sy*80; // careful sign
-      var mx = px(best[0]) + sx*80, my = py(best[1]) - sy*80;
-      var iso = nx+','+ny+' '+mx+','+my;
-
-      var g = '<rect width="300" height="200" fill="none"/>';
-      // feasible region filled
-      g += '<polygon points="'+poly+'" fill="rgba(37,99,235,0.12)" stroke="#2563EB" stroke-width="1.5"/>';
-      // iso-cost line (orange)
-      g += '<line x1="'+nx+'" y1="'+ny+'" x2="'+mx+'" y2="'+my+'" stroke="#EA580C" stroke-width="2" stroke-dasharray="5 4"/>';
-      g += '<text x="'+(W-8)+'" y="'+(py(60)+0)+'" text-anchor="end" font-size="11" fill="#EA580C">目标 Z = x + t·y</text>';
-      // optimal vertex marker
-      g += '<circle cx="'+px(best[0])+'" cy="'+py(best[1])+'" r="5" fill="#EA580C" stroke="#fff" stroke-width="1.5"/>';
-      g += '<circle cx="'+px(best[0])+'" cy="'+py(best[1])+'" r="9" fill="none" stroke="#EA580C" stroke-width="1.5"/>';
-      g += '<text x="'+(px(best[0])-26)+'" y="'+(py(best[1])-12)+'" font-size="11" fill="#fff" stroke="#00000033" stroke-width="3" paint-order="stroke">最优顶点</text>';
-      g += '<text x="'+(px(best[0])-26)+'" y="'+(py(best[1])-12)+'" font-size="11" fill="#EA580C" font-weight="600">最优顶点</text>';
-      // axes ticks
-      g += '<text x="18" y="'+(H-6)+'" font-size="10" fill="currentColor" opacity="0.7">0</text>';
-      g += '<line x1="20" y1="'+(H-14)+'" x2="'+(W-12)+'" y2="'+(H-14)+'" stroke="currentColor" opacity="0.35"/>';
-      g += '<line x1="20" y1="'+(H-14)+'" x2="20" y2="14" stroke="currentColor" opacity="0.35"/>';
-      svg.innerHTML = g;
-    }
-    draw();
-    slider.addEventListener('input', draw);
-  })();
-
-  /* ---------- nav tabs (cosmetic) ---------- */
-  (function(){
-    document.querySelectorAll('.nav-tab').forEach(function(t){
-      t.addEventListener('click', function(){
-        document.querySelectorAll('.nav-tab').forEach(function(x){ x.classList.remove('active'); });
-        t.classList.add('active');
-      });
+  // empty state toggle (demo: switch between empty / filled workspace)
+  var app = document.getElementById('app');
+  var emptyEntries = document.querySelectorAll('[data-od-id="empty-upload-problem"], [data-od-id="empty-upload-attachment"]');
+  emptyEntries.forEach(function (t) {
+    t.addEventListener('click', function () {
+      // demo: mounting a problem returns to the filled workspace
+      if (app.hasAttribute('data-empty')) app.removeAttribute('data-empty');
     });
-  })();
+  });
+  // demo helpers: window.__showEmpty() / window.__showProblem() cycle the 空状态
+  window.__showEmpty = function () { app.setAttribute('data-empty', ''); };
+  window.__showProblem = function () { app.removeAttribute('data-empty'); };
 
-  /* ---------- composer: append a user message + typewriter AI reply ---------- */
-  (function(){
-    var input = document.getElementById('chatInput');
-    var send = document.getElementById('sendBtn');
-    var box = document.getElementById('chatBox');
-    var sent = false;
-
-    function push(msg){
-      var wrap = document.createElement('div');
-      wrap.className = 'msg user';
-      var b = document.createElement('div');
-      b.className = 'bubble';
-      b.textContent = msg;
-      wrap.appendChild(b);
-      box.appendChild(wrap);
-      // AI typewriter
-      var awrap = document.createElement('div');
-      awrap.className = 'msg ai';
-      var ab = document.createElement('div');
-      ab.className = 'bubble';
-      var full = '我在读这道题。PbO/BaO 数据偏大的样品更可能属于铅钡玻璃，建议先把表 1 表 2 按样品号对齐，再判断哪些是风化点。';
-      var typed = 0;
-      function tick(){
-        typed += 2;
-        ab.textContent = full.slice(0, typed) + (typed < full.length ? '▍' : '');
-        if(typed < full.length){ setTimeout(tick, 30); }
-        else {
-          var div = document.createElement('div');
-          div.className = 'ai-flags';
-          [['有帮助'],['没帮助'],['重新生成']].forEach(function(items){
-            var m = document.createElement('button');
-            m.className = 'mini'; m.textContent = items[0]; div.appendChild(m);
-          });
-          ab.appendChild(div);
-        }
-      }
-      awrap.appendChild(ab);
-      box.appendChild(awrap);
-      box.scrollTop = box.scrollHeight;
-      setTimeout(tick, 300);
-    }
-
-    function submit(){
-      var v = input.value.trim();
-      if(!v) return;
-      input.value = '';
-      push(v);
-    }
-
-    send.addEventListener('click', submit);
-    input.addEventListener('keydown', function(ev){ if(ev.key === 'Enter'){ ev.preventDefault(); submit(); } });
-  })();
+  // rail button toggles empty / filled preview
+  var railEmpty = document.querySelector('[data-od-id="rail-empty"]');
+  railEmpty.addEventListener('click', function () {
+    if (app.hasAttribute('data-empty')) window.__showProblem();
+    else window.__showEmpty();
+    var active = app.hasAttribute('data-empty');
+    this.setAttribute('data-active', active ? 'true' : 'false');
+  });
+})();
 </script>
 </body>
 </html>

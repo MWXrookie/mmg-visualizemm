@@ -3,6 +3,7 @@
 > 2026-08-29 实测打通。目的：把 OpenDesign 桌面版的原型生成接入自动化工作流，无需手动操作桌面端。
 > 结论：可行。生成走**本地 opencode + 自带 DeepSeek API key**（BYOK），不消耗 OpenDesign 云（AMR/Vela）额度。
 > **产物落盘**：项目以「导入文件夹」方式创建（外部根 = 本项目 `docs/prototypes/generated/`），生成 HTML **直接写入本项目文件夹**，不再落在应用数据目录。
+> **2026-08-29 清理注**：旧 UI 原型（`byok/`、`legacy/`）已删除，`generated/` 已清空；本工作流供**全新 UI** 复用，重新生成即可。
 
 ## 前置（一次性）
 
@@ -51,7 +52,7 @@
    ```
 3. **轮询**：`GET /api/runs/<runId>` → status=succeeded 后，产物在
    `docs/prototypes/generated/`（**本项目文件夹内**）
-4. **归档**：`generated/` 为原始落盘区；需要时可复制到 `docs/prototypes/` 并命名（如 `xxx-byok.html`）。
+4. **归档**：`generated/` 为原始落盘区；审核通过后复制到 `docs/prototypes/` 并命名（如 `xxx-workbench.html`）。
 
 ## 关键事实（实测）
 
@@ -66,8 +67,7 @@
 
 ## 产物
 
-- `docs/prototypes/byok/`（workbench / guided-chat / settings / startup，浅色+深色）— 4 页新版原型
-- `docs/prototypes/generated/` — OpenDesign 直接落盘区（原始产物）
+- `docs/prototypes/generated/` — OpenDesign 直接落盘区（原始产物，全新 UI 生成时写入）
 
 ## 待办/注意
 
