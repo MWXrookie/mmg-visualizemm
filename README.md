@@ -7,12 +7,12 @@
 ## 📖 项目状态
 
 当前处于 **M0-M5 功能已完成，M6 发布准备中**：
-- ✅ 产品定义与需求：见 [PRD.md](PRD.md)
-- ✅ 竞品调研（5 维度）：见 [docs/竞品调研报告.md](docs/竞品调研报告.md)
-- ✅ 技术选型定案：见 [docs/技术框架与架构.md](docs/技术框架与架构.md)
-- ✅ UI/UX 设计：见 [docs/UI-UX设计.md](docs/UI-UX设计.md)
-- ✅ 开发规划与验收：见 [docs/开发规划与验收.md](docs/开发规划与验收.md)
-- ✅ 系统架构图：见 [docs/architecture.png](docs/architecture.png)（源文件 [docs/architecture.html](docs/architecture.html)）
+- ✅ 产品定义与需求：见 [docs/01-产品/PRD.md](docs/01-产品/PRD.md)
+- ✅ 竞品调研（5 维度）：见 [docs/01-产品/竞品调研报告.md](docs/01-产品/竞品调研报告.md)
+- ✅ 技术选型定案：见 [docs/01-产品/技术框架与架构.md](docs/01-产品/技术框架与架构.md)
+- ✅ UI/UX 设计：见 [docs/02-设计/UI-UX设计.md](docs/02-设计/UI-UX设计.md)
+- ✅ 开发规划与验收：见 [docs/03-开发/开发规划与验收.md](docs/03-开发/开发规划与验收.md)
+- ✅ 系统架构图：见 [docs/03-开发/architecture.png](docs/03-开发/architecture.png)（源文件 [docs/03-开发/architecture.html](docs/03-开发/architecture.html)）
 - ✅ OpenDesign 设计系统：见 [design-systems/mmg_visualizemm/DESIGN.md](design-systems/mmg_visualizemm/DESIGN.md)
 - ✅ **功能开发**：M1 附件解析 / M2 划词精读 / M3 对话引导 / M4 知识卡片 / M5 编程+会话保存
 
@@ -47,23 +47,20 @@ npm run dev          # Vite(5173) + 后端(3088)
 
 ```
 MMG_VisualizeMM/
-├── PRD.md                    # 产品需求文档（功能需求 / 里程碑 / 验收标准）
-├── design-system/            # 设计 tokens 源（ui-ux-pro-max 生成）
-├── design-systems/           # OpenDesign 设计系统（DESIGN.md，驱动原型生成）
-└── docs/
-    ├── 竞品调研报告.md         # 5 维度调研定稿汇总（机会点 / 风险 / 建议）
-    ├── 技术框架与架构.md       # 技术选型 v0.1（已并入调研结论）
-    ├── UI-UX设计.md           # 设计方向 / Tokens / 排版 / 组件规格 / 页面线框
-    ├── 开发规划与验收.md       # 任务拆解 WBS / 验收标准矩阵 / 测试策略
-    ├── architecture.html/png  # 系统架构图（源文件 + 渲染图）
-    ├── prototypes/            # （规划中）OpenDesign 高保真原型
-    └── research/              # 5 份维度原始调研报告
-        ├── A-数模辅导平台.md
-        ├── B-AI读题工具.md
-        ├── C-数学可视化工具.md
-        ├── D-用户痛点.md
-        └── E-开源形态参考.md
+├── web/ server/ scripts/       # 源码（前端 / 后端 / 工具脚本）
+├── design-system/              # 设计 tokens 源（ui-ux-pro-max 生成，工具绑定勿移）
+├── design-systems/             # OpenDesign 设计系统（DESIGN.md，驱动原型生成，工具绑定勿移）
+├── docs/                       # 全部文档与素材（分类归档，入口见 docs/README.md）
+│   ├── 01-产品/                # PRD / 竞品调研 / 技术框架 / 原始调研 research/
+│   ├── 02-设计/                # UI-UX设计 / UI偏差清单 / UI渲染描述 / wireframes 线框
+│   ├── 03-开发/                # 开发规划与验收 / 验收报告 / 评测集 / 架构图
+│   ├── prototypes/             # 原型（byok 新版 / legacy 归档 / generated 落盘区）
+│   ├── 05-门户/                # portal.html 门户 + 素材
+│   └── 06-素材/                # 真题 / PDF / Excel 附件
+└── PRD.md → docs/01-产品/PRD.md
 ```
+
+> 📌 完整文档地图见 [docs/README.md](docs/README.md)。
 
 ## 🎯 产品一句话
 
