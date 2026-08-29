@@ -76,7 +76,7 @@ body {
 }
 .nav-tabs { display: flex; gap: 4px; }
 .nav-tab {
-  height: 34px; padding: 0 14px; border: none; background: transparent; border-radius: 8px;
+  height: 40px; padding: 0 14px; border: none; background: transparent; border-radius: 8px;
   font-size: 14px; font-family: inherit; cursor: pointer; color: var(--color-muted-foreground);
 }
 .nav-tab.active { background: rgba(37, 99, 235, 0.1); color: var(--color-primary); font-weight: 600; }
@@ -101,8 +101,8 @@ body {
 .btn-accent:hover:not(:disabled) { background: #c2410c; }
 .btn-ghost { background: transparent; color: var(--color-muted-foreground); border-color: var(--color-border); }
 .btn-ghost:hover:not(:disabled) { background: var(--color-muted); }
-.btn-sm { height: 30px; padding: 0 12px; font-size: 13px; }
-.btn-lg { height: 44px; padding: 0 28px; font-size: 15px; font-weight: 600; }
+.btn-sm { height: 32px; padding: 0 12px; font-size: 13px; }
+.btn-lg { height: 40px; padding: 0 28px; font-size: 15px; font-weight: 600; }
 
 .alert {
   margin-top: 12px; padding: 10px 14px; border-radius: 8px; font-size: 13px;
@@ -191,6 +191,11 @@ body {
 .tbl td { padding: 7px 12px; border-top: 1px solid var(--color-border); white-space: nowrap; }
 .tbl td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .tbl tr:hover td { background: rgba(37, 99, 235, 0.04); }
+/* 横向滚动时冻结首列（DESIGN.md §5：>50 列场景） */
+.tbl th:first-child, .tbl td:first-child { position: sticky; left: 0; }
+.tbl th:first-child { background: var(--color-muted); z-index: 2; }
+.tbl td:first-child { background: var(--color-card); }
+.tbl tr:hover td:first-child { background: var(--color-muted); }
 .text-preview { white-space: pre-wrap; font-family: inherit; font-size: 13px; line-height: 1.6; color: var(--color-muted-foreground); max-height: 240px; overflow-y: auto; }
 .problem-input {
   width: 100%; min-height: 260px; border: 1px solid var(--color-border); border-radius: var(--radius-sm);
@@ -408,11 +413,16 @@ body {
   .coding-split { flex-direction: column; }
 }
 
-/* 浮动划词工具栏：绝对定位锁定在选区旁，随内容滚动 */
+/* 浮动划词工具栏：绝对定位锁定在选区旁，随内容滚动；150ms 淡入 */
 .float-toolbar {
   position: absolute; transform: translateX(-50%); z-index: 30; display: flex; gap: 4px;
   background: var(--color-card); border: 1px solid var(--color-border); border-radius: 8px; padding: 4px;
   box-shadow: var(--shadow-pop);
+  animation: float-in 0.15s ease-out;
+}
+@keyframes float-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(4px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
 /* ===== 响应式 ===== */
@@ -447,8 +457,8 @@ body {
 
 /* ===== 主题切换按钮（顶部导航） ===== */
 .theme-toggle {
-  width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--color-border);
-  background: transparent; cursor: pointer; font-size: 15px; line-height: 1; color: var(--color-foreground);
+  width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--color-border);
+  background: transparent; cursor: pointer; font-size: 16px; line-height: 1; color: var(--color-foreground);
 }
 .theme-toggle:hover { background: var(--color-muted); }
 
