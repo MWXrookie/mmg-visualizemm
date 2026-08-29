@@ -59,6 +59,51 @@ function ConceptTrigger({ messages, onOpenCards }) {
   )
 }
 
+/** 附件表格预览（支持多 sheet tab 切换） */
+function AttachmentTable({ a, onRemove }) {
+  const tables = a.sheets && a.sheets.length > 0 ? a.sheets : [{ name: a.name, headers: a.headers, rows: a.rows }]
+  const [idx, setIdx] = useState(0)
+  const t = tables[Math.min(idx, tables.length - 1)] || tables[0]
+  return (
+    <div className="card table-card">
+      <h4>
+        📊 {a.name}
+        <span className="hint">（{tables.length} 个表单）</span>
+        <button className="attach-del" onClick={onRemove}>✕</button>
+      </h4>
+      {tables.length > 1 && (
+        <div className="sheet-tabs">
+          {tables.map((s, i) => (
+            <button
+              key={s.name + i}
+              className={`sheet-tab ${i === idx ? 'active' : ''}`}
+              onClick={() => setIdx(i)}
+            >
+              {s.name} <span className="hint">({s.totalRows} 行)</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="table-scroll">
+        <table className="tbl">
+          <thead>
+            <tr>{t.headers.map((h, i) => <th key={i}>{h}</th>)}</tr>
+          </thead>
+          <tbody>
+            {t.rows.slice(0, 10).map((r, ri) => (
+              <tr key={ri}>
+                {t.headers.map((_, ci) => (
+                  <td key={ci} className={isNaN(Number(r[ci])) ? '' : 'num'}>{r[ci] || '—'}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 export default function Workbench({ settings, onOpenCards }) {
   const [title, setTitle] = useState('')
   const [problemText, setProblemText] = useState('')
@@ -447,31 +492,7 @@ export default function Workbench({ settings, onOpenCards }) {
                 .filter((a) => a.status === 'done')
                 .map((a) =>
                   a.type === 'table' ? (
-                    <div className="card table-card" key={a.id}>
-                      <h4>
-                        📊 {a.name}
-                        <span className="hint">
-                          （{a.headers.length} 列 · 预览 {Math.min(a.rows.length, 10)} 行）
-                        </span>
-                        <button className="attach-del" onClick={() => removeAttachment(a.id)}>✕</button>
-                      </h4>
-                      <div className="table-scroll">
-                        <table className="tbl">
-                          <thead>
-                            <tr>{a.headers.map((h, i) => <th key={i}>{h}</th>)}</tr>
-                          </thead>
-                          <tbody>
-                            {a.rows.slice(0, 10).map((r, ri) => (
-                              <tr key={ri}>
-                                {a.headers.map((_, ci) => (
-                                  <td key={ci} className={isNaN(Number(r[ci])) ? '' : 'num'}>{r[ci] || '—'}</td>
-                                ))}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
+                    <AttachmentTable key={a.id} a={a} onRemove={() => removeAttachment(a.id)} />
                   ) : (
                     <div className="card table-card" key={a.id}>
                       <h4>

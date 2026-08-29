@@ -50,15 +50,18 @@ export async function parseFile(file) {
   return json
 }
 
-/** 生成附件摘要（供 AI 读题联动解读） */
+/** 生成附件摘要（供 AI 读题联动解读，支持多 sheet） */
 export function attachSummary(attachments) {
   const parts = []
   for (const a of attachments) {
     if (a.status !== 'done') continue
     if (a.type === 'table') {
-      const head = a.headers.join(' | ')
-      const sample = a.rows.slice(0, 3).map((r) => r.join(' | ')).join('\n    ')
-      parts.push(`【${a.name}】表头：${head}\n    示例数据：\n    ${sample}`)
+      const tables = a.sheets && a.sheets.length > 0 ? a.sheets : [{ name: a.name, headers: a.headers, rows: a.rows }]
+      for (const t of tables) {
+        const head = t.headers.join(' | ')
+        const sample = t.rows.slice(0, 3).map((r) => r.join(' | ')).join('\n    ')
+        parts.push(`【${a.name}｜${t.name}】表头：${head}\n    示例数据：\n    ${sample}`)
+      }
     } else if (a.type === 'text') {
       parts.push(`【${a.name}】文本摘要：${a.text.slice(0, 500)}`)
     }

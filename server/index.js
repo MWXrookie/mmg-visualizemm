@@ -149,32 +149,52 @@ function looksLikeHeader(row) {
 function normalizeCell(v) {
   if (v === null || v === undefined) return ''
   if (v instanceof Date) return v.toISOString().slice(0, 10)
+  if (typeof v === 'object') {
+    // exceljs 富文本（如 SiO₂ 下标）、公式结果等
+    if (Array.isArray(v.richText)) return v.richText.map((t) => t.text ?? '').join('')
+    if (v.result !== undefined) return String(v.result)
+    if (v.text !== undefined) return String(v.text)
+    if (v.hyperlink !== undefined) return String(v.hyperlink)
+    return JSON.stringify(v)
+  }
   return String(v)
 }
 
 async function parseXlsx(buffer) {
   const wb = new ExcelJS.Workbook()
   await wb.xlsx.load(buffer)
-  const ws = wb.worksheets[0]
-  if (!ws) return { ok: false, error: '工作簿中没有工作表' }
-  const raw = []
-  ws.eachRow({ includeEmpty: true }, (row) => {
-    if (raw.length >= MAX_ROWS + 5) return
-    raw.push(row.values.slice(1).map(normalizeCell))
-  })
-  if (raw.length === 0) return { ok: false, error: '表格为空' }
-  // 第一行是表头（含文本）则作为 headers，否则自动列名
-  let headers, rows
-  if (looksLikeHeader(raw[0])) {
-    headers = raw[0].map((h, i) => (String(h).trim() === '' ? `列${i + 1}` : String(h).trim()))
-    rows = raw.slice(1).slice(0, MAX_ROWS)
-  } else {
-    headers = raw[0].map((_, i) => `列${i + 1}`)
-    rows = raw.slice(0, MAX_ROWS)
+  const sheets = []
+  for (const ws of wb.worksheets) {
+    if (!ws.actualRowCount) continue
+    const raw = []
+    ws.eachRow({ includeEmpty: true }, (row) => {
+      if (raw.length >= MAX_ROWS + 5) return
+      raw.push(row.values.slice(1).map(normalizeCell))
+    })
+    if (raw.length === 0) continue
+    // 第一行是表头（含文本）则作为 headers，否则自动列名
+    let headers, rows
+    if (looksLikeHeader(raw[0])) {
+      headers = raw[0].map((h, i) => (String(h).trim() === '' ? `列${i + 1}` : String(h).trim()))
+      rows = raw.slice(1).slice(0, MAX_ROWS)
+    } else {
+      headers = raw[0].map((_, i) => `列${i + 1}`)
+      rows = raw.slice(0, MAX_ROWS)
+    }
+    rows = rows.filter((r) => r.some((c) => c.trim() !== ''))
+    sheets.push({ name: ws.name, headers, rows, totalRows: ws.actualRowCount })
   }
-  // 去掉全空行
-  rows = rows.filter((r) => r.some((c) => c.trim() !== ''))
-  return { ok: true, type: 'table', headers, rows, sheetName: ws.name, totalRows: ws.actualRowCount }
+  if (sheets.length === 0) return { ok: false, error: '表格为空' }
+  // 兼容单表：展开第一个 sheet 字段；多表通过 sheets 提供
+  return {
+    ok: true,
+    type: 'table',
+    sheets,
+    name: sheets[0].name,
+    headers: sheets[0].headers,
+    rows: sheets[0].rows,
+    totalRows: sheets[0].totalRows,
+  }
 }
 
 function parseCsv(text) {
