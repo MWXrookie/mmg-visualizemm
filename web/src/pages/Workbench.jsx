@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { marked } from 'marked'
 import { chat, streamChat, parseFile, attachSummary } from '../api.js'
-import { CONCEPT_KEYWORDS } from './Cards.jsx'
+import { KnowledgeCard, findConcept } from './Cards.jsx'
 import { saveSession, loadSession, clearSession, loadSessionList, saveSessionList } from '../store.js'
 import MD, { sanitize } from '../components/MD.jsx'
 const READ_OVERVIEW_SYSTEM =
@@ -71,22 +71,6 @@ function renderProblem(problemText, quoteHl) {
   return html
 }
 
-/** 对话概念检测：命中词表时显示知识卡片入口 */
-function ConceptTrigger({ messages, onOpenCards }) {
-  if (!onOpenCards || messages.length === 0) return null
-  // 只在最后一条 AI 消息中检测
-  const last = messages[messages.length - 1]
-  if (!last || last.role !== 'assistant') return null
-  const hit = CONCEPT_KEYWORDS.find((c) => last.content.toLowerCase().includes(c.keyword.toLowerCase()))
-  if (!hit) return null
-  const title = { 'decision-tree': '决策树', 'linear-regression': '线性回归', kmeans: 'K-means 聚类' }[hit.cardId]
-  return (
-    <div className="card-link" onClick={onOpenCards}>
-      💡 对话中提到了 <b>{title}</b> —— 打开知识卡片，用交互演示理解它 →
-    </div>
-  )
-}
-
 /** 附件表格预览（支持多 sheet tab 切换） */
 function AttachmentTable({ a, onRemove }) {
   const tables = a.sheets && a.sheets.length > 0 ? a.sheets : [{ name: a.name, headers: a.headers, rows: a.rows }]
@@ -132,7 +116,7 @@ function AttachmentTable({ a, onRemove }) {
   )
 }
 
-export default function Workbench({ settings, onOpenCards }) {
+export default function Workbench({ settings }) {
   const [title, setTitle] = useState('')
   const [problemText, setProblemText] = useState('')
   const [loaded, setLoaded] = useState(false)
@@ -674,6 +658,8 @@ export default function Workbench({ settings, onOpenCards }) {
   /* ---------- 读题工作台 ---------- */
   // 步骤指示器状态：①读题理解（有 overview 即完成）②精读深挖 ③建模方向
   const step2Done = messages.filter((m) => m.role === 'user').length >= 1
+  // 整体解读中命中建模概念 → 内嵌知识卡片
+  const overviewHit = overview ? findConcept(overview) : null
   const steps = [
     { n: '①', label: '读题理解', done: !!overview, active: !overview },
     { n: '②', label: '精读深挖', done: step2Done, active: !!overview && !step2Done },
@@ -827,6 +813,7 @@ export default function Workbench({ settings, onOpenCards }) {
             <div className="card ai-card">
               <div className="section-label">📖 整体解读</div>
               <MD text={overview} className="ai-content-md" />
+              {overviewHit && <KnowledgeCard cardId={overviewHit.cardId} />}
             </div>
           )}
 
@@ -838,43 +825,49 @@ export default function Workbench({ settings, onOpenCards }) {
               {messages.length === 0 && (
                 <div className="chat-empty">提出你的问题，例如：「这道题该用什么模型？目标函数怎么设？」</div>
               )}
-              {messages.map((m) => (
-                <div key={m.id ?? m.content} className={`msg ${m.role === 'user' ? 'user' : 'ai'}`}>
-                  {m.role === 'user' ? (
-                    <div className="bubble">{m.content}</div>
-                  ) : (
-                    <div className="bubble guide">
-                      <MD text={m.content} />
-                      {m.streaming && <span className="stream-cursor" />}
-                      {!m.streaming && (
-                        <div className="msg-actions">
-                          <button
-                            className={`mini-btn ${feedback[m.id] === 'up' ? 'on' : ''}`}
-                            onClick={() => setFeedback((f) => ({ ...f, [m.id]: 'up' }))}
-                            title="有帮助"
-                          >
-                            👍
-                          </button>
-                          <button
-                            className={`mini-btn ${feedback[m.id] === 'down' ? 'on' : ''}`}
-                            onClick={() => setFeedback((f) => ({ ...f, [m.id]: 'down' }))}
-                            title="没帮助"
-                          >
-                            👎
-                          </button>
-                          <button className="mini-btn" onClick={regenerate} title="重新生成">
-                            ↻
-                          </button>
+              {messages.map((m) => {
+                // 流式完成后检测建模概念 → 在消息下方内嵌知识卡片（读题附属，无独立入口）
+                const hit = m.role === 'assistant' && !m.streaming ? findConcept(m.content) : null
+                return (
+                  <React.Fragment key={m.id ?? m.content}>
+                    <div className={`msg ${m.role === 'user' ? 'user' : 'ai'}`}>
+                      {m.role === 'user' ? (
+                        <div className="bubble">{m.content}</div>
+                      ) : (
+                        <div className="bubble guide">
+                          <MD text={m.content} />
+                          {m.streaming && <span className="stream-cursor" />}
+                          {!m.streaming && (
+                            <div className="msg-actions">
+                              <button
+                                className={`mini-btn ${feedback[m.id] === 'up' ? 'on' : ''}`}
+                                onClick={() => setFeedback((f) => ({ ...f, [m.id]: 'up' }))}
+                                title="有帮助"
+                              >
+                                👍
+                              </button>
+                              <button
+                                className={`mini-btn ${feedback[m.id] === 'down' ? 'on' : ''}`}
+                                onClick={() => setFeedback((f) => ({ ...f, [m.id]: 'down' }))}
+                                title="没帮助"
+                              >
+                                👎
+                              </button>
+                              <button className="mini-btn" onClick={regenerate} title="重新生成">
+                                ↻
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
-                  )}
-                </div>
-              ))}
+                    {hit && <KnowledgeCard cardId={hit.cardId} />}
+                  </React.Fragment>
+                )
+              })}
               {chatLoading && !messages.some((m) => m.streaming) && (
                 <div className="msg ai"><div className="bubble guide typing">AI 思考中…</div></div>
               )}
-              {!chatLoading && <ConceptTrigger messages={messages} onOpenCards={onOpenCards} />}
             </div>
             <div className="input-bar">
               <input

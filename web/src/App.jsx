@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import Workbench from './pages/Workbench.jsx'
 import Settings from './pages/Settings.jsx'
-import Cards from './pages/Cards.jsx'
 import Coding from './pages/Coding.jsx'
 import { loadSettings, loadTheme, saveTheme } from './store.js'
 
@@ -36,9 +35,6 @@ export default function App() {
           <button className={`nav-tab ${view === 'workbench' ? 'active' : ''}`} onClick={() => setView('workbench')}>
             读题工作台
           </button>
-          <button className={`nav-tab ${view === 'cards' ? 'active' : ''}`} onClick={() => setView('cards')}>
-            知识卡片
-          </button>
           <button className={`nav-tab ${view === 'coding' ? 'active' : ''}`} onClick={() => setView('coding')}>
             编程工作台
           </button>
@@ -67,9 +63,7 @@ export default function App() {
 
       <main className="main">
         {view === 'workbench' ? (
-          <Workbench settings={settings} onOpenCards={() => setView('cards')} />
-        ) : view === 'cards' ? (
-          <Cards />
+          <Workbench settings={settings} />
         ) : view === 'coding' ? (
           <Coding />
         ) : (

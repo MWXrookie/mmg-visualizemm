@@ -87,11 +87,10 @@ function DecisionTreeDemo() {
     return nodes
   }
   const nodes = useMemo(() => buildNodes(depth), [depth])
-  const visible = nodes.filter((nd) => nd.level < revealed || (nd.isLeaf && nd.level < revealed) )
 
   // 布局：满二叉树坐标
   const W = 560, H = 320, topPad = 40, levelH = 70
-  function pos(node, depthMax) {
+  function pos(node) {
     const count = Math.pow(2, node.level)
     const col = node.isLeaf ? parseInt(node.id.slice(1)) : parseInt(node.id.slice(1).split('-')[1])
     const x = ((col + 0.5) / count) * W
@@ -116,10 +115,10 @@ function DecisionTreeDemo() {
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
         {/* 连线 */}
-        {nodes.filter((nd) => !nd.isLeaf && nd.level + 1 < revealed + (depth === revealed ? 1 : 0)).map((nd) => {
-          const p = pos(nd, depth)
+        {nodes.filter((nd) => !nd.isLeaf).map((nd) => {
+          const p = pos(nd)
           const lc = Math.pow(2, nd.level + 1)
-          const childIdx = nd.isLeaf ? -1 : parseInt(nd.id.slice(1).split('-')[1])
+          const childIdx = parseInt(nd.id.slice(1).split('-')[1])
           const leftX = ((childIdx * 2 + 0.5) / lc) * W
           const rightX = ((childIdx * 2 + 1.5) / lc) * W
           const childY = p.y + levelH
@@ -133,7 +132,7 @@ function DecisionTreeDemo() {
         })}
         {/* 节点 */}
         {nodes.filter((nd) => nd.level < revealed).map((nd) => {
-          const p = pos(nd, depth)
+          const p = pos(nd)
           return nd.isLeaf ? (
             <g key={nd.id}>
               <rect x={p.x - 26} y={p.y - 12} width="52" height="24" rx="12" fill={nd.cls === 'A' ? '#2563eb' : '#ea580c'} />
@@ -357,7 +356,85 @@ function KMeansDemo() {
   )
 }
 
-/* ============ 卡片框架 ============ */
+/* ============ 线性规划演示（可行域 + 等值线） ============ */
+
+function LinearProgrammingDemo() {
+  const [z, setZ] = useState(18)
+  const W = 560, H = 300, pad = 30
+  const xMax = 8, yMax = 8
+  const sx = (x) => pad + (x / xMax) * (W - pad * 2)
+  const sy = (y) => H - pad - (y / yMax) * (H - pad * 2)
+  // 约束：x≥0, y≥0, x+y≤8, 2x+y≤10；目标 max z=3x+2y，最优 (2,6) z=18
+  const poly = [[0, 0], [5, 0], [2, 6], [0, 8]]
+  const optimum = [2, 6]
+  const zStar = 18
+
+  // 等值线 3x+2y=z 与绘图区边界的交点（裁剪到可视区域）
+  const linePts = (() => {
+    const pts = []
+    const x0 = z / 3
+    if (x0 >= 0 && x0 <= xMax) pts.push([x0, 0])
+    const y0 = z / 2
+    if (y0 >= 0 && y0 <= yMax) pts.push([0, y0])
+    const yX = (z - 3 * xMax) / 2
+    if (yX >= 0 && yX <= yMax) pts.push([xMax, yX])
+    const xY = (z - 2 * yMax) / 3
+    if (xY >= 0 && xY <= xMax) pts.push([xY, yMax])
+    return pts
+  })()
+
+  return (
+    <div className="demo">
+      <div className="demo-controls">
+        <label>
+          目标值 z（3x+2y）
+          <input type="range" min="0" max={zStar} step="1" value={z} onChange={(e) => setZ(+e.target.value)} />
+          <b>{z}</b>
+        </label>
+        {z === zStar && <span className="kc-tag">最优解 (2, 6) → z=18</span>}
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
+        {[0, 2, 4, 6, 8].map((g) => (
+          <g key={g}>
+            <line x1={sx(g)} y1={pad} x2={sx(g)} y2={H - pad} stroke="#f1f5f9" />
+            <line x1={pad} y1={sy(g)} x2={W - pad} y2={sy(g)} stroke="#f1f5f9" />
+          </g>
+        ))}
+        {/* 可行域多边形 */}
+        <polygon
+          points={poly.map(([x, y]) => `${sx(x)},${sy(y)}`).join(' ')}
+          fill="rgba(37, 99, 235, 0.12)"
+          stroke="#2563eb"
+          strokeWidth="1.5"
+        />
+        {/* 约束线（虚线） */}
+        <line x1={sx(0)} y1={sy(8)} x2={sx(8)} y2={sy(0)} stroke="#94a3b8" strokeWidth="1" strokeDasharray="4 3" />
+        <line x1={sx(0)} y1={sy(10)} x2={sx(5)} y2={sy(0)} stroke="#94a3b8" strokeWidth="1" strokeDasharray="4 3" />
+        {/* 目标等值线 */}
+        {linePts.length === 2 && (
+          <line
+            x1={sx(linePts[0][0])} y1={sy(linePts[0][1])}
+            x2={sx(linePts[1][0])} y2={sy(linePts[1][1])}
+            stroke="#ea580c" strokeWidth="2.5"
+          />
+        )}
+        {/* 最优顶点 */}
+        <circle cx={sx(optimum[0])} cy={sy(optimum[1])} r="6" fill="#ea580c" />
+        <text x={sx(optimum[0]) + 12} y={sy(optimum[1]) - 10} fontSize="12" fill="#ea580c" fontWeight="600">
+          最优 (2, 6)
+        </text>
+        {/* 坐标轴 */}
+        <line x1={pad} y1={sy(0)} x2={W - pad} y2={sy(0)} stroke="#cbd5e1" strokeWidth="1" />
+        <line x1={sx(0)} y1={pad} x2={sx(0)} y2={H - pad} stroke="#cbd5e1" strokeWidth="1" />
+      </svg>
+      <div className="demo-note">
+        蓝色区域是约束围成的可行域；橙色线是目标等值线。拖动滑块增大 z，当等值线即将离开可行域时经过的顶点就是最优解——<b>线性规划的最优解总在可行域顶点上</b>。
+      </div>
+    </div>
+  )
+}
+
+/* ============ 卡片注册表 ============ */
 
 const CARDS = [
   {
@@ -387,62 +464,97 @@ const CARDS = [
     try: '把 K 从 3 调到 4，观察分组变化——K 值应该怎么选？',
     related: ['肘部法则', 'DBSCAN'],
   },
+  {
+    id: 'linear-programming',
+    title: '线性规划',
+    tag: '优化 / 决策',
+    concept: '在一组线性约束下，求目标函数的最大/最小值——资源分配、更新替换、运输调度等"怎么安排最优"的问题首选。',
+    demo: LinearProgrammingDemo,
+    try: '拖动目标值滑块，观察等值线离开可行域的瞬间——为什么最优解总在顶点？',
+    related: ['整数规划', '单纯形法'],
+  },
 ]
 
-export default function Cards() {
-  const [activeId, setActiveId] = useState(CARDS[0].id)
+/**
+ * 内嵌知识卡片（读题附属）：AI 输出提到建模概念时，就地出现在内容下方。
+ * 折叠态只显示标题行；点击展开概念 + 交互演示 + 试一试。
+ */
+export function KnowledgeCard({ cardId, defaultOpen = false }) {
+  const card = CARDS.find((c) => c.id === cardId) || CARDS[0]
+  const [open, setOpen] = useState(defaultOpen)
   const [favs, setFavs] = useState(loadFavorites)
-  const card = CARDS.find((c) => c.id === activeId)
   const isFav = favs.includes(card.id)
 
-  function toggleFav() {
+  function toggleFav(e) {
+    e.stopPropagation()
     const next = isFav ? favs.filter((x) => x !== card.id) : [...favs, card.id]
     setFavs(next)
     saveFavorites(next)
   }
 
   return (
-    <div className="cards-page">
-      <h1 className="page-title">知识卡片</h1>
-      <p className="page-desc">模型概念 + 交互演示——动动手，比看十遍公式记得牢。</p>
-
-      <div className="card-tabs">
-        {CARDS.map((c) => (
-          <button key={c.id} className={`card-tab ${c.id === activeId ? 'active' : ''}`} onClick={() => setActiveId(c.id)}>
-            {favs.includes(c.id) ? '⭐ ' : ''}{c.title}
-            <span className="card-tag">{c.tag}</span>
-          </button>
-        ))}
+    <div className={`concept-card ${open ? 'open' : ''}`}>
+      <div
+        className="concept-head"
+        onClick={() => setOpen(!open)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(!open) }
+        }}
+      >
+        <span className="concept-badge">💡 相关概念</span>
+        <b>{card.title}</b>
+        <span className="hint">{card.tag}</span>
+        <span className="concept-toggle">{open ? '收起 ▴' : '展开演示 ▾'}</span>
+        <button
+          className={`mini-btn ${isFav ? 'on' : ''}`}
+          onClick={toggleFav}
+          title={isFav ? '取消收藏' : '收藏'}
+          aria-pressed={isFav}
+        >
+          {isFav ? '⭐' : '☆'}
+        </button>
       </div>
-
-      <div className="card knowledge-card" key={card.id}>
-        <div className="kc-head">
-          <h2>{card.title}</h2>
-          <span className="kc-tag">{card.tag}</span>
+      {open && (
+        <div className="concept-body">
+          <p className="kc-concept">{card.concept}</p>
+          <div className="kc-demo">
+            <card.demo />
+          </div>
+          <div className="kc-try">
+            <b>试一试：</b>
+            {card.try}
+          </div>
         </div>
-        <p className="kc-concept">{card.concept}</p>
-        <div className="kc-demo">
-          <card.demo />
-        </div>
-        <div className="kc-try">
-          <b>试一试：</b>
-          {card.try}
-        </div>
-        <div className="kc-foot">
-          <button className={`btn btn-ghost btn-sm ${isFav ? 'fav-on' : ''}`} onClick={toggleFav}>
-            {isFav ? '⭐ 已收藏' : '☆ 收藏'}
-          </button>
-          <span className="hint">相关概念：{card.related.join(' / ')}</span>
-        </div>
-      </div>
+      )}
     </div>
   )
 }
 
-/** 概念词表（供对话自动触发） */
+/** 概念词表（对话/解读内容自动触发内嵌卡片） */
 export const CONCEPT_KEYWORDS = [
   { keyword: '决策树', cardId: 'decision-tree' },
+  { keyword: '随机森林', cardId: 'decision-tree' },
+  { keyword: '分类树', cardId: 'decision-tree' },
+  { keyword: '线性回归', cardId: 'linear-regression' },
   { keyword: '回归', cardId: 'linear-regression' },
-  { keyword: '聚类', cardId: 'kmeans' },
+  { keyword: '最小二乘', cardId: 'linear-regression' },
+  { keyword: '拟合', cardId: 'linear-regression' },
   { keyword: 'k-means', cardId: 'kmeans' },
+  { keyword: 'kmeans', cardId: 'kmeans' },
+  { keyword: '聚类', cardId: 'kmeans' },
+  { keyword: '线性规划', cardId: 'linear-programming' },
+  { keyword: '整数规划', cardId: 'linear-programming' },
+  { keyword: '目标规划', cardId: 'linear-programming' },
 ]
+
+/** 在文本中检测命中的概念（返回首个匹配的词条） */
+export function findConcept(text) {
+  if (!text) return null
+  const lower = text.toLowerCase()
+  for (const c of CONCEPT_KEYWORDS) {
+    if (lower.includes(c.keyword.toLowerCase())) return c
+  }
+  return null
+}

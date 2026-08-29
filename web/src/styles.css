@@ -357,31 +357,11 @@ body {
 .mini-btn:hover { background: var(--color-muted); }
 
 /* 对话概念触发 */
-.card-link {
-  display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--color-primary);
-  background: rgba(37, 99, 235, 0.06); border: 1px solid rgba(37, 99, 235, 0.2); border-radius: var(--radius-sm);
-  padding: 9px 12px; margin-top: 8px; cursor: pointer;
-}
-.card-link:hover { background: rgba(37, 99, 235, 0.1); }
-
-/* ===== 知识卡片页 ===== */
-.cards-page { max-width: 900px; margin: 0 auto; }
-.card-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
-.card-tab {
-  display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px;
-  border: 1px solid var(--color-border); border-radius: 999px; background: var(--color-card);
-  font-size: 14px; font-family: inherit; cursor: pointer; color: var(--color-muted-foreground);
-}
-.card-tab.active { border-color: var(--color-primary); color: var(--color-primary); font-weight: 600; background: rgba(37, 99, 235, 0.06); }
-.card-tag { font-size: 11px; background: var(--color-muted); border-radius: 999px; padding: 1px 8px; color: var(--color-muted-foreground); }
-.knowledge-card { padding: 24px; }
-.kc-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-.kc-head h2 { font-size: 20px; font-weight: 700; }
+/* ===== 知识卡片（内嵌形态样式，页面版已移除） ===== */
 .kc-tag { font-size: 12px; background: rgba(37, 99, 235, 0.1); color: var(--color-primary); border-radius: 999px; padding: 2px 10px; }
 .kc-concept { font-size: 14px; color: var(--color-muted-foreground); margin-bottom: 14px; line-height: 1.7; }
 .kc-demo { border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-background); padding: 16px; margin-bottom: 14px; }
 .kc-try { font-size: 13px; background: rgba(234, 88, 12, 0.07); border-left: 3px solid var(--color-accent); padding: 10px 14px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; margin-bottom: 12px; }
-.kc-foot { display: flex; align-items: center; justify-content: space-between; }
 .demo-controls { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin-bottom: 12px; font-size: 13px; }
 .demo-controls label { display: flex; align-items: center; gap: 8px; color: var(--color-muted-foreground); }
 .demo-controls input[type="range"] { width: 120px; accent-color: var(--color-primary); }
@@ -454,6 +434,27 @@ body {
 
 /* ===== 卡片收藏 ===== */
 .fav-on { color: #d97706 !important; border-color: #d97706 !important; }
+
+/* ===== 内嵌知识卡片（读题附属：上下文触发，无独立入口） ===== */
+.concept-card {
+  border: 1px solid var(--color-border); border-left: 3px solid var(--color-accent);
+  border-radius: var(--radius-sm); background: var(--color-card);
+  margin: 8px 0 12px; overflow: hidden;
+}
+.concept-head {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  cursor: pointer; user-select: none; font-size: 13px;
+}
+.concept-head:hover { background: var(--color-muted); }
+.concept-head b { color: var(--color-foreground); }
+.concept-badge {
+  font-size: 12px; font-weight: 600; color: var(--color-accent);
+  background: rgba(234, 88, 12, 0.1); border-radius: 999px; padding: 2px 8px; white-space: nowrap;
+}
+.concept-toggle { margin-left: auto; color: var(--color-muted-foreground); font-size: 12px; white-space: nowrap; }
+.concept-card .mini-btn { margin-left: 2px; }
+.concept-body { padding: 4px 12px 12px; border-top: 1px solid var(--color-border); }
+.concept-body .kc-concept { margin: 10px 0 14px; }
 
 /* ===== 主题切换按钮（顶部导航） ===== */
 .theme-toggle {
