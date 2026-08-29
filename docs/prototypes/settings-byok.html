@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>模型设置 · 数学建模 AI 辅导</title>
+  <style>
+    /* ─── theme tokens ───────────────────────────────────────────────── */
+    :root {
+      /* light (default) */
+      --bg:        #F8FAFC;
+      --surface:   #FFFFFF;
+      --fg:        #1E293B;
+      --muted:     #475569;
+      --border:    #E2E8F0;
+      --accent:    #2563EB;
+      --accent-2:  #EA580C;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+    }
+    html[data-theme="dark"] {
+      --bg:        #0F172A;
+      --surface:   #1E293B;
+      --fg:        #E2E8F0;
+      --muted:     #94A3B8;
+      --border:    #334155;
+      --accent:    #3B82F6;
+      --accent-2:  #FB923C;
+    }
+
+    /* derived — do not add new tokens (var() values resolve per theme) */
+    :root {
+      --accent-soft: color-mix(in oklch, var(--accent) 13%, transparent);
+      --accent-strong: color-mix(in oklch, var(--accent) 86%, transparent);
+      --success: #16A34A;
+      --success-soft: color-mix(in oklch, #16A34A 12%, transparent);
+      --danger: #DC2626;
+      --danger-soft: color-mix(in oklch, #DC2626 12%, transparent);
+      --fg-soft: color-mix(in oklch, var(--fg) 6%, transparent);
+
+      /* type — body + mono; no decorative serif needed for a utility settings page */
+      --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+      --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+
+      /* spacing — 4px rhythm */
+      --ru: 4px;
+      --container: 720px;
+      --gutter: 20px;
+
+      /* form sizing per spec */
+      --ctl-h: 36px;
+      --btn-s: 32px;
+      --btn-m: 36px;
+    }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.6;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+  svg { display: block; }
+  button { font: inherit; cursor: pointer; color: inherit; }
+  p { margin: 0; }
+  h1, h2, h3 { margin: 0; text-wrap: balance; }
+
+  /* ─── layout ──────────────────────────────────────────────────────── */
+  .container { max-width: var(--container); margin-inline: auto; padding-inline: var(--gutter); }
+  .stack { display: flex; flex-direction: column; }
+  .row { display: flex; align-items: center; }
+  .page-body { padding-block: 36px 64px; }
+
+  /* ─── topnav ──────────────────────────────────────────────────────── */
+  .topnav { position: sticky; top: 0; z-index: 20; background: color-mix(in oklch, var(--bg) 88%, transparent); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+  .topnav-inner { display: flex; align-items: center; gap: var(--gutter); height: 56px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; color: var(--fg); white-space: nowrap; }
+  .brand-mark { width: 26px; height: 26px; border-radius: 7px; background: var(--accent); color: #fff; display: grid; place-items: center; }
+  .brand-mark svg { width: 15px; height: 15px; }
+  .nav-links { display: flex; align-items: center; gap: 6px; margin-inline: auto; }
+  .nav-link {
+    appearance: none; background: transparent; border: 0; border-radius: var(--radius-sm);
+    padding: 7px 12px; font-size: 14px; font-weight: 500; color: var(--muted);
+    text-decoration: none; white-space: nowrap; transition: background .15s ease, color .15s ease;
+  }
+  .nav-link:hover { color: var(--fg); background: var(--fg-soft); }
+  .nav-link[aria-current="page"] { color: var(--accent); background: var(--accent-soft); }
+  .nav-link[aria-current="page"]:hover { color: var(--accent); }
+  .topnav-right { display: flex; align-items: center; gap: 10px; }
+
+  /* key status pill */
+  .key-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 10px; border: 1px solid var(--border); border-radius: 999px;
+    font-size: 12px; color: var(--muted); background: color-mix(in oklch, var(--surface) 70%, transparent); white-space: nowrap;
+  }
+  .key-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent-2); }
+
+  /* theme toggle */
+  .theme-toggle {
+    width: var(--ctl-h); height: var(--ctl-h); display: grid; place-items: center;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--surface); color: var(--muted); transition: all .15s ease;
+  }
+  .theme-toggle:hover { color: var(--fg); border-color: color-mix(in oklch, var(--fg) 40%, var(--border)); }
+  .theme-toggle:active { transform: translateY(1px); }
+  .theme-toggle svg { width: 17px; height: 17px; }
+  html[data-theme="dark"] .theme-toggle .icon-sun { display: block; }
+  html[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+  html[data-theme="light"] .theme-toggle .icon-sun { display: none; }
+  html[data-theme="light"] .theme-toggle .icon-moon { display: block; }
+
+  /* ─── page header ─────────────────────────────────────────────────── */
+  .page-head { margin-bottom: 28px; }
+  .page-head h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.3; }
+  .page-head p { margin-top: 8px; color: var(--muted); font-size: 14px; max-width: 60ch; }
+  .page-head .lock-tip { display: inline-flex; align-items: center; gap: 6px; }
+
+  /* ─── card ────────────────────────────────────────────────────────── */
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md);
+    padding: 24px; margin-bottom: var(--gutter);
+  }
+  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+  .card-head h2 { font-size: 16px; font-weight: 600; letter-spacing: -0.005em; }
+  .card-head .badge { font-size: 12px; color: var(--muted); font-weight: 500; }
+
+  /* ─── form ────────────────────────────────────────────────────────── */
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field + .field { margin-top: 16px; }
+  .field label { font-size: 13px; font-weight: 500; color: var(--fg); }
+  .field label .hint { font-weight: 400; color: var(--muted); }
+  .ctl {
+    width: 100%; height: var(--ctl-h);
+    padding: 0 12px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--bg); color: var(--fg);
+    font: inherit; font-size: 13.5px;
+    transition: border-color .15s ease, box-shadow .15s ease;
+  }
+  .ctl::placeholder { color: color-mix(in oklch, var(--muted) 72%, transparent); }
+  .ctl:hover { border-color: color-mix(in oklch, var(--fg) 30%, var(--border)); }
+  .ctl:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  select.ctl { appearance: none; -webkit-appearance: none; padding-right: 36px; cursor: pointer;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 10px center; }
+  @supports (-webkit-mask: none) {
+    select.ctl { background-color: transparent; }
+    html[data-theme="light"] select.ctl {
+      background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%231E293B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    }
+    html[data-theme="dark"] select.ctl {
+      background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23E2E8F0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    }
+  }
+
+  .seg {
+    display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 3px; gap: 3px;
+  }
+  .seg button {
+    height: 28px; border: 0; border-radius: calc(var(--radius-sm) - 3px);
+    background: transparent; color: var(--muted); font-size: 13px; font-weight: 500;
+    transition: all .15s ease;
+  }
+  .seg button:hover { color: var(--fg); }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+  .seg button[aria-pressed="true"]:hover { color: #fff; background: var(--accent-strong); }
+
+  /* input with trailing action (show/hide eye) */
+  .input-group { position: relative; display: flex; align-items: center; }
+  .input-group .ctl { padding-right: 44px; }
+  .icon-btn {
+    position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
+    width: 30px; height: 30px; display: grid; place-items: center;
+    border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted);
+    transition: color .15s ease, background .15s ease;
+  }
+  .icon-btn:hover { color: var(--fg); background: var(--fg-soft); }
+  .icon-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+  .icon-btn svg { width: 17px; height: 17px; }
+  .icon-btn .on, .icon-btn.showing .off { display: none; }
+  .icon-btn.showing .on { display: block; }
+
+  /* ─── buttons ─────────────────────────────────────────────────────── */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    border: 1px solid transparent; border-radius: var(--radius-sm);
+    font-size: 13.5px; font-weight: 500; text-decoration: none;
+    transition: all .15s ease; white-space: nowrap;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent-strong); }
+  .btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+  .btn-primary:disabled { background: color-mix(in oklch, var(--accent) 45%, var(--bg)); color: #fff; cursor: not-allowed; transform: none; }
+  .btn-ghost { background: transparent; color: var(--fg); border-color: var(--border); }
+  .btn-ghost:hover { border-color: color-mix(in oklch, var(--fg) 40%, var(--border)); background: var(--fg-soft); }
+  .btn-ghost:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+  .btn-m { height: var(--btn-m); padding: 0 16px; min-width: 88px; }
+  .btn-s { height: var(--btn-s); padding: 0 12px; }
+  .btn svg { width: 16px; height: 16px; }
+
+  /* ─── switch ──────────────────────────────────────────────────────── */
+  .pref-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 4px 0; }
+  .pref-row + .pref-row { border-top: 1px solid var(--border); margin-top: 18px; padding-top: 18px; }
+  .pref-text strong { display: block; font-size: 14px; font-weight: 500; }
+  .pref-text p { margin-top: 3px; color: var(--muted); font-size: 13px; max-width: 46ch; }
+  .switch {
+    flex-shrink: 0; width: 40px; height: 22px; border: 0; border-radius: 999px;
+    background: color-mix(in oklch, var(--fg) 18%, var(--border)); position: relative;
+    transition: background .2s ease; margin-top: 2px;
+  }
+  .switch::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+    border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); transition: transform .2s ease;
+  }
+  .switch[aria-checked="true"] { background: var(--accent); }
+  .switch[aria-checked="true"]::after { transform: translateX(18px); }
+  .switch:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+
+  /* ─── result notice ───────────────────────────────────────────────── */
+  .notice {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 10px 12px; border-radius: var(--radius-sm); border-left: 3px solid; font-size: 13.5px;
+  }
+  .notice svg { width: 16px; height: 16px; margin-top: 1px; flex-shrink: 0; }
+  .notice p { line-height: 1.55; }
+  .notice-success { background: var(--success-soft); border-left-color: var(--success); color: var(--fg); }
+  .notice-success svg { color: var(--success); }
+  .notice-error { background: var(--danger-soft); border-left-color: var(--danger); color: var(--fg); }
+  .notice-error svg { color: var(--danger); }
+  .notice[hidden] { display: none; }
+
+  /* ─── guide steps ─────────────────────────────────────────────────── */
+  .guide-card { background: color-mix(in oklch, var(--accent) 6%, var(--surface)); }
+  .guide-head { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+  .guide-head h2 { font-size: 16px; font-weight: 600; }
+  .guide-head .time { font-size: 12px; color: var(--muted); background: var(--accent-soft); color: var(--accent); padding: 3px 8px; border-radius: 999px; font-weight: 500; }
+  .guide-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .gstep { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 16px; }
+  .gstep .num {
+    width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #fff;
+    display: grid; place-items: center; font-size: 13px; font-weight: 600; margin-bottom: 12px;
+  }
+  .gstep strong { display: block; font-size: 14px; font-weight: 600; margin-bottom: 5px; }
+  .gstep p { font-size: 13px; color: var(--muted); line-height: 1.55; }
+  .guide-foot { margin-top: 16px; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .guide-foot svg { width: 15px; height: 15px; color: var(--accent-2); flex-shrink: 0; }
+
+  /* mobile reflow — no horizontal scroll */
+  @media (max-width: 640px) {
+    .page-body { padding-top: 24px; }
+    .topnav .key-pill { display: none; }
+    .guide-steps { grid-template-columns: 1fr; }
+    .brand .brand-label { display: none; }
+  }
+  @media (max-width: 480px) {
+    .nav-link { padding: 7px 9px; font-size: 13px; }
+    .card { padding: 20px; }
+    .card-actions { flex-direction: column; align-items: stretch; }
+    .card-actions .btn { width: 100%; }
+  }
+  .card-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
+
+  /* focus visible ring for all focusable */
+  a:focus-visible, button:focus-visible { outline: none; }
+</style>
+</head>
+<body>
+  <header class="topnav" data-od-id="model-settings-topnav">
+    <div class="container topnav-inner">
+      <a class="brand" href="#" data-od-id="brand">
+        <span class="brand-mark">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="7" rx="2"/><rect x="13" y="3" width="8" height="4" rx="2"/><rect x="13" y="10" width="8" height="11" rx="2"/></svg>
+        </span>
+        <span class="brand-label">数学建模 AI</span>
+      </a>
+      <nav class="nav-links" data-od-id="main-nav">
+        <a class="nav-link" href="#">读题工作台</a>
+        <a class="nav-link" href="#">编程工作台</a>
+        <a class="nav-link" href="#" aria-current="page">模型设置</a>
+      </nav>
+      <div class="topnav-right">
+        <span class="key-pill" data-od-id="key-status">
+          <span class="dot" aria-hidden="true"></span>
+          Key 已连接
+        </span>
+        <button class="theme-toggle" id="theme-toggle" data-od-id="theme-toggle" aria-label="切换主题" title="切换主题">
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main id="content" class="container page-body">
+
+    <section class="page-head" data-od-id="model-settings-header">
+      <h1>模型设置</h1>
+      <p class="lock-tip">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+        Key 只保存在本浏览器（AES-GCM 加密），不会上传服务器
+      </p>
+    </section>
+
+    <!-- 模型接入 -->
+    <section class="card" data-od-id="model-access-card">
+      <div class="card-head">
+        <h2>模型接入</h2>
+        <span class="badge">Provider &amp; API</span>
+      </div>
+
+      <div class="stack">
+        <div class="field" data-od-id="field-provider">
+          <label for="provider">Provider</label>
+          <select class="ctl" id="provider" data-od-id="provider-select">
+            <option value="qwen">通义百炼（qwen-plus）</option>
+            <option value="deepseek" selected>DeepSeek（deepseek-chat）</option>
+            <option value="openai">OpenAI（gpt-4o-mini）</option>
+            <option value="custom">自定义</option>
+          </select>
+        </div>
+
+        <div class="field" data-od-id="field-api-key">
+          <label for="api-key">API Key</label>
+          <div class="input-group">
+            <input class="ctl" type="password" id="api-key" placeholder="sk-••••••••••••••••••••••" autocomplete="off" />
+            <button class="icon-btn" id="toggle-key" data-od-id="toggle-key" aria-label="显示/隐藏 Key" aria-pressed="false">
+              <svg class="off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="3" y1="3" x2="21" y2="21"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="field" data-od-id="field-base-url">
+          <label for="base-url">Base URL</label>
+          <input class="ctl" type="url" id="base-url" placeholder="https://api.deepseek.com/v1" />
+        </div>
+
+        <div class="field" data-od-id="field-model">
+          <label for="model-name">模型名</label>
+          <input class="ctl" id="model-name" placeholder="deepseek-chat" />
+        </div>
+      </div>
+
+      <div class="card-actions" data-od-id="model-actions">
+        <button class="btn btn-primary btn-m" id="test-btn" data-od-id="test-connection">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+          测试连接
+        </button>
+        <button class="btn btn-ghost btn-m" data-od-id="save-setting">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
+          保存设置
+        </button>
+      </div>
+
+      <div class="notice notice-success" data-od-id="test-result" id="test-result" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+        <p>连接成功（模型 <span id="result-model">deepseek-chat</span>）</p>
+      </div>
+      <div class="notice notice-error" data-od-id="test-result-error" id="test-result-error" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+        <p id="result-error-msg">Key 无效：请检查 API Key 是否复制完整、无误。</p>
+      </div>
+    </section>
+
+    <!-- 偏好 -->
+    <section class="card" data-od-id="preferences-card">
+      <div class="card-head">
+        <h2>偏好</h2>
+      </div>
+
+      <div class="pref-row" data-od-id="pref-theme">
+        <div class="pref-text">
+          <strong>主题</strong>
+          <p>选择浅色或深色界面。</p>
+        </div>
+        <div class="seg" role="group" aria-label="主题" data-od-id="theme-segmented">
+          <button type="button" aria-pressed="true" data-theme="light">浅色</button>
+          <button type="button" aria-pressed="false" data-theme="dark">深色</button>
+        </div>
+      </div>
+
+      <div class="pref-row" data-od-id="pref-guide">
+        <div class="pref-text">
+          <strong>引导模式</strong>
+          <p>开启后 AI 只给思路与反问，不直接给出完整成品答案。</p>
+        </div>
+        <button class="switch" id="guide-switch" role="switch" aria-checked="true" data-od-id="guide-mode-switch" aria-label="引导模式"></button>
+      </div>
+    </section>
+
+    <!-- 新手指引 -->
+    <section class="card guide-card" data-od-id="get-started-card">
+      <div class="guide-head">
+        <h2>还没有 API Key？</h2>
+        <span class="time">3 分钟搞定</span>
+      </div>
+      <div class="guide-steps">
+        <div class="gstep" data-od-id="guide-step-1">
+          <span class="num">1</span>
+          <strong>注册平台</strong>
+          <p>在通义百炼或 DeepSeek 官网注册账号，进入「API-KEY」管理页面。</p>
+        </div>
+        <div class="gstep" data-od-id="guide-step-2">
+          <span class="num">2</span>
+          <strong>创建 Key</strong>
+          <p>点击「创建 API Key」，复制生成的密钥字符，妥善保存。</p>
+        </div>
+        <div class="gstep" data-od-id="guide-step-3">
+          <span class="num">3</span>
+          <strong>粘贴测试</strong>
+          <p>把 Key 粘贴到上方输入框，点击「测试连接」即可开始使用。</p>
+        </div>
+      </div>
+      <p class="guide-foot" data-od-id="guide-tip">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18l-7 9v8l-4 2v-10L3 3z"/></svg>
+        国内平台充值 10 元即可用很久，日常题目用量几乎可以忽略不计。
+      </p>
+    </section>
+
+  </main>
+
+  <script>
+    var $ = function (sel, ctx) { return (ctx || document).querySelector(sel); };
+
+    /* ── theme ── */
+    var THEME_KEY = 'mm-model-settings-theme';
+    function applyTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      var segBtns = document.querySelectorAll('.seg [data-theme]');
+      segBtns.forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-theme') === theme)); });
+    }
+    function toggleTheme() {
+      var cur = document.documentElement.getAttribute('data-theme');
+      applyTheme(cur === 'dark' ? 'light' : 'dark');
+      try { localStorage.setItem(THEME_KEY, document.documentElement.getAttribute('data-theme')); } catch (e) {}
+    }
+    (function initTheme() {
+      var saved = null;
+      try { saved = localStorage.getItem(THEME_KEY); } catch (e) {}
+      applyTheme(saved === 'dark' ? 'dark' : 'light');
+    })();
+    $('#theme-toggle').addEventListener('click', toggleTheme);
+    document.querySelectorAll('.seg [data-theme]').forEach(function (b) {
+      b.addEventListener('click', function () { applyTheme(b.getAttribute('data-theme')); try { localStorage.setItem(THEME_KEY, b.getAttribute('data-theme')); } catch (e) {} });
+    });
+    document.documentElement.addEventListener('keydown', function (e) {
+      if (e.altKey && (e.key === 't' || e.key === 'T')) toggleTheme();
+    });
+
+    /* ── show/hide key ── */
+    $('#toggle-key').addEventListener('click', function () {
+      var input = $('#api-key');
+      var showing = input.type === 'text';
+      input.type = showing ? 'password' : 'text';
+      this.classList.toggle('showing', !showing);
+      this.setAttribute('aria-pressed', String(!showing));
+      this.setAttribute('aria-label', showing ? '显示 Key' : '隐藏 Key');
+    });
+
+    /* ── provider presets ── */
+    var PRESETS = {
+      qwen:     { baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus' },
+      deepseek: { baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
+      openai:   { baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
+      custom:   { baseUrl: 'https://api.example.com/v1', model: '' }
+    };
+    $('#provider').addEventListener('change', function () {
+      var p = PRESETS[this.value];
+      if (!p) return;
+      $('#base-url').placeholder = p.baseUrl;
+      $('#model-name').placeholder = p.model || 'your-model-name';
+      if (this.value !== 'custom') { $('#base-url').value = p.baseUrl; $('#model-name').value = p.model; }
+    });
+
+    /* ── switch ── */
+    $('#guide-switch').addEventListener('click', function () {
+      var on = this.getAttribute('aria-checked') === 'true';
+      this.setAttribute('aria-checked', String(!on));
+    });
+
+    /* ── test connection (demo) ── cycles success → 3 error categories ── */
+    var failures = {
+      'Key 无效': 'Key 无效：请检查 API Key 是否复制完整、无误。',
+      '额度不足': '额度不足：当前账号余额不足，请前往平台充值后重试。',
+      '网络错误': '网络错误：无法连接服务，请检查网络或 Base URL 后重试。'
+    };
+    var demo = ['success', 'Key 无效', '额度不足', '网络错误'];
+    var stepIdx = 0;
+    $('#test-btn').addEventListener('click', function (e) {
+      e.preventDefault();
+      var btn = this, orig = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<svg class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>连接中…';
+      setTimeout(function () {
+        $('#test-result-error').hidden = true;
+        $('#test-result').hidden = true;
+        var state = demo[stepIdx % demo.length];
+        if (state === 'success') {
+          $('#result-model').textContent = $('#model-name').value || $('#model-name').placeholder;
+          $('#test-result').hidden = false;
+        } else {
+          $('#result-error-msg').textContent = failures[state];
+          $('#test-result-error').hidden = false;
+        }
+        stepIdx++;
+        btn.disabled = false;
+        btn.innerHTML = orig;
+      }, 700);
+    });
+
+    /* ── save ── */
+    $('#save-setting').addEventListener('click', function (e) {
+      e.preventDefault();
+      var btn = this, orig = btn.innerHTML;
+      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>已保存';
+      setTimeout(function () { btn.innerHTML = orig; }, 1400);
+    });
+  </script>
+</body>
+</html>

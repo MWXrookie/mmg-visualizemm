@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>数学建模引导 · 精读深挖</title>
+<style>
+  /* ---------- Reset & tokens ---------- */
+  *,*::before,*::after{box-sizing:border-box}
+  :root{
+    --bg:#F8FAFC;
+    --surface:#FFFFFF;
+    --fg:#1E293B;
+    --muted:#475569;
+    --border:#E2E8F0;
+    --accent:#2563EB;
+    --accent-strong:#1D4ED8;
+    --accent-soft:rgba(37,99,235,.09);
+    --accent-soft-2:rgba(37,99,235,.14);
+    --amber:#EA580C;
+    --amber-soft:rgba(234,88,12,.12);
+    --green:#16A34A;
+    --green-soft:rgba(22,163,74,.13);
+    --red:#DC2626;
+    --amber-chip:#9A3412;
+    --radius-sm:6px;
+    --radius-md:10px;
+    --radius-lg:14px;
+    --shadow-sm:0 1px 2px rgba(15,23,42,.05);
+    --shadow-md:0 10px 30px -12px rgba(15,23,42,.18);
+    --font-display:"PingFang SC","Microsoft YaHei","Noto Sans SC",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --font-body:"PingFang SC","Microsoft YaHei","Noto Sans SC",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --font-mono:ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono",Consolas,monospace;
+    --chip-border:var(--border);
+  }
+  html[data-theme="dark"]{
+    --bg:#0F172A;
+    --surface:#1E293B;
+    --fg:#E2E8F0;
+    --muted:#94A3B8;
+    --border:#334155;
+    --accent:#3B82F6;
+    --accent-strong:#60A5FA;
+    --accent-soft:rgba(59,130,246,.16);
+    --accent-soft-2:rgba(59,130,246,.24);
+    --amber:#FB923C;
+    --amber-soft:rgba(251,146,60,.16);
+    --green:#4ADE80;
+    --green-soft:rgba(74,222,128,.16);
+    --red:#F87171;
+    --amber-chip:#FDBA74;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.3);
+    --shadow-md:0 16px 36px -16px rgba(0,0,0,.5);
+    --chip-border:#475569;
+  }
+  html,body{height:100%}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--fg);
+    font-family:var(--font-body);
+    font-size:14px;
+    line-height:1.7;
+    -webkit-font-smoothing:antialiased;
+    transition:background .25s ease,color .25s ease;
+  }
+  a{color:var(--accent);text-decoration:none}
+  /* ---------- Layout scaffolding ---------- */
+  .app{display:flex;flex-direction:column;min-height:100vh;max-width:1280px;margin:0 auto;padding:0 24px}
+  .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 0 14px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:15px;letter-spacing:-.01em}
+  .brand-mark{width:30px;height:30px;border-radius:8px;background:var(--accent);display:grid;place-items:center;color:#fff;box-shadow:0 6px 16px -8px var(--accent)}
+  .topbar-actions{display:flex;align-items:center;gap:10px}
+  .theme-switch{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);background:var(--surface);color:var(--muted);border-radius:999px;padding:7px 12px;font-size:12.5px;cursor:pointer;transition:all .18s ease}
+  .theme-switch:hover{border-color:var(--accent);color:var(--accent)}
+  .theme-switch:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .topbar-note{font-size:12.5px;color:var(--muted);letter-spacing:.01em;display:flex;align-items:center;gap:6px}
+  /* ---------- Step indicator ---------- */
+  .steps{display:flex;align-items:center;gap:0;margin:6px 0 4px}
+  .step{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+  .step-num{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:600;border:1.5px solid var(--border);background:var(--surface);flex:none}
+  .step.past .step-num{background:var(--green);border-color:var(--green);color:#fff}
+  .step.done .step-num{background:var(--surface)}
+  .step.current{color:var(--fg);font-weight:600}
+  .step.current .step-num{border-color:var(--accent);color:var(--accent)}
+  .step-line{height:1.5px;width:56px;background:var(--border);margin:0 12px}
+  .step.past ~ .step-line{background:var(--green)}
+  .step-num svg{display:block}
+  /* ---------- Workspace ---------- */
+  .workspace{display:grid;grid-template-columns:minmax(0,65%) minmax(0,35%);gap:24px;padding:20px 0 32px;flex:1}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-sm)}
+  /* ---------- Left: chat ---------- */
+  .chat{display:flex;flex-direction:column;gap:14px;min-width:0}
+  .guide-banner{display:flex;align-items:flex-start;gap:10px;border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:var(--radius-sm);background:var(--accent-soft);padding:11px 14px;font-size:13px;color:var(--fg)}
+  .guide-banner svg{flex:none;color:var(--accent);margin-top:2px}
+  .guide-banner strong{font-weight:600}
+  .guide-banner .guide-hint{color:var(--muted)}
+  .thread{display:flex;flex-direction:column;gap:14px}
+  .msg{display:flex;gap:10px;max-width:100%}
+  .msg.user{justify-content:flex-end}
+  .msg .avatar{width:30px;height:30px;border-radius:8px;background:var(--accent);color:#fff;display:grid;place-items:center;font-size:13px;font-weight:600;flex:none;margin-top:2px}
+  .msg.ai .avatar{background:var(--surface);border:1px solid var(--border);color:var(--accent)}
+  .bubble{max-width:78%;padding:11px 14px;font-size:14px;line-height:1.75}
+  .msg.user .bubble{background:var(--accent);color:#fff;border-radius:var(--radius-sm);border-top-right-radius:4px}
+  .msg.ai .bubble{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);border-top-left-radius:4px;color:var(--fg)}
+  .msg.ai.guide .bubble{border-left:3px solid var(--accent)}
+  .msg.ai .bubble strong{font-weight:600}
+  .msg.ai .bubble code{font-family:var(--font-mono);font-size:12.5px;background:var(--accent-soft);padding:1px 6px;border-radius:4px;color:var(--accent)}
+  .caret{display:inline-block;width:2px;height:15px;background:var(--amber);margin-left:2px;vertical-align:-2px;animation:blink 1s step-end infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+  .stream-note{font-size:12px;color:var(--muted);margin-top:6px;letter-spacing:.01em}
+  /* knowledge card */
+  .kcard{margin-top:2px;border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:var(--radius-sm);background:var(--surface);overflow:hidden;max-width:420px}
+  .kcard-head{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;transition:background .15s ease}
+  .kcard-head:hover{background:var(--bg)}
+  .kcard-head:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;border-radius:var(--radius-sm)}
+  .kchip{font-size:11px;font-weight:600;letter-spacing:.04em;background:var(--amber-soft);color:var(--amber-chip);border-radius:999px;padding:2px 9px;flex:none}
+  .kcard-title{font-size:13.5px;font-weight:600;color:var(--fg);flex:1}
+  .kcard-toggle{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--accent);font-weight:600}
+  .star{align-self:flex-start}
+  .kcard-body{display:none;padding:14px;border-top:1px solid var(--border);background:var(--bg)}
+  .kcard.open .kcard-body{display:block}
+  .kcard.open .chev-dn{transform:rotate(180deg)}
+  .kdef{font-size:13.5px;color:var(--fg);margin:0 0 12px}
+  /* demo: feasible region canvas */
+  .demo{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px}
+  .demo-caption{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .demo-caption span{font-size:12.5px;font-weight:600;color:var(--fg)}
+  .demo-legend{display:flex;gap:12px;font-size:11.5px;color:var(--muted)}
+  .demo-legend i{width:10px;height:10px;border-radius:2px;display:inline-block;margin-right:4px;vertical-align:-1px}
+  svg.feasible{width:100%;height:auto;background:#fff;border-radius:var(--radius-sm)}
+  html[data-theme="dark"] svg.feasible{background:#0F172A}
+  .obj-line{stroke:var(--amber);stroke-width:2}
+  .vertex{transition:r .1s ease}
+  .slider-row{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:12.5px;color:var(--muted)}
+  .slider-row input[type=range]{flex:1;-webkit-appearance:none;appearance:none;height:4px;border-radius:4px;background:var(--border);outline-offset:4px}
+  .slider-row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.2);cursor:pointer}
+  .slider-row input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--accent);border:2px solid #fff;cursor:pointer}
+  .slider-row input[type=range]:focus-visible{outline:2px solid var(--accent)}
+  .demo-readout{font-family:var(--font-mono);font-size:12.5px;color:var(--accent);font-weight:600;white-space:nowrap}
+  .try-btn{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--accent);background:var(--accent-soft);border:1px solid var(--accent-soft-2);border-radius:var(--radius-sm);padding:7px 14px;cursor:pointer;transition:all .16s ease}
+  .try-btn:hover{background:var(--accent);color:#fff}
+  .try-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .kcard-foot{display:flex;align-items:center;justify-content:space-between;margin-top:12px}
+  .fav{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--amber-chip);background:var(--amber-soft);border:1px solid var(--amber-soft);border-radius:999px;padding:4px 10px}
+  .fav.is-off{color:var(--muted);background:transparent;border-color:var(--border);cursor:pointer;transition:all .15s ease}
+  .fav.is-off:hover{border-color:var(--amber);color:var(--amber-chip)}
+  .fav.is-off:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+  /* concept entry */
+  .concept-entry{display:inline-flex;align-items:center;gap:8px;border:1.5px solid var(--accent);border-radius:999px;padding:7px 14px;font-size:13px;color:var(--fg);align-self:flex-start;cursor:default}
+  .concept-entry .ce-meta{color:var(--muted);font-size:12.5px}
+  .concept-entry .ce-link{color:var(--accent);font-weight:600}
+  /* composer */
+  .composer{display:flex;gap:10px;align-items:stretch}
+  .composer input[type=text]{flex:1;height:40px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--fg);padding:0 14px;font-size:14px;font-family:inherit;transition:border-color .16s ease,box-shadow .16s ease}
+  .composer input[type=text]::placeholder{color:var(--muted)}
+  .composer input[type=text]:hover{border-color:var(--chip-border)}
+  .composer input[type=text]:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft-2)}
+  .composer input[type=text]:disabled{background:var(--bg);color:var(--muted)}
+  .send-btn{height:40px;min-width:76px;border:none;border-radius:var(--radius-sm);background:var(--accent);color:#fff;font-size:14px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;transition:background .15s ease}
+  .send-btn:hover{background:var(--accent-strong)}
+  .send-btn:active{transform:translateY(1px)}
+  .send-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .send-btn:disabled{background:var(--border);color:var(--muted);cursor:not-allowed}
+  /* ---------- Right: process panel ---------- */
+  .process{display:flex;flex-direction:column;gap:14px;min-width:0}
+  .pcard{padding:16px}
+  .pcard-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .pcard-title{font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
+  .pcard-title svg{color:var(--accent)}
+  .pcard-count{font-size:11px;font-weight:600;color:var(--muted);background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:1px 8px;line-height:1.6}
+  .pcard-note{font-size:11.5px;color:var(--muted);letter-spacing:.01em}
+  .q-list{display:flex;flex-direction:column;gap:8px}
+  .q-item{display:flex;gap:9px;font-size:13px;color:var(--fg)}
+  .q-num{width:18px;height:18px;border-radius:5px;background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:600;display:grid;place-items:center;flex:none;margin-top:2px;font-family:var(--font-mono)}
+  .q-item.done{color:var(--muted)}
+  .q-item.done .q-num{background:var(--green-soft);color:var(--green)}
+  .q-item.current-ask .q-num{background:var(--accent);color:#fff}
+  .q-item.current-ask{font-weight:600}
+  .tag-row{display:flex;flex-wrap:wrap;gap:8px}
+  .tag{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;border-radius:999px;padding:4px 10px;border:1px solid transparent;cursor:pointer;transition:all .15s ease}
+  .tag:hover{border-color:var(--border)}
+  .tag:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .tag .dot{width:6px;height:6px;border-radius:50%;flex:none}
+  .tag.blue{background:var(--accent-soft);color:var(--accent)}.tag.blue .dot{background:var(--accent)}
+  .tag.amber{background:var(--amber-soft);color:var(--amber-chip)}.tag.amber .dot{background:var(--amber)}
+  .tag.green{background:var(--green-soft);color:var(--green)}.tag.green .dot{background:var(--green)}
+  .concept-list{display:flex;flex-direction:column;gap:4px}
+  .concept-item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:none;background:none;padding:9px 10px;border-radius:var(--radius-sm);font-size:13px;color:var(--fg);font-family:inherit;cursor:pointer;transition:background .14s ease}
+  .concept-item:hover{background:var(--bg)}
+  .concept-item:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+  .concept-item .ci-ic{width:28px;height:28px;border-radius:7px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;flex:none}
+  .concept-item .ci-meta{display:flex;flex-direction:column;line-height:1.4;flex:1;min-width:0}
+  .concept-item .ci-name{font-weight:600}
+  .concept-item .ci-sub{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .concept-item .chev{color:var(--muted);flex:none}
+  .concept-item[data-state="open"] .ci-ic{background:var(--accent);color:#fff}
+  /* ---------- Scrollbar ---------- */
+  ::-webkit-scrollbar{width:8px;height:8px}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:8px;border:2px solid var(--bg)}
+  ::-webkit-scrollbar-thumb:hover{background:var(--chip-border)}
+  /* ---------- Responsive ---------- */
+  @media (max-width:920px){
+    .workspace{grid-template-columns:1fr}
+    .process{order:-1}
+    .step-line{width:28px;margin:0 6px}
+  }
+  @media (max-width:560px){
+    .app{padding:0 14px}
+    .topbar-note{display:none}
+    .bubble{max-width:88%}
+    .guide-banner .guide-hint{display:block;margin-top:2px}
+  }
+  .sr-only{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+</style>
+</head>
+<body>
+  <div class="app" data-od-id="app-shell">
+
+    <!-- topbar -->
+    <header class="topbar" data-od-id="topbar">
+      <div class="brand" data-od-id="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 4v5c0 4.5-3 8-7 9-4-1-7-4.5-7-9V7z"/></svg>
+        </span>
+        <span>数学建模 AI 辅导</span>
+      </div>
+      <div class="topbar-actions">
+        <span class="topbar-note" data-od-id="topbar-note">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>
+          引导模式 · 免费配额 12/20
+        </span>
+        <button class="theme-switch" id="themeToggle" data-od-id="theme-toggle" aria-label="切换深色/浅色主题">
+          <svg id="themeToggleIconDark" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg>
+          <svg id="themeToggleIconLight" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></svg>
+          <span id="themeToggleLabel">深色</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- step indicator -->
+    <nav class="steps" data-od-id="step-indicator" aria-label="题目处理步骤">
+      <div class="step past" data-od-id="step-read">
+        <span class="step-num">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+        </span>
+        <span>① 读题理解</span>
+      </div>
+      <span class="step-line" aria-hidden="true"></span>
+      <div class="step current" data-od-id="step-deepdive">
+        <span class="step-num">②</span>
+        <span>精读深挖</span>
+      </div>
+      <span class="step-line" aria-hidden="true"></span>
+      <div class="step" data-od-id="step-model">
+        <span class="step-num">③</span>
+        <span>建模归纳</span>
+      </div>
+      <span class="step-line" aria-hidden="true"></span>
+      <div class="step" data-od-id="step-solve">
+        <span class="step-num">④</span>
+        <span>求解验证</span>
+      </div>
+    </nav>
+
+    <!-- workspace -->
+    <main class="workspace" data-od-id="workspace">
+
+      <!-- LEFT: chat -->
+      <section class="chat" data-od-id="chat-column" aria-label="对话流">
+
+        <div class="guide-banner" data-od-id="guide-banner">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>
+          <div>
+            <strong>引导模式已开启：</strong>AI 只引导思路，不直接给答案。
+            <span class="guide-hint">我会用提问帮你自己说出来。</span>
+          </div>
+        </div>
+
+        <!-- message thread -->
+        <div class="thread" data-od-id="message-thread">
+
+          <div class="msg user" data-od-id="msg-user-target">
+            <div class="bubble">目标函数应该怎么设？</div>
+          </div>
+
+          <div class="msg ai guide" data-od-id="msg-ai-guide-1">
+            <div class="avatar" aria-hidden="true">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 4v5c0 4.5-3 8-7 9-4-1-7-4.5-7-9V7z"/></svg>
+            </div>
+            <div class="bubble">先别急着写公式。反问：你觉得题目里哪个量是你要「决策」的？<br>想清楚再往下，我帮你验证。</div>
+          </div>
+
+          <div class="msg user" data-od-id="msg-user-vol">
+            <div class="bubble">应该是采购量？</div>
+          </div>
+
+          <div class="msg ai" data-od-id="msg-ai-lp">
+            <div class="avatar" aria-hidden="true">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 4v5c0 4.5-3 8-7 9-4-1-7-4.5-7-9V7z"/></svg>
+            </div>
+            <div class="bubble">
+              对。现在看约束：这类问题适合用 <strong>线性规划</strong> 建模——
+              目标=总成本最小，决策变量=各批次更新数量，约束=预算与需求。<br>给出你的判断。
+              <!-- inline knowledge card -->
+              <div class="kcard" data-od-id="kcard-linear-programming" data-state="collapsed">
+                <button class="kcard-head" data-od-id="kcard-head" aria-expanded="false" onclick="toggleKcard(this)">
+                  <span class="kchip">相关概念</span>
+                  <span class="kcard-title">线性规划</span>
+                  <span class="star" aria-hidden="true">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17.9 6.6 19.9l1-6.1L3.2 9.5l6.1-.9z"/></svg>
+                  </span>
+                  <span class="kcard-toggle">展开演示
+                    <svg class="chev-dn" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+                  </span>
+                </button>
+                <div class="kcard-body">
+                  <p class="kdef">线性规划是求解「目标函数」在若干线性「约束」下的最优值（最大/最小）的方法。解空间是一个凸可行域，最优解必然出现在某个顶点上。</p>
+                  <div class="demo" data-od-id="kcard-demo">
+                    <div class="demo-caption">
+                      <span>可行域与最优解</span>
+                      <span class="demo-legend"><span><i style="background:var(--accent)"></i>可行域</span><span><i style="background:var(--amber)"></i>目标等值线</span></span>
+                    </div>
+                    <svg class="feasible" id="lpSvg" viewBox="0 0 300 220" role="img" aria-label="线性规划可行域演示">
+                      <line id="con1" x1="35" y1="196" x2="240" y2="60" stroke="var(--border)" stroke-width="1.5"/>
+                      <line id="con2" x1="55" y1="200" x2="255" y2="140" stroke="var(--border)" stroke-width="1.5"/>
+                      <line id="con3" x1="60" y1="185" x2="120" y2="196" stroke="var(--border)" stroke-width="1.5"/>
+                      <polygon id="feasibleRegion" points="60,196 110,130 150,92 196,80 205,196" fill="var(--accent)" fill-opacity="0.22" stroke="var(--accent)" stroke-width="1.5"/>
+                      <line id="objLine" x1="60" y1="150" x2="250" y2="70" stroke="var(--amber)" stroke-width="2"/>
+                      <circle id="optVertex" class="vertex" cx="196" cy="80" r="5" fill="var(--green)" stroke="#fff" stroke-width="2"/>
+                    </svg>
+                    <div class="slider-row" data-od-id="lp-slider">
+                      <span>等值线</span>
+                      <input type="range" id="lpSlider" min="1" max="100" value="100" aria-label="拖动目标等值线"/>
+                      <span class="demo-readout" id="lpReadout">最优 @ (196,80)</span>
+                    </div>
+                    <div class="kcard-foot">
+                      <button class="fav is-off" data-od-id="kcard-fav" data-state="off" onclick="toggleFav(this)">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17.9 6.6 19.9l1-6.1L3.2 9.5l6.1-.9z"/></svg>
+                        收藏到概念库
+                      </button>
+                      <button class="try-btn" data-od-id="kcard-try" onclick="tryDemo()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 0-2-.8-2-2V9.5c0-1.2 1-2 2.5-2h9.2c1.5 0 2.5.8 2.5 2v5c0 1.2-1 2-2.5 2"/><path d="M12 5.5L8.5 2M14.5 15.5L18 19"/></svg>
+                        试一试
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="concept-entry" data-od-id="concept-entry-regression">
+            <span class="ce-meta">相关概念</span>
+            <span class="ce-link">线性回归</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+
+          <!-- streaming state -->
+          <div class="msg ai guide" data-od-id="msg-ai-streaming">
+            <div class="avatar" aria-hidden="true">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 4v5c0 4.5-3 8-7 9-4-1-7-4.5-7-9V7z"/></svg>
+            </div>
+            <div class="bubble">
+              好，那当批次数量多于一次时，你的总成本里除了采购单价，还要不要计入「更换批次带来的固定成本」？如果是，这个固定成本该怎么写进目标函<span class="caret" aria-hidden="true">▍</span>
+              <div class="stream-note">正在生成 …</div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- composer -->
+        <div class="composer" data-od-id="composer">
+          <input type="text" id="chatInput" placeholder="在引导模式下，试着说说你的想法…" aria-label="输入消息" />
+          <button class="send-btn" id="sendBtn" data-od-id="send-btn" aria-label="发送">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+            发送
+          </button>
+        </div>
+
+      </section>
+
+      <!-- RIGHT: process panel -->
+      <aside class="process" data-od-id="process-panel" aria-label="过程面板">
+
+        <section class="pcard" data-od-id="pcard-questions">
+          <div class="pcard-h">
+            <h2 class="pcard-title">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 014.5 1.5c0 1.5-2.5 2.5-2.5 2.5M12 17h.01"/></svg>
+              当前追问
+            </h2>
+            <button class="pcard-note" data-od-id="pcard-questions-note" style="border:none;background:none;cursor:pointer" onclick="addQuestion()" aria-label="添加一条追问">+ 追问</button>
+          </div>
+          <div class="q-list" id="qList" data-od-id="question-list">
+            <div class="q-item done" data-od-id="q-1">
+              <span class="q-num">1</span><span>你在决策哪个量？</span>
+            </div>
+            <div class="q-item current-ask" data-od-id="q-2">
+              <span class="q-num">2</span><span>固定成本是否计入目标函数？</span>
+            </div>
+            <div class="q-item" data-od-id="q-3">
+              <span class="q-num">3</span><span>你怎么验证结果在可行域内？</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="pcard" data-od-id="pcard-context">
+          <div class="pcard-h">
+            <h2 class="pcard-title">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7l-3 3-3-3M14 4h8v8h-8zM4 14h8v8H4zM16 16h4M16 20h4M6 4V1M6 10V7M2 7h1M11 7h-1"/></svg>
+              上下文判定
+            </h2>
+            <span class="pcard-count" data-od-id="context-count">已确认 3</span>
+          </div>
+          <div class="tag-row" data-od-id="context-tags">
+            <span class="tag blue" data-od-id="ctx-constraint"><span class="dot"></span>约束条件</span>
+            <span class="tag amber" data-od-id="ctx-known"><span class="dot"></span>已知条件</span>
+            <span class="tag green" data-od-id="ctx-objective"><span class="dot"></span>目标</span>
+          </div>
+        </section>
+
+        <section class="pcard" data-od-id="pcard-concepts">
+          <div class="pcard-h">
+            <h2 class="pcard-title">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7a2 2 0 013-1.7M11 4.5h2M17 7l-3 3M20 12V8a3 3 0 00-3-3h-2M4 12v1a3 3 0 003 3h5M11 20l-2-2"/></svg>
+              相关概念
+            </h2>
+            <button class="pcard-note" data-od-id="pcard-concepts-note" style="border:none;background:none;cursor:pointer" onclick="addConcept()" aria-label="展开全部概念">展开全部</button>
+          </div>
+          <div class="concept-list" data-od-id="concept-list">
+            <button class="concept-item" data-od-id="concept-decision-tree" data-state="idle" onclick="focusConcept(this,'dec-tree')">
+              <span class="ci-ic" aria-hidden="true">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v4H4zM8 15h12v4H8z"/><path d="M12 9v6M16 9v6M8 13H4M20 13h-4"/></svg>
+              </span>
+              <span class="ci-meta"><span class="ci-name">决策树</span><span class="ci-sub">多分支条件判断结构</span></span>
+              <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+            </button>
+            <button class="concept-item" data-od-id="concept-linear-regression" data-state="idle" onclick="focusConcept(this,'lin-reg')">
+              <span class="ci-ic" aria-hidden="true">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-5 4 3 5-7"/></svg>
+              </span>
+              <span class="ci-meta"><span class="ci-name">线性回归</span><span class="ci-sub">拟合变量间的趋势关系</span></span>
+              <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+            </button>
+            <button class="concept-item" data-od-id="concept-kmeans" data-state="idle" onclick="focusConcept(this,'kmeans')">
+              <span class="ci-ic" aria-hidden="true">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="3"/><circle cx="17" cy="8" r="3"/><circle cx="10" cy="17" r="3"/><circle cx="18" cy="17" r="3"/></svg>
+              </span>
+              <span class="ci-meta"><span class="ci-name">K-means</span><span class="ci-sub">无监督聚类划分方法</span></span>
+              <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+            </button>
+            <button class="concept-item" data-od-id="concept-linear-programming" data-state="open" onclick="focusConcept(this,'lp')">
+              <span class="ci-ic" aria-hidden="true">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M6 16c2-4 5-8 9-8 3 0 4 2 5 4"/><circle cx="15" cy="8" r="1.6"/></svg>
+              </span>
+              <span class="ci-meta"><span class="ci-name">线性规划</span><span class="ci-sub">可行域内求最优解</span></span>
+              <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+            </button>
+          </div>
+        </section>
+
+      </aside>
+    </main>
+  </div>
+
+<script>
+  /* ---------- Theme ---------- */
+  var toggle=document.getElementById('themeToggle');
+  function applyTheme(persist){
+    var isDark=document.documentElement.getAttribute('data-theme')==='dark';
+    var icDark=document.getElementById('themeToggleIconDark');
+    var icLight=document.getElementById('themeToggleIconLight');
+    var lab=document.getElementById('themeToggleLabel');
+    icLight.style.display=isDark?'none':'';
+    icDark.style.display=isDark?'':'none';
+    lab.textContent=isDark?'浅色':'深色';
+    if(persist){try{localStorage.setItem('mmg-theme',isDark?'dark':'light')}catch(e){}}
+  }
+  toggle.addEventListener('click',function(){
+    var cur=document.documentElement.getAttribute('data-theme');
+    document.documentElement.setAttribute('data-theme',cur==='dark'?'light':'dark');
+    applyTheme(true);
+  });
+  (function(){try{var saved=localStorage.getItem('mmg-theme');if(saved){document.documentElement.setAttribute('data-theme',saved)}}catch(e){}applyTheme(false)})();
+
+  /* ---------- Knowledge card ---------- */
+  function toggleKcard(head){
+    var card=head.closest('.kcard');
+    var open=card.getAttribute('data-state')==='open';
+    card.setAttribute('data-state',open?'collapsed':'open');
+    card.classList.toggle('open',!open);
+    head.setAttribute('aria-expanded',String(!open));
+  }
+  function toggleFav(btn){
+    var off=btn.getAttribute('data-state')==='off';
+    if(off){
+      btn.setAttribute('data-state','on');
+      btn.classList.remove('is-off');
+      btn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17.9 6.6 19.9l1-6.1L3.2 9.5l6.1-.9z"/></svg> 已收藏';
+    } else {
+      btn.setAttribute('data-state','off');
+      btn.classList.add('is-off');
+      btn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17.9 6.6 19.9l1-6.1L3.2 9.5l6.1-.9z"/></svg> 收藏到概念库';
+    }
+  }
+
+  /* ---------- LP slider demo ---------- */
+  var slider=document.getElementById('lpSlider');
+  var objLine=document.getElementById('objLine');
+  var readout=document.getElementById('lpReadout');
+  var optVertex=document.getElementById('optVertex');
+  var vertexLabels=[
+    {x:196,y:80,label:'A (196,80)'},
+    {x:205,y:130,label:'B (205,130)'},
+    {x:150,y:92,label:'R (150,92)'}
+  ];
+  var label=null;
+  function positionVertex(){
+    var k=slider.value/100;
+    var base={x:150,y:92};
+    var lo={x:130,y:176},hi={x:205,y:70},arg={x:196,y:80};
+    var fx,fy,lab;
+    if(k<=0.45){
+      var t=k/0.45;fx=lo.x+(arg.x-lo.x)*t;fy=lo.y+(arg.y-lo.y)*t;lab=vertexLabels[2];
+    } else if(k<=0.75){
+      var t=(k-0.45)/0.30;fx=arg.x+(arg.x)*0.05*t;fy=arg.y+(hi.y-arg.y)*t;lab=vertexLabels[0];
+    } else {
+      var t=(k-0.75)/0.25;fx=arg.x+(hi.x-arg.x)*t;fy=arg.y+(hi.y-arg.y)*t;lab=vertexLabels[1];
+    }
+    optVertex.setAttribute('cx',fx);optVertex.setAttribute('cy',fy);
+    readout.textContent='最优 @ '+lab.label+'  ·  等值线 '+Math.round(k*100)+'/100';
+  }
+  slider.addEventListener('input',positionVertex);
+  positionVertex();
+
+  /* ---------- Try demo: brief animation ---------- */
+  function tryDemo(){
+    var v=40;var iv=setInterval(function(){v+=3;slider.value=v;positionVertex();if(v>=100){clearInterval(iv)}},22);
+  }
+
+  /* ---------- Process panel small actions ---------- */
+  var qSeq=3;
+  function addQuestion(){
+    qSeq++;
+    var li=document.createElement('div');
+    li.className='q-item';
+    li.setAttribute('data-od-id','q-'+qSeq);
+    li.innerHTML='<span class="q-num">'+qSeq+'</span><span>引导性追问 '+(qSeq-1)+'</span>';
+    document.getElementById('qList').appendChild(li);
+  }
+  function addConcept(){
+    var c=document.querySelector('.concept-item');
+    if(c&&c.setAttribute)c.setAttribute('data-state',c.getAttribute('data-state')==='open'?'idle':'open');
+  }
+  function focusConcept(el,key){
+    var items=document.querySelectorAll('.concept-item');
+    items.forEach(function(i){if(i!==el&&i.getAttribute('data-state')==='open')i.setAttribute('data-state','idle')});
+    var state=el.getAttribute('data-state')==='open'?'idle':'open';
+    el.setAttribute('data-state',state);
+    if(key==='lp'){
+      var kcard=document.querySelector('.kcard');
+      if(kcard){kcard.setAttribute('data-state','open');kcard.classList.add('open');kcard.querySelector('.kcard-head').setAttribute('aria-expanded','true')}
+    }
+  }
+
+  /* ---------- Composer (send/disabled) ---------- */
+  var input=document.getElementById('chatInput');
+  var sendBtn=document.getElementById('sendBtn');
+  function syncBtn(){sendBtn.disabled=input.value.trim()===''}
+  input.addEventListener('input',syncBtn);
+  sendBtn.addEventListener('click',function(){if(input.value.trim()){input.value='';syncBtn()}});
+  syncBtn();
+</script>
+</body>
+</html>
