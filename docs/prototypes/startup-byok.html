@@ -1,0 +1,566 @@
+﻿<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>鏂板缓璇婚浼氳瘽 路 鏁板寤烘ā AI 杈呭</title>
+  <style>
+    /* 鈹€鈹€鈹€ tokens 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+       娴呰壊榛樿锛涙繁鑹查€氳繃 html[data-theme="dark"] 瑕嗙洊銆傜粦瀹氳嚜浜у搧 brief銆?*/
+    :root {
+      --bg:      #F8FAFC;   /* 娴呰壊鑳屾櫙 */
+      --surface: #FFFFFF;   /* 娴呰壊鍗＄墖 */
+      --fg:      #1E293B;   /* 娴呰壊涓绘枃瀛?*/
+      --muted:   #475569;   /* 娴呰壊娆¤鏂囧瓧 */
+      --border:  #E2E8F0;   /* 娴呰壊杈规 */
+      --accent:  #2563EB;   /* 涓昏壊 钃?*/
+      --warm:    #EA580C;   /* 椤甸潰绾уぇ CTA 姗?*/
+      --btn-fg:  #FFFFFF;   /* 褰╄壊鎸夐挳涓婃枃瀛?*/
+
+      --shadow:  0 1px 2px rgba(15,23,42,.06);
+      --shadow-lg: 0 12px 32px -12px rgba(15,23,42,.18);
+      --radius-sm: 6px;
+      --radius:   10px;
+      --radius-lg: 16px;
+
+      --accent-soft: color-mix(in oklch, var(--accent) 12%, transparent);
+      --accent-strong: color-mix(in oklch, var(--accent) 88%, black);
+      --warm-soft:  color-mix(in oklch, var(--warm) 14%, transparent);
+      --warm-strong: color-mix(in oklch, var(--warm) 90%, black);
+      --ok:        #16a34a;
+      --ok-soft:   color-mix(in oklch, var(--ok) 13%, transparent);
+      --danger:    #dc2626;
+      --danger-soft: color-mix(in oklch, var(--danger) 12%, transparent);
+      --fg-soft:   color-mix(in oklch, var(--fg) 5%, transparent);
+
+      --font-display: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'SimSun', serif;
+      --font-body:    -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', system-ui, sans-serif;
+      --font-mono:    ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace;
+    }
+    html[data-theme="dark"] {
+      --bg:      #0F172A;
+      --surface: #1E293B;
+      --fg:      #E2E8F0;
+      --muted:   #94A3B8;
+      --border:  #334155;
+      --accent:  #3B82F6;
+      --warm:    #FB923C;
+      --btn-fg:  #FFFFFF;
+      --shadow:  0 1px 2px rgba(0,0,0,.4);
+      --shadow-lg: 0 12px 32px -12px rgba(0,0,0,.55);
+      --warm-strong: color-mix(in oklch, var(--warm) 82%, black);
+      --fg-soft: color-mix(in oklch, var(--fg) 8%, transparent);
+    }
+
+    /* 鈹€鈹€鈹€ reset & base 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+    *, *::before, *::after { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: var(--font-body);
+      font-size: 15px;
+      line-height: 1.6;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+      transition: background .25s ease, color .25s ease;
+    }
+    img, svg { display: block; }
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; cursor: pointer; }
+    h1, h2, h3, h4 { text-wrap: balance; margin: 0; }
+    p { text-wrap: pretty; margin: 0; }
+
+    .container { max-width: 720px; margin-inline: auto; padding-inline: 20px; }
+
+    /* 鈹€鈹€鈹€ top bar 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding-block: 16px;
+    }
+    .brandmark { display: flex; align-items: center; gap: 10px; }
+    .brandmark .logo-badge {
+      width: 32px; height: 32px; border-radius: 9px;
+      display: grid; place-items: center;
+      background: var(--accent); color: var(--btn-fg);
+    }
+    .brandmark .logo-badge svg { width: 18px; height: 18px; }
+    .brandmark .brand-name {
+      font-family: var(--font-display); font-weight: 600;
+      font-size: 17px; letter-spacing: .005em;
+    }
+    .theme-toggle {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 7px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 13px;
+      transition: background .15s, border-color .15s, color .15s;
+    }
+    .theme-toggle svg { width: 15px; height: 15px; }
+    .theme-toggle:hover { color: var(--fg); border-color: color-mix(in oklch, var(--fg) 40%, transparent); }
+    .theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    /* 鈹€鈹€鈹€ main card 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+    .pagewrap { padding-block: 24px 56px; }
+    .main-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      padding: 28px 28px 24px;
+    }
+    .main-head { text-align: center; margin-bottom: 20px; }
+    .main-head .kicker {
+      display: inline-flex; align-items: center; gap: 7px;
+      color: var(--accent); font-size: 13px; font-weight: 500;
+      margin-bottom: 10px;
+    }
+    .main-head .kicker svg { width: 15px; height: 15px; }
+    .main-head .kicker code { font-family: var(--font-mono); font-size: 12px; letter-spacing: .02em; }
+    .main-head h1 {
+      font-family: var(--font-display);
+      font-size: clamp(26px, 4.4vw, 34px);
+      line-height: 1.3;
+      font-weight: 600;
+      letter-spacing: 0;
+    }
+
+    /* 鈹€鈹€鈹€ steps 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+    .steps { display: grid; gap: 0; margin: 18px 0 22px; }
+    .step {
+      display: flex; gap: 12px; align-items: flex-start;
+      padding: 10px 0;
+      border-top: 1px solid var(--border);
+      font-size: 14px; line-height: 1.7;
+    }
+    .step:last-child { border-bottom: 1px solid var(--border); }
+    .step-num {
+      flex: 0 0 auto; width: 22px; height: 22px; margin-top: 2px;
+      border-radius: 50%;
+      background: var(--accent-soft); color: var(--accent);
+      font-size: 12px; font-weight: 600;
+      display: grid; place-items: center;
+    }
+    .step b { font-weight: 600; }
+
+    /* 鈹€鈹€鈹€ CTA 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+    .cta-row { margin-top: 22px; }
+    .cta-start {
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      width: 100%;
+      padding: 14px 20px;
+      border-radius: var(--radius);
+      border: 1px solid var(--warm);
+      background: var(--warm); color: var(--btn-fg);
+      font-size: 16px; font-weight: 600; letter-spacing: .01em;
+      box-shadow: var(--shadow-lg);
+      transition: background .15s, transform .05s, box-shadow .15s;
+    }
+    .cta-start svg { width: 18px; height: 18px; }
+    .cta-start:hover { background: var(--warm-strong); }
+    .cta-start:active { transform: translateY(1px); box-shadow: var(--shadow); }
+    .cta-start:focus-visible { outline: 3px solid color-mix(in oklch, var(--warm) 55%, transparent); outline-offset: 2px; }
+    .cta-hint { text-align: center; color: var(--muted); font-size: 12px; margin-top: 10px; }
+
+    /* 鈹€鈹€鈹€ section title 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+    .sec-title {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 13px; font-weight: 600; color: var(--muted);
+      letter-spacing: .02em; margin-bottom: 14px;
+    }
+    .sec-title svg { width: 15px; height: 15px; }
+
+    /* 鈹€鈹€鈹€ dropzone 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+    .dropzone {
+      border: 1.5px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 26px 20px;
+      text-align: center;
+      background: color-mix(in oklch, var(--bg) 55%, var(--surface));
+      cursor: pointer;
+      transition: border-color .15s, background .15s;
+    }
+    .dropzone svg.dz-icon { width: 26px; height: 26px; margin: 0 auto 10px; color: var(--muted); }
+    .dropzone .dz-main { font-size: 14px; font-weight: 500; }
+    .dropzone .dz-main b { color: var(--accent); font-weight: 600; }
+    .dropzone .dz-formats { color: var(--muted); font-size: 12px; margin-top: 6px; font-family: var(--font-mono); letter-spacing: .02em; }
+    .dropzone:hover { border-color: var(--accent); }
+    .dropzone:hover svg.dz-icon { color: var(--accent); }
+    .dropzone.dragover { border-color: var(--accent); background: var(--accent-soft); }
+    .dropzone:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    .zone-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+    @media (max-width: 560px) { .zone-grid { grid-template-columns: 1fr; } }
+
+    /* 鈹€鈹€鈹€ textarea 棰樺共 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+    .prompt-box {
+      display: flex; flex-direction: column; gap: 10px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+      background: var(--surface);
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .prompt-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+    .prompt-box textarea {
+      width: 100%; border: 0; outline: 0; resize: vertical;
+      background: transparent; color: var(--fg);
+      font: inherit; font-size: 14px; line-height: 1.7;
+      min-height: 72px;
+    }
+    .prompt-box textarea::placeholder { color: var(--muted); }
+    .prompt-box .prompt-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .prompt-count { color: var(--muted); font-size: 12px; font-family: var(--font-mono); letter-spacing: .02em; }
+    .btn-ghost-file {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 7px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: transparent; color: var(--fg);
+      font-size: 13px; font-weight: 500;
+      transition: border-color .15s, color .15s, background .15s;
+    }
+    .btn-ghost-file svg { width: 15px; height: 15px; color: var(--muted); }
+    .btn-ghost-file:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-ghost-file:hover svg { color: var(--accent); }
+    .btn-ghost-file:active { transform: translateY(1px); }
+    .btn-ghost-file:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .btn-ghost-file:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* 鈹€鈹€鈹€ attachment list 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+    .attachments { display: flex; flex-direction: column; gap: 8px; }
+    .attach {
+      display: flex; align-items: center; gap: 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      padding: 10px 12px;
+      min-height: 52px;
+    }
+    .attach .file-icon {
+      flex: 0 0 auto; width: 34px; height: 34px;
+      border-radius: 8px; display: grid; place-items: center;
+      background: var(--fg-soft); color: var(--muted);
+    }
+    .attach .file-icon svg { width: 17px; height: 17px; }
+    .attach .attach-name { font-size: 13.5px; font-weight: 500; line-height: 1.4; }
+    .attach .attach-sub { font-size: 12px; color: var(--muted); margin-top: 1px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .attach .attach-status { margin-left: auto; flex: 0 0 auto; display: flex; align-items: center; gap: 8px; }
+
+    .spinner {
+      width: 16px; height: 16px; border-radius: 50%;
+      border: 2px solid color-mix(in oklch, var(--accent) 30%, transparent);
+      border-top-color: var(--accent);
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .status-txt { font-size: 12px; font-weight: 500; }
+    .status-txt.parsing { color: var(--accent); }
+    .status-txt.parsed  { color: var(--ok); }
+    .status-txt.failed  { color: var(--danger); }
+
+    .status-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 9px; border-radius: 999px;
+      font-size: 12px; font-weight: 500;
+    }
+    .status-chip svg { width: 13px; height: 13px; }
+    .status-chip.ok { background: var(--ok-soft); color: var(--ok); }
+    .status-chip.err { background: var(--danger-soft); color: var(--danger); }
+    .attach-meta { color: var(--muted); font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .01em; }
+
+    /* 鈹€鈹€鈹€ history 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+    .history { margin-top: 26px; }
+    .history-items { display: flex; flex-direction: column; gap: 8px; }
+    .hist-row {
+      display: flex; align-items: center; gap: 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      padding: 12px 14px;
+      box-shadow: var(--shadow);
+    }
+    .hist-row .hist-main { flex: 1 1 auto; min-width: 0; }
+    .hist-row .hist-title { font-size: 14px; font-weight: 500; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .hist-row .hist-time { font-size: 12px; color: var(--muted); margin-top: 2px; font-family: var(--font-mono); letter-spacing: .01em; }
+    .btn-continue {
+      flex: 0 0 auto;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 7px 14px;
+      border-radius: var(--radius-sm);
+      border: 1px solid transparent;
+      background: var(--accent); color: var(--btn-fg);
+      font-size: 13px; font-weight: 500;
+      transition: background .15s;
+    }
+    .btn-continue svg { width: 14px; height: 14px; }
+    .btn-continue:hover { background: var(--accent-strong); }
+    .btn-continue:active { transform: translateY(1px); }
+    .btn-continue:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .icon-btn {
+      flex: 0 0 auto;
+      width: 32px; height: 32px;
+      border-radius: var(--radius-sm);
+      border: 1px solid transparent;
+      background: transparent; color: var(--muted);
+      display: grid; place-items: center;
+      transition: color .15s, background .15s, border-color .15s;
+    }
+    .icon-btn svg { width: 17px; height: 17px; }
+    .icon-btn:hover { color: var(--danger); background: var(--danger-soft); }
+    .icon-btn:active { transform: translateY(1px); }
+    .icon-btn:focus-visible { outline: 2px solid var(--danger); outline-offset: 2px; }
+    .empty-state {
+      border: 1px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      text-align: center; color: var(--muted); font-size: 13px;
+    }
+    .empty-state svg { width: 22px; height: 22px; margin: 0 auto 8px; color: var(--border); }
+
+    /* 鈹€鈹€鈹€ tutorial link 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+    .tutorial { text-align: center; margin-top: 26px; }
+    .tutorial a {
+      display: inline-flex; align-items: center; gap: 7px;
+      color: var(--accent); font-size: 14px; font-weight: 500;
+      transition: color .15s;
+    }
+    .tutorial a svg { width: 15px; height: 15px; }
+    .tutorial a:hover { color: var(--accent-strong); text-decoration: underline; text-underline-offset: 4px; }
+    .tutorial a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+    .footnote { text-align: center; color: var(--muted); font-size: 12px; margin-top: 28px; }
+
+    @media (max-width: 480px) {
+      .main-card { padding: 20px 16px 18px; }
+      .hist-row { flex-wrap: wrap; }
+      .hist-row .hist-main { flex-basis: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container" style="max-width: 720px;">
+    <header class="topbar" data-od-id="topbar">
+      <div class="brandmark">
+        <span class="logo-badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l2 6h6l-4.6 4 1.6 6L12 15.4 7 19l1.6-6L4 9h6z"/></svg>
+        </span>
+        <span class="brand-name">鏁版ā AI 杈呭</span>
+      </div>
+      <button class="theme-toggle" data-od-id="theme-toggle" aria-label="鍒囨崲涓婚">
+        <svg class="ic-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="ic-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        <span data-theme-label>娴呰壊</span>
+      </button>
+    </header>
+
+    <main class="pagewrap" data-od-id="new-session">
+      <section class="main-card" data-od-id="session-card">
+        <div class="main-head">
+          <p class="kicker">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+            涓婁紶棰樼洰锛孉I 甯綘璇婚鎷嗚В
+          </p>
+          <h1>鏂板缓璇婚浼氳瘽</h1>
+        </div>
+
+        <div class="steps" data-od-id="steps">
+          <div class="step" data-od-id="step-paste">
+            <span class="step-num">1</span>
+            <div>鎶婇鐩?b>绮樿创鍒颁笅鏂?/b>锛屾垨涓婁紶 PDF / MD / TXT 棰樺共鏂囦欢</div>
+          </div>
+          <div class="step" data-od-id="step-attach">
+            <span class="step-num">2</span>
+            <div>涓婁紶鏁版嵁闄勪欢锛圗xcel / CSV锛夛紝鐢ㄤ簬鍚庣画鏁板€煎缓妯?/div>
+          </div>
+          <div class="step" data-od-id="step-start">
+            <span class="step-num">3</span>
+            <div>鐐瑰嚮銆屽紑濮嬭棰樸€嶏紝绛夊緟瑙ｆ瀽鍑洪鎰忋€佺害鏉熶笌寰呮眰閲?/div>
+          </div>
+        </div>
+
+        <!-- 棰樺共杈撳叆 + 闄勪欢涓婁紶 -->
+        <div class="zone-grid" data-od-id="inputs">
+          <div class="prompt-wrap" data-od-id="prompt-input">
+            <p class="sec-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M4 12h10M4 17h16"/></svg>
+              棰樺共鍐呭
+            </p>
+            <div class="prompt-box">
+              <textarea data-od-id="prompt-textarea" placeholder="鍦ㄦ绮樿创棰樼洰鍏ㄦ枃锛屾垨鐩存帴杈撳叆棰樼洰鍏抽敭淇℃伅鈥︼紙棣栨璇婚寤鸿绮樿创瀹屾暣鍘熸枃锛孉I 浼氭媶瑙ｄ负鏉′欢銆佺洰鏍囦笌鍙敤鏁版嵁锛? rows="3"></textarea>
+              <div class="prompt-foot">
+                <span class="prompt-count num" data-od-id="prompt-count">0 / 3000 瀛?/span>
+                <button class="btn-ghost-file" data-od-id="upload-question-btn" type="button">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5M12 3v12"/></svg>
+                  涓婁紶棰樺共鏂囦欢锛圥DF/MD/TXT锛?                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="dz-wrap" data-od-id="dropzone">
+            <p class="sec-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>
+              鏁版嵁闄勪欢
+            </p>
+            <div class="dropzone" data-od-id="dropzone-area" tabindex="0" role="button" aria-label="涓婁紶鏁版嵁闄勪欢">
+              <svg class="dz-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3v12"/><path d="M7 9l5-5 5 5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+              <p class="dz-main">鐐瑰嚮閫夋嫨鎴?b>鎷栨嫿鏁版嵁闄勪欢</b></p>
+              <p class="dz-formats">鏀寔鏍煎紡 路 xlsx / csv / pdf / txt</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 闄勪欢鍒楄〃 -->
+      <section class="main-card" style="margin-top: 12px;" data-od-id="attachments">
+        <p class="sec-title" style="margin-bottom: 14px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"/><path d="M3 8V6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2"/><path d="M10 12h4"/></svg>
+          闄勪欢瑙ｆ瀽
+        </p>
+        <div class="attachments" data-od-id="attachment-list">
+          <!-- 鐘舵€?1 路 瑙ｆ瀽涓?-->
+          <div class="attach" data-od-id="attach-parsing">
+            <span class="file-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18M9 21V9"/></svg></span>
+            <div class="attach-main">
+              <div class="attach-name">璧涢鏁版嵁_鍩庡競鑳芥簮娑堣€?xlsx</div>
+              <div class="attach-sub">Excel 鏁版嵁琛?/div>
+            </div>
+            <div class="attach-status">
+              <span class="spinner"></span>
+              <span class="status-txt parsing">瑙ｆ瀽涓€?/span>
+            </div>
+          </div>
+
+          <!-- 鐘舵€?2 路 宸茶В鏋?-->
+          <div class="attach" data-od-id="attach-parsed">
+            <span class="file-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg></span>
+            <div class="attach-main">
+              <div class="attach-name">闄勪欢_鍥炲綊鍙橀噺.csv</div>
+              <div class="attach-sub"><span class="attach-meta">鍒楁暟 6 路 琛屾暟 1200</span></div>
+            </div>
+            <div class="attach-status">
+              <span class="status-chip ok">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 6L9 17l-5-5"/></svg>
+                宸茶В鏋?              </span>
+            </div>
+          </div>
+
+          <!-- 鐘舵€?3 路 澶辫触 -->
+          <div class="attach" data-od-id="attach-failed">
+            <span class="file-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18M9 21V9"/></svg></span>
+            <div class="attach-main">
+              <div class="attach-name">鍘熷鏁版嵁_2024.xlsx</div>
+              <div class="attach-sub">Excel 鏁版嵁琛?/div>
+            </div>
+            <div class="attach-status">
+              <span class="status-chip err">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+                瑙ｆ瀽澶辫触
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="attach-note" style="margin-top:12px; font-size:12px; color:var(--muted); display:flex; gap:6px; align-items:center;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
+          澶辫触鍘熷洜锛氭枃浠舵牸寮忎笉鍖归厤锛岃杞崲涓?xlsx / csv 鍚庨噸璇?        </div>
+      </section>
+
+      <!-- 寮€濮嬭棰?澶?CTA -->
+      <section class="main-card" style="margin-top: 12px;" data-od-id="cta-section">
+        <button class="cta-start" data-od-id="cta-start" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 3v12"/><path d="M16 15l-4 4-4-4"/></svg>
+          寮€濮嬭棰?        </button>
+        <p class="cta-hint">灏嗗熀浜庡凡绮樿创棰樺共涓庨檮浠惰繘琛岄鎰忔媶瑙ｄ笌寤烘ā寤鸿</p>
+      </section>
+    </main>
+
+    <!-- 鍘嗗彶浼氳瘽 -->
+    <section data-od-id="history" style="margin-top: 28px;">
+      <p class="sec-title" style="margin-bottom: 14px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        鍘嗗彶浼氳瘽
+      </p>
+      <div class="history-items" data-od-id="history-list">
+        <div class="hist-row" data-od-id="history-item-1">
+          <div class="hist-main">
+            <div class="hist-title">2024 鍩庡競鑳芥簮娑堣€楀缓妯?/div>
+            <div class="hist-time">浠婂ぉ 14:32 路 宸茶棰?/div>
+          </div>
+          <button class="btn-continue" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M5 4l6 2v12l-6 2z"/><path d="M12 6h7v12h-7"/></svg>
+            缁х画
+          </button>
+          <button class="icon-btn" data-od-id="delete-history-1" type="button" aria-label="鍒犻櫎浼氳瘽">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+          </button>
+        </div>
+        <div class="hist-row" data-od-id="history-item-2">
+          <div class="hist-main">
+            <div class="hist-title">鎺掗槦绯荤粺鏈€浼樺寲璁捐</div>
+            <div class="hist-time">鏄ㄥぉ 20:10 路 宸茶棰?/div>
+          </div>
+          <button class="btn-continue" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M5 4l6 2v12l-6 2z"/><path d="M12 6h7v12h-7"/></svg>
+            缁х画
+          </button>
+          <button class="icon-btn" data-od-id="delete-history-2" type="button" aria-label="鍒犻櫎浼氳瘽">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+          </button>
+        </div>
+        <!-- 绌烘€侊紙绀轰緥锛?-->
+        <div class="empty-state" data-od-id="history-empty" style="display:none;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          杩樻病鏈夊巻鍙蹭細璇?        </div>
+      </div>
+    </section>
+
+    <!-- 鏁欑▼ -->
+    <div class="tutorial" data-od-id="tutorial">
+      <a href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M10 9a2 2 0 1 1 3 1.7c-.7.5-1 1-1 1.8"/><path d="M12 17h.01"/></svg>
+        绗竴娆＄敤锛熺湅 3 鍒嗛挓鏁欑▼
+      </a>
+    </div>
+
+    <p class="footnote">鏀寔 Excel / CSV 闄勪欢 路 鏁伴噺涓嶉檺 路 鏈湴瑙ｆ瀽鍔犲瘑瀛樺偍</p>
+  </div>
+
+  <script>
+    /* 涓婚鍒囨崲 鈥斺€?娴呰壊 / 娣辫壊 */
+    (function () {
+      var root = document.documentElement;
+      var btn = document.querySelector('[data-od-id="theme-toggle"]');
+      var label = btn.querySelector('[data-theme-label]');
+      function apply(theme) {
+        root.setAttribute('data-theme', theme);
+        label.textContent = theme === 'dark' ? '娣辫壊' : '娴呰壊';
+      }
+      btn.addEventListener('click', function () {
+        apply(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+      });
+      if (root.getAttribute('data-theme') === 'dark') apply('dark');
+    })();
+
+    /* 棰樺共瀛楁暟缁熻 */
+    var ta = document.querySelector('[data-od-id="prompt-textarea"]');
+    var count = document.querySelector('[data-od-id="prompt-count"]');
+    ta.addEventListener('input', function () {
+      count.textContent = ta.value.length + ' / 3000 瀛?;
+    });
+
+    /* 闄勪欢鎷栨嫿楂樹寒 */
+    var dz = document.querySelector('[data-od-id="dropzone-area"]');
+    ['dragenter', 'dragover'].forEach(function (e) {
+      dz.addEventListener(e, function (ev) { ev.preventDefault(); dz.classList.add('dragover'); });
+    });
+    ['dragleave', 'drop'].forEach(function (e) {
+      dz.addEventListener(e, function (ev) { ev.preventDefault(); dz.classList.remove('dragover'); });
+    });
+  </script>
+</body>
+</html>
+
