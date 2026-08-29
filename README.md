@@ -27,6 +27,8 @@ npm start            # 启动服务 → http://127.0.0.1:3088
 npm run dev          # Vite(5173) + 后端(3088)
 ```
 
+> ⚠️ **要求 Node.js ≥ 23.4**（后端使用 Node 内置 SQLite `node:sqlite`，低版本无法启动）。
+
 打开浏览器 → **模型设置**页填入你的 API Key（通义百炼/DeepSeek/OpenAI/自定义）→ 测试连接 → **读题工作台**粘贴题目 → AI 整体解读 / 划词精读 / 对话深挖。
 
 ### 已实现功能
