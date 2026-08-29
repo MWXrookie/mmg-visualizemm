@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>线框 01 · 主页面（应用壳）</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: #eef0f3; color: #334155; padding: 24px; }
+  .doc-title { text-align: center; font-size: 15px; color: #64748b; margin-bottom: 16px; letter-spacing: .05em; }
+  .doc-title b { color: #0f172a; }
+  .shell { display: flex; height: 640px; border: 2px solid #94a3b8; border-radius: 10px; overflow: hidden; background: #fff; position: relative; }
+  .size-hint { position: absolute; top: 6px; right: 10px; font-size: 11px; color: #94a3b8; background: #fff; padding: 2px 8px; border: 1px dashed #cbd5e1; border-radius: 4px; z-index: 5; }
+
+  /* 左侧边栏 28% */
+  .sidebar { width: 28%; min-width: 200px; background: #f1f5f9; border-right: 2px solid #cbd5e1; display: flex; flex-direction: column; }
+  .sb-brand { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 2px dashed #cbd5e1; }
+  .sb-logo { width: 28px; height: 28px; border-radius: 7px; background: #cbd5e1; border: 1px dashed #94a3b8; }
+  .sb-name { width: 110px; height: 12px; background: #cbd5e1; border-radius: 3px; }
+
+  .sb-section { padding: 14px 12px 4px; font-size: 11px; color: #94a3b8; letter-spacing: .08em; }
+  .sb-nav { padding: 4px 10px; display: flex; flex-direction: column; gap: 6px; }
+  .sb-item { display: flex; align-items: center; gap: 10px; padding: 10px 10px; border-radius: 8px; font-size: 13.5px; color: #475569; background: #fff; border: 1px dashed #cbd5e1; }
+  .sb-item .ic { width: 16px; height: 16px; border-radius: 4px; background: #cbd5e1; }
+  .sb-item.active { background: #dbeafe; border: 1px solid #93c5fd; color: #1d4ed8; font-weight: 600; }
+  .sb-item.ghost { background: transparent; border: 1px dashed #cbd5e1; color: #94a3b8; font-size: 12.5px; }
+
+  .sb-sessions { flex: 1; overflow: hidden; padding: 6px 10px; display: flex; flex-direction: column; gap: 6px; }
+  .session-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 7px; background: #fff; border: 1px dashed #d7dee8; font-size: 12.5px; color: #64748b; }
+  .session-row .bar { width: 8px; height: 8px; border-radius: 2px; background: #cbd5e1; }
+
+  .sb-foot { padding: 10px; border-top: 2px dashed #cbd5e1; display: flex; flex-direction: column; gap: 6px; }
+  .sb-item.mini { padding: 8px 10px; font-size: 12.5px; }
+
+  /* 右侧内容区 72% */
+  .content { flex: 1; display: flex; flex-direction: column; background: #fff; }
+  .c-head { display: flex; align-items: center; gap: 10px; padding: 12px 20px; border-bottom: 2px dashed #cbd5e1; }
+  .c-title { width: 130px; height: 14px; background: #cbd5e1; border-radius: 3px; }
+  .c-actions { margin-left: auto; display: flex; gap: 8px; }
+  .c-btn { width: 64px; height: 26px; border-radius: 6px; background: #e2e8f0; border: 1px dashed #94a3b8; }
+  .c-btn.solid { background: #bfdbfe; }
+  .c-body { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; }
+  .c-ph { text-align: center; color: #94a3b8; }
+  .c-ph .big { font-size: 15px; margin-bottom: 8px; }
+  .c-ph .sub { font-size: 12px; }
+  .c-inner-hint { position: absolute; inset: 16px; border: 2px dashed #cbd5e1; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+
+  /* 标注 */
+  .ann { position: absolute; font-size: 11px; color: #0369a1; background: #e0f2fe; border: 1px solid #7dd3fc; border-radius: 4px; padding: 2px 8px; z-index: 6; }
+  .ann.side { top: 30px; left: 14px; }
+  .ann.content { top: 30px; left: 34%; }
+
+  .notes { margin-top: 14px; display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: #475569; }
+  .notes .n { background: #fff; border: 1px solid #cbd5e1; border-radius: 7px; padding: 8px 12px; }
+  .notes b { color: #0f172a; }
+</style>
+</head>
+<body>
+<div class="doc-title">线框 01 · <b>主页面（应用壳）</b> —— 左 28% 功能边栏 / 右 72% 内容区（比例可切 2:8 或 3:7）</div>
+
+<div class="shell">
+  <span class="size-hint">左 28% ｜ 右 72%</span>
+
+  <!-- 左侧边栏 -->
+  <aside class="sidebar">
+    <div class="sb-brand">
+      <div class="sb-logo"></div>
+      <div class="sb-name"></div>
+    </div>
+    <div class="sb-section">功 能（MVP 2 项 · 可扩展）</div>
+    <nav class="sb-nav">
+      <div class="sb-item active"><span class="ic"></span>读题工作台</div>
+      <div class="sb-item"><span class="ic"></span>编程工作台</div>
+      <div class="sb-item ghost"><span class="ic"></span>＋ 更多功能（扩展位）</div>
+    </nav>
+    <div class="sb-foot">
+      <div class="sb-item mini">模型设置</div>
+      <div class="sb-item mini">主题切换</div>
+    </div>
+  </aside>
+
+  <!-- 右侧内容区 -->
+  <main class="content">
+    <div class="c-head">
+      <div class="c-title"></div>
+      <div class="c-actions"><span class="c-btn"></span><span class="c-btn solid"></span></div>
+    </div>
+    <div class="c-body">
+      <div class="c-inner-hint">
+        <div class="c-ph">
+          <div class="big">当前功能内容区（占位）</div>
+          <div class="sub">两个主体：读题工作台 / 编程工作台 —— 右侧随侧边栏选择切换</div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <span class="ann side">A · 左侧功能导航（两个主体 + 底部设置）</span>
+  <span class="ann content">B · 右侧内容展示区（对应所选功能）</span>
+</div>
+
+<div class="notes">
+  <div class="n"><b>已定</b>：无会话列表（非对话类产品）；知识卡片完全内嵌；MVP 主体 = 读题工作台 + 编程工作台</div>
+  <div class="n"><b>架构要点</b>：侧边栏导航是可扩展列表 —— 每个功能 = 导航一项 + 右侧一个内容视图；MVP 后按此挂载新功能</div>
+  <div class="n"><b>待确认 1</b>：左栏比例 —— 28%（当前）/ 20%（2:8）/ 30%（3:7）？</div>
+  <div class="n"><b>下一步</b>：细化「读题工作台」右侧内容区（左题右 AI？还是别的结构）</div>
+</div>
+</body>
+</html>
