@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { marked } from 'marked'
-import { chat, parseFile, attachSummary } from '../api.js'
+import { chat, streamChat, parseFile, attachSummary } from '../api.js'
 import { CONCEPT_KEYWORDS } from './Cards.jsx'
-import { saveSession, loadSession, clearSession } from '../store.js'
+import { saveSession, loadSession, clearSession, loadSessionList, saveSessionList } from '../store.js'
 import MD, { sanitize } from '../components/MD.jsx'
 const READ_OVERVIEW_SYSTEM =
   '你是数学建模辅导助手。用户会给你一道数学建模题目（可能含数据说明），请做「整体解读」，输出四部分：\n' +
@@ -150,6 +150,7 @@ export default function Workbench({ settings, onOpenCards }) {
   // 划词
   const [floatSel, setFloatSel] = useState(null) // {text, x, top}
   const [selResult, setSelResult] = useState(null) // {role, confidence, info, impact, quote, raw, doubted}
+  const [selLive, setSelLive] = useState(null) // 流式解读的实时文本（null=未在流式）
   const [selLoading, setSelLoading] = useState(false)
   const [selError, setSelError] = useState('')
   const [quoteHl, setQuoteHl] = useState('') // 用于原文高亮的引用句
@@ -175,24 +176,45 @@ export default function Workbench({ settings, onOpenCards }) {
     return '你是数学建模辅导助手。给用户清晰、具体的帮助，可以直接给出建模思路与方案建议。\n' + base
   }
 
-  // 重新生成：重发最后一条 user 消息
+  // 流式优先、失败自动降级非流式；已产生部分内容时保留并抛错
+  async function streamWithFallback(msgs, onDelta) {
+    let got = false
+    try {
+      return await streamChat(settings, msgs, { onDelta: (t) => { got = true; onDelta?.(t) } })
+    } catch (e) {
+      if (got) throw new Error(`${e.message}（已展示部分内容）`)
+      const r = await chat(settings, msgs)
+      onDelta?.(r.content)
+      return r.content
+    }
+  }
+
+  // 重新生成：重发最后一条 user 消息（流式）
   async function regenerate() {
     let idx = -1
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === 'assistant') { idx = i; break }
     }
     if (idx < 0 || idx - 1 < 0 || messages[idx - 1].role !== 'user') return
-    const q = messages[idx - 1].content
     const history = messages.slice(0, idx)
     setMessages(history)
     setChatLoading(true)
     setError('')
+    const aid = Date.now()
+    setMessages([...history, { role: 'assistant', content: '', id: aid, streaming: true }])
     try {
-      const r = await chat(settings, [{ role: 'system', content: chatSystem() }, ...history])
-      setMessages([...history, { role: 'assistant', content: r.content, id: Date.now() }])
+      await streamWithFallback(
+        [{ role: 'system', content: chatSystem() }, ...history],
+        (t) => setMessages((prev) => prev.map((m) => (m.id === aid ? { ...m, content: t } : m))),
+      )
+      setMessages((prev) => prev.map((m) => (m.id === aid ? { ...m, streaming: false } : m)))
     } catch (e) {
       setError(e.message)
-      setMessages(messages)
+      setMessages((prev) => {
+        const last = prev[prev.length - 1]
+        if (last && last.id === aid && last.content === '') return prev.slice(0, -1)
+        return prev
+      })
     } finally {
       setChatLoading(false)
     }
@@ -285,9 +307,9 @@ export default function Workbench({ settings, onOpenCards }) {
     if (g) return setError(g)
     setLoading(true)
     setError('')
+    setOverview('')
     try {
-      const r = await chat(settings, buildReadPayload(problemText))
-      setOverview(r.content)
+      await streamWithFallback(buildReadPayload(problemText), setOverview)
     } catch (e) {
       setError(e.message)
     } finally {
@@ -318,33 +340,44 @@ export default function Workbench({ settings, onOpenCards }) {
     const g = guardKey()
     if (g) return setError(g)
     const selectedText = floatSel ? floatSel.text : ''
+    // 验收约束：选区上限 500 字
+    if (selectedText.length > 500) {
+      setSelError(`选中内容过长（${selectedText.length} 字，上限 500），请缩小选区后重试`)
+      return
+    }
     const basePrompt = extra
       ? `用户质疑了上一轮判定（原判定角色：${selResult?.role}，置信度 ${selResult?.confidence}%）。请重新审视，可修正角色，并说明理由。`
       : ''
     setSelLoading(true)
     setSelResult(null)
+    setSelLive('')
     setSelError('')
     try {
-      const r = await chat(settings, [
-        { role: 'system', content: SELECTED_ROLE_SYSTEM },
-        {
-          role: 'user',
-          content: `${basePrompt}\n题目全文：\n${problemText}\n\n选中的文字：\n「${selectedText}」`,
-        },
-      ])
-      const parsed = extractJson(r.content)
+      const content = await streamWithFallback(
+        [
+          { role: 'system', content: SELECTED_ROLE_SYSTEM },
+          {
+            role: 'user',
+            content: `${basePrompt}\n题目全文：\n${problemText}\n\n选中的文字：\n「${selectedText}」`,
+          },
+        ],
+        setSelLive,
+      )
+      setSelLive(null)
+      const parsed = extractJson(content)
       if (parsed && parsed.role) {
-        setSelResult({ ...parsed, raw: r.content, doubted: !!extra })
+        setSelResult({ ...parsed, raw: content, doubted: !!extra })
         setQuoteHl(parsed.quote || selectedText)
       } else {
         // 解析失败：降级为纯文本展示
-        setSelResult({ raw: r.content, fallback: true })
+        setSelResult({ raw: content, fallback: true })
         setQuoteHl(selectedText)
       }
       setFloatSel(null)
       window.getSelection()?.removeAllRanges()
     } catch (e) {
       setSelError(e.message)
+      setSelLive(null)
     } finally {
       setSelLoading(false)
     }
@@ -402,15 +435,22 @@ export default function Workbench({ settings, onOpenCards }) {
     setInput('')
     setChatLoading(true)
     setError('')
+    const aid = Date.now() + 1
+    setMessages([...next, { role: 'assistant', content: '', id: aid, streaming: true }])
     try {
-      const r = await chat(settings, [
-        { role: 'system', content: chatSystem() },
-        ...next,
-      ])
-      setMessages([...next, { role: 'assistant', content: r.content, id: Date.now() + 1 }])
+      await streamWithFallback(
+        [{ role: 'system', content: chatSystem() }, ...next],
+        (t) => setMessages((prev) => prev.map((m) => (m.id === aid ? { ...m, content: t } : m))),
+      )
+      setMessages((prev) => prev.map((m) => (m.id === aid ? { ...m, streaming: false } : m)))
     } catch (e) {
       setError(e.message)
-      setMessages(next)
+      // 已有部分内容则保留消息；占位为空则移除（用户消息始终保留）
+      setMessages((prev) => {
+        const last = prev[prev.length - 1]
+        if (last && last.id === aid && last.content === '') return prev.slice(0, -1)
+        return prev
+      })
     } finally {
       setChatLoading(false)
     }
@@ -432,6 +472,71 @@ export default function Workbench({ settings, onOpenCards }) {
   function editProblem() {
     setLoaded(false)
     setError('')
+  }
+
+  /* ---------- 会话列表 + 导出（F-802/803） ---------- */
+  const [sessionList, setSessionList] = useState(loadSessionList)
+  const [savedTip, setSavedTip] = useState('')
+
+  function toast(msg) {
+    setSavedTip(msg)
+    setTimeout(() => setSavedTip(''), 2600)
+  }
+
+  // 当前会话存入列表（供"继续/删除"）
+  function saveToSessionList() {
+    if (!problemText.trim()) return toast('请先输入题目内容')
+    const entry = { id: Date.now(), title: title || '未命名题目', savedAt: Date.now(), problemText, overview, messages }
+    const list = [entry, ...loadSessionList().filter((s) => s.problemText !== problemText)]
+    saveSessionList(list)
+    setSessionList(list)
+    toast('已保存到历史会话')
+  }
+
+  function loadFromSessionList(item) {
+    setTitle(item.title || '未命名题目')
+    setProblemText(item.problemText)
+    setOverview(item.overview || '')
+    setMessages(item.messages || [])
+    setAttachments([])
+    setLoaded(true)
+    setError('')
+    toast(`已载入「${item.title}」`)
+  }
+
+  function deleteSession(id) {
+    const list = loadSessionList().filter((s) => s.id !== id)
+    saveSessionList(list)
+    setSessionList(list)
+  }
+
+  // 导出 Markdown（题目/解读/对话）
+  function exportMarkdown() {
+    if (!problemText.trim()) return toast('请先输入题目内容')
+    const md = [
+      `# ${title || '未命名题目'}`,
+      '',
+      '## 题目',
+      problemText,
+      overview ? '## AI 整体解读\n\n' + overview : '',
+      messages.length
+        ? '## 对话记录\n\n' +
+          messages
+            .map((m) => `### ${m.role === 'user' ? '我' : 'AI'}\n\n${m.content}`)
+            .join('\n\n')
+        : '',
+      '',
+      `> 由 MMG_VisualizeMM 导出 · ${new Date().toLocaleString()}`,
+    ]
+      .filter((s) => s !== '')
+      .join('\n\n')
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `${title || '会话'}.md`
+    a.click()
+    URL.revokeObjectURL(a.href)
+    toast('已导出 Markdown')
   }
 
   // 会话自动保存/恢复（刷新后不丢失题目/解读/对话/附件）
@@ -540,7 +645,28 @@ export default function Workbench({ settings, onOpenCards }) {
             </button>
           </div>
         </div>
+
+        {sessionList.length > 0 && (
+          <div className="card history-card">
+            <h4>📚 历史会话（{sessionList.length}）</h4>
+            <div className="session-list">
+              {sessionList.map((s) => (
+                <div key={s.id} className="session-item">
+                  <span className="session-title" title={s.problemText.slice(0, 120)}>
+                    {s.title}
+                  </span>
+                  <span className="hint">{new Date(s.savedAt).toLocaleString()}</span>
+                  <button className="btn btn-ghost btn-sm" onClick={() => loadFromSessionList(s)}>
+                    继续
+                  </button>
+                  <button className="attach-del" onClick={() => deleteSession(s.id)}>✕</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {error && <div className="alert error">{error}</div>}
+        {savedTip && <div className="alert success">{savedTip}</div>}
       </div>
     )
   }
@@ -571,6 +697,12 @@ export default function Workbench({ settings, onOpenCards }) {
         <h2 className="doc-title">{title}</h2>
         <div className="attach-row">
           <span className="attach">📄 题目文本（{problemText.length} 字）</span>
+          <button className="btn btn-ghost btn-sm" onClick={saveToSessionList}>
+            📁 保存会话
+          </button>
+          <button className="btn btn-ghost btn-sm" onClick={exportMarkdown}>
+            💾 导出 MD
+          </button>
           <button className="btn btn-ghost btn-sm" onClick={editProblem}>
             编辑题干
           </button>
@@ -579,6 +711,7 @@ export default function Workbench({ settings, onOpenCards }) {
           </button>
         </div>
       </div>
+      {savedTip && <div className="alert success">{savedTip}</div>}
 
       {error && <div className="alert error">{error}</div>}
 
@@ -620,6 +753,18 @@ export default function Workbench({ settings, onOpenCards }) {
                     </div>
                   ),
                 )}
+            </div>
+          )}
+
+          {selLive !== null && !selResult && (
+            <div className="card role-card">
+              <div className="role-head">
+                <span className="section-label">
+                  ✂️ 选中段落解读 <span className="hint">（流式输出中…）</span>
+                </span>
+              </div>
+              <MD text={selLive || '…'} className="role-body" />
+              <span className="stream-cursor" />
             </div>
           )}
 
@@ -700,30 +845,35 @@ export default function Workbench({ settings, onOpenCards }) {
                   ) : (
                     <div className="bubble guide">
                       <MD text={m.content} />
-                      <div className="msg-actions">
-                        <button
-                          className={`mini-btn ${feedback[m.id] === 'up' ? 'on' : ''}`}
-                          onClick={() => setFeedback((f) => ({ ...f, [m.id]: 'up' }))}
-                          title="有帮助"
-                        >
-                          👍
-                        </button>
-                        <button
-                          className={`mini-btn ${feedback[m.id] === 'down' ? 'on' : ''}`}
-                          onClick={() => setFeedback((f) => ({ ...f, [m.id]: 'down' }))}
-                          title="没帮助"
-                        >
-                          👎
-                        </button>
-                        <button className="mini-btn" onClick={regenerate} title="重新生成">
-                          ↻
-                        </button>
-                      </div>
+                      {m.streaming && <span className="stream-cursor" />}
+                      {!m.streaming && (
+                        <div className="msg-actions">
+                          <button
+                            className={`mini-btn ${feedback[m.id] === 'up' ? 'on' : ''}`}
+                            onClick={() => setFeedback((f) => ({ ...f, [m.id]: 'up' }))}
+                            title="有帮助"
+                          >
+                            👍
+                          </button>
+                          <button
+                            className={`mini-btn ${feedback[m.id] === 'down' ? 'on' : ''}`}
+                            onClick={() => setFeedback((f) => ({ ...f, [m.id]: 'down' }))}
+                            title="没帮助"
+                          >
+                            👎
+                          </button>
+                          <button className="mini-btn" onClick={regenerate} title="重新生成">
+                            ↻
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
               ))}
-              {chatLoading && <div className="msg ai"><div className="bubble guide typing">AI 思考中…</div></div>}
+              {chatLoading && !messages.some((m) => m.streaming) && (
+                <div className="msg ai"><div className="bubble guide typing">AI 思考中…</div></div>
+              )}
               {!chatLoading && <ConceptTrigger messages={messages} onOpenCards={onOpenCards} />}
             </div>
             <div className="input-bar">

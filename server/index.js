@@ -143,6 +143,76 @@ app.post('/api/chat', async (req, res) => {
   }
 })
 
+/* ---------- AI 流式中继（SSE，首字 <3s 验收项） ---------- */
+
+app.post('/api/chat/stream', async (req, res) => {
+  const { baseUrl, apiKey, model, messages } = req.body || {}
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return res.status(400).json({ ok: false, message: 'messages 不能为空' })
+  }
+  const base = normalizeBase(baseUrl)
+  if (!base || !apiKey || !model) {
+    return res.status(400).json({ ok: false, code: 'BAD_CONFIG', message: '缺少 baseUrl / apiKey / model' })
+  }
+  const controller = new AbortController()
+  // 客户端断开（而非请求体读完）时才中止上游请求
+  res.on('close', () => {
+    if (!res.writableEnded) controller.abort()
+  })
+  try {
+    const upstream = await fetch(`${base}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({ model, messages, max_tokens: 2048, temperature: 0.4, stream: true }),
+      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(120000)]),
+    })
+    if (!upstream.ok || !upstream.body) {
+      const text = await upstream.text().catch(() => '')
+      let json = null
+      try { json = text ? JSON.parse(text) : null } catch { /* ignore */ }
+      const err = new Error(formatError(upstream.status, json, text))
+      err.code = statusToCode(upstream.status)
+      throw err
+    }
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    })
+    const decoder = new TextDecoder()
+    let buffer = ''
+    for await (const chunk of upstream.body) {
+      buffer += decoder.decode(chunk, { stream: true })
+      let idx
+      while ((idx = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, idx).trim()
+        buffer = buffer.slice(idx + 1)
+        if (!line.startsWith('data:')) continue
+        const data = line.slice(5).trim()
+        if (!data || data === '[DONE]') continue
+        try {
+          const obj = JSON.parse(data)
+          const delta = obj.choices?.[0]?.delta?.content ?? ''
+          if (delta) res.write(`data: ${JSON.stringify({ delta })}\n\n`)
+        } catch { /* 忽略无法解析的 chunk */ }
+      }
+    }
+    res.write(`data: ${JSON.stringify({ done: true })}\n\n`)
+    res.end()
+  } catch (e) {
+    if (!res.headersSent) {
+      return res.status(400).json({ ok: false, code: e.code, message: e.message })
+    }
+    // 已开始流式输出：以 SSE error 事件告知前端（保留已展示的部分内容）
+    res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`)
+    res.end()
+  }
+})
+
 /* ---------- 文件解析 ---------- */
 
 const MAX_ROWS = 100 // 表格最多解析前 100 行

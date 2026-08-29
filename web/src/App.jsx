@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import Workbench from './pages/Workbench.jsx'
 import Settings from './pages/Settings.jsx'
 import Cards from './pages/Cards.jsx'
@@ -7,7 +7,16 @@ import { loadSettings } from './store.js'
 
 export default function App() {
   const [view, setView] = useState('workbench')
-  const [settings, setSettings] = useState(loadSettings)
+  const [settings, setSettings] = useState(null)
+
+  // 设置含解密（AES-GCM），需异步加载
+  useEffect(() => {
+    loadSettings().then(setSettings)
+  }, [])
+
+  if (!settings) {
+    return <div className="app booting"><div className="boot-hint">加载本地设置…</div></div>
+  }
 
   return (
     <div className="app">

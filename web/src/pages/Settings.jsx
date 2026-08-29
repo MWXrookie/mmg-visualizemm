@@ -23,7 +23,7 @@ export default function Settings({ settings, setSettings }) {
     }
   }
 
-  function onSave() {
+  async function onSave() {
     const s = {
       providerId,
       baseUrl: baseUrl.trim(),
@@ -32,8 +32,8 @@ export default function Settings({ settings, setSettings }) {
       guideMode,
     }
     setSettings(s)
-    saveSettings(s)
-    setResult({ ok: true, message: '已保存到本地浏览器（Key 不会上传服务器）' })
+    await saveSettings(s)
+    setResult({ ok: true, message: '已保存到本地浏览器（Key 已 AES-GCM 加密，不会上传服务器）' })
   }
 
   async function onTest() {

@@ -30,6 +30,54 @@ export function chat(settings, messages) {
   })
 }
 
+/**
+ * SSE 流式对话：边收边回调 onDelta(累计内容)，返回最终完整内容。
+ * 失败时抛出 Error（含 provider 的错误信息），调用方可降级为非流式重试。
+ */
+export async function streamChat(settings, messages, { onDelta } = {}) {
+  const res = await fetch('/api/chat/stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      baseUrl: settings.baseUrl,
+      apiKey: settings.apiKey,
+      model: settings.model,
+      messages,
+    }),
+  })
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}))
+    throw new Error(json.message || `请求失败（HTTP ${res.status}）`)
+  }
+  if (!res.body) throw new Error('浏览器不支持流式读取，已切换为整段输出')
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let acc = ''
+  let buffer = ''
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    let idx
+    while ((idx = buffer.indexOf('\n')) >= 0) {
+      const line = buffer.slice(0, idx).trim()
+      buffer = buffer.slice(idx + 1)
+      if (!line.startsWith('data:')) continue
+      const data = line.slice(5).trim()
+      if (!data) continue
+      let obj
+      try { obj = JSON.parse(data) } catch { continue }
+      if (obj.error) throw new Error(obj.error)
+      if (obj.delta) {
+        acc += obj.delta
+        onDelta?.(acc)
+      }
+      if (obj.done) return acc
+    }
+  }
+  return acc
+}
+
 /** 上传文件并解析（返回 {ok,type,headers,rows,text,name}） */
 export async function parseFile(file) {
   const b64 = await new Promise((resolve, reject) => {

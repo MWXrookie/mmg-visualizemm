@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { loadFavorites, saveFavorites } from '../store.js'
 
 /* ============ 数学工具 ============ */
 
@@ -54,7 +55,21 @@ function seededRandom(seed) {
 function DecisionTreeDemo() {
   const [depth, setDepth] = useState(3)
   const [revealed, setRevealed] = useState(1) // 已生长的层数
-  const playing = revealed < depth
+  const [playing, setPlaying] = useState(false)
+
+  // 逐层生长动画：每 900ms 生长一层，播完自动停止
+  useEffect(() => {
+    if (!playing) return
+    if (revealed >= depth) { setPlaying(false); return }
+    const t = setTimeout(() => setRevealed((r) => (r >= depth ? r : r + 1)), 900)
+    return () => clearTimeout(t)
+  }, [playing, revealed, depth])
+
+  function onPlayToggle() {
+    if (playing) return setPlaying(false)
+    setRevealed(1)
+    setPlaying(true)
+  }
 
   // 生成树节点：深度 d（根=0），叶子按索引分 A/B
   function buildNodes(d) {
@@ -89,13 +104,13 @@ function DecisionTreeDemo() {
       <div className="demo-controls">
         <label>
           最大深度
-          <input type="range" min="1" max="4" value={depth} onChange={(e) => { setDepth(+e.target.value); setRevealed(1) }} />
+          <input type="range" min="1" max="4" value={depth} onChange={(e) => { setDepth(+e.target.value); setRevealed(1); setPlaying(false) }} />
           <b>{depth}</b>
         </label>
-        <button className="btn btn-primary btn-sm" onClick={() => setRevealed(playing ? depth : 1)}>
-          {playing ? '▶ 播完' : '▶ 播放逐层生长'}
+        <button className="btn btn-primary btn-sm" onClick={onPlayToggle}>
+          {playing ? '⏸ 暂停' : revealed >= depth ? '↺ 重播' : '▶ 播放逐层生长'}
         </button>
-        {revealed > 1 && revealed < depth && (
+        {!playing && revealed > 1 && revealed < depth && (
           <button className="btn btn-ghost btn-sm" onClick={() => setRevealed(revealed + 1)}>下一步</button>
         )}
       </div>
@@ -223,8 +238,8 @@ function KMeansDemo() {
   const [iter, setIter] = useState(0)
   const W = 560, H = 300, pad = 30
 
-  // 预置 3 簇数据点（归一化 0-1）
-  const points = useMemo(() => {
+  // 预置 3 簇数据点（归一化 0-1）；状态化以支持点拖拽重聚类
+  function genPoints() {
     const rnd = seededRandom(7)
     const clusters = [
       { cx: 0.25, cy: 0.3 }, { cx: 0.7, cy: 0.65 }, { cx: 0.4, cy: 0.8 },
@@ -236,14 +251,40 @@ function KMeansDemo() {
       }
     })
     return pts
-  }, [])
+  }
+  const [pts, setPts] = useState(genPoints)
+  const svgRef = useRef(null)
+
+  // 拖拽数据点（Pointer 事件，换算到 viewBox 坐标）
+  function startDrag(i, e) {
+    e.preventDefault()
+    const svg = svgRef.current
+    if (!svg) return
+    const pt = svg.createSVGPoint()
+    const onMove = (ev) => {
+      pt.x = ev.clientX
+      pt.y = ev.clientY
+      const p = pt.matrixTransform(svg.getScreenCTM().inverse())
+      setPts((prev) =>
+        prev.map((q, qi) =>
+          qi === i ? { ...q, x: Math.min(1, Math.max(0, p.x)), y: Math.min(1, Math.max(0, p.y)) } : q,
+        ),
+      )
+    }
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+  }
 
   // K-means 迭代（同步计算）
   const state = useMemo(() => {
-    let centers = points.slice(0, Math.min(k, points.length)).map((p) => ({ x: p.x, y: p.y }))
-    let assign = new Array(points.length).fill(0)
+    let centers = pts.slice(0, Math.min(k, pts.length)).map((p) => ({ x: p.x, y: p.y }))
+    let assign = new Array(pts.length).fill(0)
     for (let it = 0; it < Math.max(0, iter); it++) {
-      assign = points.map((p) => {
+      assign = pts.map((p) => {
         let best = 0, bd = Infinity
         centers.forEach((c, ci) => {
           const d = (p.x - c.x) ** 2 + (p.y - c.y) ** 2
@@ -252,13 +293,13 @@ function KMeansDemo() {
         return best
       })
       const sums = centers.map(() => ({ x: 0, y: 0, n: 0 }))
-      points.forEach((p, i) => {
+      pts.forEach((p, i) => {
         sums[assign[i]].x += p.x; sums[assign[i]].y += p.y; sums[assign[i]].n++
       })
       centers = sums.map((s) => (s.n > 0 ? { x: s.x / s.n, y: s.y / s.n } : { x: 0.5, y: 0.5 }))
     }
     // 最后一次分配
-    assign = points.map((p) => {
+    assign = pts.map((p) => {
       let best = 0, bd = Infinity
       centers.forEach((c, ci) => {
         const d = (p.x - c.x) ** 2 + (p.y - c.y) ** 2
@@ -267,7 +308,7 @@ function KMeansDemo() {
       return best
     })
     return { centers, assign }
-  }, [points, k, iter])
+  }, [pts, k, iter])
 
   const colors = ['#2563eb', '#ea580c', '#16a34a', '#7c3aed', '#d97706']
   const sx = (x) => pad + x * (W - pad * 2)
@@ -288,9 +329,18 @@ function KMeansDemo() {
           <button className="btn btn-ghost btn-sm" onClick={() => setIter(0)}>重置</button>
         )}
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
-        {points.map((p, i) => (
-          <circle key={i} cx={sx(p.x)} cy={sy(p.y)} r="5" fill={colors[state.assign[i] % colors.length]} opacity="0.85" />
+      <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className="demo-svg">
+        {pts.map((p, i) => (
+          <circle
+            key={i}
+            cx={sx(p.x)}
+            cy={sy(p.y)}
+            r="5"
+            fill={colors[state.assign[i] % colors.length]}
+            opacity="0.85"
+            style={{ cursor: 'grab' }}
+            onPointerDown={(e) => startDrag(i, e)}
+          />
         ))}
         {state.centers.map((c, ci) => (
           <g key={ci}>
@@ -301,7 +351,7 @@ function KMeansDemo() {
         ))}
       </svg>
       <div className="demo-note">
-        点按颜色归到最近质心；点「迭代一步」观察质心如何移动、簇如何收敛。K 值不合适时点会"打架"。
+        点按颜色归到最近质心；点「迭代一步」观察质心如何移动、簇如何收敛。可<b>直接拖拽数据点</b>，聚类实时重算。K 值不合适时点会"打架"。
       </div>
     </div>
   )
@@ -341,7 +391,15 @@ const CARDS = [
 
 export default function Cards() {
   const [activeId, setActiveId] = useState(CARDS[0].id)
+  const [favs, setFavs] = useState(loadFavorites)
   const card = CARDS.find((c) => c.id === activeId)
+  const isFav = favs.includes(card.id)
+
+  function toggleFav() {
+    const next = isFav ? favs.filter((x) => x !== card.id) : [...favs, card.id]
+    setFavs(next)
+    saveFavorites(next)
+  }
 
   return (
     <div className="cards-page">
@@ -351,7 +409,7 @@ export default function Cards() {
       <div className="card-tabs">
         {CARDS.map((c) => (
           <button key={c.id} className={`card-tab ${c.id === activeId ? 'active' : ''}`} onClick={() => setActiveId(c.id)}>
-            {c.title}
+            {favs.includes(c.id) ? '⭐ ' : ''}{c.title}
             <span className="card-tag">{c.tag}</span>
           </button>
         ))}
@@ -371,7 +429,9 @@ export default function Cards() {
           {card.try}
         </div>
         <div className="kc-foot">
-          <button className="btn btn-ghost btn-sm">⭐ 收藏</button>
+          <button className={`btn btn-ghost btn-sm ${isFav ? 'fav-on' : ''}`} onClick={toggleFav}>
+            {isFav ? '⭐ 已收藏' : '☆ 收藏'}
+          </button>
           <span className="hint">相关概念：{card.related.join(' / ')}</span>
         </div>
       </div>

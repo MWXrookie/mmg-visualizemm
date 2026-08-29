@@ -21,6 +21,20 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* 无障碍：键盘焦点环可见 */
+:focus-visible { outline: 2px solid var(--color-ring); outline-offset: 2px; }
+
+/* 无障碍：reduced-motion 关闭动画与打字光标闪烁 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .quote-hl.flash { animation: none !important; }
+  .stream-cursor { animation: none !important; }
+}
+
 body {
   font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
   background: var(--color-background);
@@ -383,6 +397,31 @@ body {
 }
 
 /* ===== 响应式 ===== */
-@media (max-width: 1024px) {
+@media (max-width: 1280px) {
   .split { flex-direction: column; }
 }
+
+/* ===== 流式输出光标（打字机效果） ===== */
+.stream-cursor {
+  display: inline-block; width: 8px; height: 1.1em; vertical-align: text-bottom; margin-left: 2px;
+  background: var(--color-accent); border-radius: 1px;
+  animation: stream-blink 0.9s step-end infinite;
+}
+@keyframes stream-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+/* ===== 启动加载 ===== */
+.booting { align-items: center; justify-content: center; color: var(--color-muted-foreground); }
+
+/* ===== 历史会话列表 ===== */
+.history-card { margin-top: 16px; }
+.history-card h4 { margin-bottom: 8px; }
+.session-list { display: flex; flex-direction: column; gap: 6px; }
+.session-item {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+}
+.session-item:hover { background: var(--color-muted); }
+.session-title { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ===== 卡片收藏 ===== */
+.fav-on { color: #d97706 !important; border-color: #d97706 !important; }
