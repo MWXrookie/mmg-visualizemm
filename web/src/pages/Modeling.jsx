@@ -115,6 +115,11 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
     setBlocks((prev) => prev.filter((b) => b.id !== id))
   }
 
+  /** 更新某个步骤的思路说明（有序列表每步独立填写） */
+  function updateStep(blockId, si, desc) {
+    setBlocks((prev) => prev.map((blk) => (blk.id === blockId ? { ...blk, steps: (blk.steps || []).map((s, i) => (i === si ? { ...s, desc } : s)) } : blk)))
+  }
+
   function startEdit(b) {
     setEditingId(b.id)
     setDraft({ title: b.title, quote: b.quote, body: b.body || '', stepsText: b.steps.map((s) => `${s.label}：${s.desc}`).join('\n') })
@@ -314,6 +319,7 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
                 onCancelPreview={() => setPreview(null)}
                 onAiBody={() => aiWriteBody(b, setDraft)}
                 aiBusy={busy}
+                onUpdateStep={(si, desc) => updateStep(b.id, si, desc)}
               />
             ))}
             <button className="new-block" onClick={addBlock}>＋ 新建拆解块</button>
@@ -423,9 +429,11 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
   )
 }
 
-function Block({ b, index, open, preview, editing, draft, setDraft, onToggle, onEdit, onCommitEdit, onCancelEdit, onRelate, onRemove, onApply, onCancelPreview, onAiBody, aiBusy }) {
+function Block({ b, index, open, preview, editing, draft, setDraft, onToggle, onEdit, onCommitEdit, onCancelEdit, onRelate, onRemove, onApply, onCancelPreview, onAiBody, aiBusy, onUpdateStep }) {
   // 步骤展开状态：默认全部展开（步骤+思路相结合），点击可收起；新增步骤自动展开
   const [openSteps, setOpenSteps] = useState(() => new Set(b.steps.map((_, i) => i)))
+  const [editStep, setEditStep] = useState(null) // 正在填写思路的步骤索引
+  const [stepDraft, setStepDraft] = useState('') // 步骤思路草稿
   useEffect(() => {
     setOpenSteps((prev) => {
       const next = new Set(prev)
@@ -439,6 +447,15 @@ function Block({ b, index, open, preview, editing, draft, setDraft, onToggle, on
       next.has(i) ? next.delete(i) : next.add(i)
       return next
     })
+  }
+  function startEditStep(i, desc) {
+    setEditStep(i)
+    setStepDraft(desc || '')
+  }
+  function saveStep(i) {
+    onUpdateStep(i, stepDraft.trim())
+    setEditStep(null)
+    setStepDraft('')
   }
   return (
     <article className={`decomp-block ${open ? 'open' : ''}`}>
@@ -471,8 +488,8 @@ function Block({ b, index, open, preview, editing, draft, setDraft, onToggle, on
                     {aiBusy ? <><IconSparkles size={13} /> AI 生成中…</> : <><IconSparkles size={13} /> AI 帮我写思路</>}
                   </button>
                 </div>
-                <div className="bk-label">步骤（有序列表，每步展开显示思路说明）</div>
-                <textarea className="bk-textarea" value={draft.stepsText} onChange={(e) => setDraft({ ...draft, stepsText: e.target.value })} placeholder="每行一个步骤：步骤名：说明（留空则不显示步骤列表）" rows={3} />
+                <div className="bk-label">步骤标题（有序列表，每步展开后可分别填写思路）</div>
+                <textarea className="bk-textarea" value={draft.stepsText} onChange={(e) => setDraft({ ...draft, stepsText: e.target.value })} placeholder="每行一个步骤标题（如：数据预处理 / 建模 / 验证）。每步的思路在下方展开区分别填写。" rows={3} />
                 <div className="bk-edit-actions">
                   <button className="btn btn-ghost btn-sm" onClick={onCancelEdit}>取消</button>
                   <button className="btn btn-primary btn-sm" onClick={onCommitEdit}>保存</button>
@@ -507,7 +524,29 @@ function Block({ b, index, open, preview, editing, draft, setDraft, onToggle, on
                             </button>
                             {sOpen && (
                               <div className="step-body">
-                                {s.desc ? <MD text={s.desc} /> : <span className="hint">（此步骤暂无思路说明）</span>}
+                                {editStep === si ? (
+                                  <>
+                                    <textarea
+                                      className="step-edit"
+                                      value={stepDraft}
+                                      onChange={(e) => setStepDraft(e.target.value)}
+                                      placeholder={'在此填写该步骤的思路（支持 Markdown）：\n**做法**：…\n- 要点一\n- 要点二\n> 引用/假设…'}
+                                      rows={4}
+                                      autoFocus
+                                    />
+                                    <div className="step-edit-actions">
+                                      <button className="btn btn-ghost btn-sm" onClick={() => setEditStep(null)}>取消</button>
+                                      <button className="btn btn-primary btn-sm" onClick={() => saveStep(si)}>保存思路</button>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <>
+                                    {s.desc ? <MD text={s.desc} /> : <span className="hint">（此步骤暂无思路，点击「填写思路」补充）</span>}
+                                    <button className="step-edit-btn" onClick={() => startEditStep(si, s.desc)}>
+                                      <IconEdit size={12} /> {s.desc ? '编辑思路' : '填写思路'}
+                                    </button>
+                                  </>
+                                )}
                               </div>
                             )}
                           </li>

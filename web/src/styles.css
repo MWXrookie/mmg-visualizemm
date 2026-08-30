@@ -647,3 +647,10 @@ h1, h2, h3, h4 { font-weight: 600; letter-spacing: .01em; }
 .step-chev.open { transform: rotate(180deg); }
 .step-body { padding: 2px 14px 12px 46px; font-size: 13px; color: var(--fg); }
 .step-body .markdown-body { font-size: 13px; line-height: 1.7; }
+
+/* 步骤思路编辑区（每步独立填写） */
+.step-edit { width: 100%; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); padding: 8px 10px; font-size: 13px; line-height: 1.6; color: inherit; resize: vertical; outline: none; font-family: inherit; transition: border-color .15s; }
+.step-edit:focus { border-color: var(--primary); }
+.step-edit-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+.step-edit-btn { display: inline-flex; align-items: center; gap: 4px; margin-top: 8px; border: 1px dashed var(--border); background: none; color: var(--primary); border-radius: 6px; padding: 3px 10px; font-size: 11.5px; cursor: pointer; }
+.step-edit-btn:hover { background: var(--surface-2); border-color: var(--primary); }
