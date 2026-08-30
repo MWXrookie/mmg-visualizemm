@@ -435,6 +435,176 @@ function LinearProgrammingDemo() {
   )
 }
 
+/* ============ 整数规划演示（可行域网格 + 整数解） ============ */
+
+function IntegerProgrammingDemo() {
+  const [z, setZ] = useState(17)
+  const W = 560, H = 300, pad = 30
+  const xMax = 8, yMax = 8
+  const sx = (x) => pad + (x / xMax) * (W - pad * 2)
+  const sy = (y) => H - pad - (y / yMax) * (H - pad * 2)
+  // 约束：x≥0, y≥0, x+y≤8, 2x+y≤10；目标 max 3x+2y
+  const poly = [[0, 0], [5, 0], [2, 6], [0, 8]]
+  // 可行整数点
+  const intPts = []
+  for (let x = 0; x <= 8; x++) for (let y = 0; y <= 8; y++) if (x + y <= 8 && 2 * x + y <= 10) intPts.push([x, y])
+  // 最优整数解
+  let best = null, bestV = -1
+  for (const [x, y] of intPts) { const v = 3 * x + 2 * y; if (v > bestV) { bestV = v; best = [x, y] } }
+  // 等值线 3x+2y=z
+  const linePts = (() => {
+    const pts = []
+    const x0 = z / 3
+    if (x0 >= 0 && x0 <= xMax) pts.push([x0, 0])
+    const y0 = z / 2
+    if (y0 >= 0 && y0 <= yMax) pts.push([0, y0])
+    const yX = (z - 3 * xMax) / 2
+    if (yX >= 0 && yX <= yMax) pts.push([xMax, yX])
+    const xY = (z - 2 * yMax) / 3
+    if (xY >= 0 && xY <= xMax) pts.push([xY, yMax])
+    return pts
+  })()
+  return (
+    <div className="demo">
+      <div className="demo-controls">
+        <label>
+          目标值 z（3x+2y）
+          <input type="range" min="0" max={bestV} step="1" value={z} onChange={(e) => setZ(+e.target.value)} />
+          <b>{z}</b>
+        </label>
+        {z === bestV && <span className="kc-tag">最优整数解 ({best[0]}, {best[1]}) → z={bestV}</span>}
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
+        {[0, 2, 4, 6, 8].map((g) => (
+          <g key={g}>
+            <line x1={sx(g)} y1={pad} x2={sx(g)} y2={H - pad} stroke="#f1f5f9" />
+            <line x1={pad} y1={sy(g)} x2={W - pad} y2={sy(g)} stroke="#f1f5f9" />
+          </g>
+        ))}
+        <polygon points={poly.map(([x, y]) => `${sx(x)},${sy(y)}`).join(' ')} fill="rgba(37, 99, 235, 0.10)" stroke="#2563eb" strokeWidth="1.5" />
+        {/* 全部整数网格点（可行=蓝，不可行=灰） */}
+        {Array.from({ length: 81 }, (_, i) => [i % 9, Math.floor(i / 9)]).map(([x, y]) => {
+          const ok = x + y <= 8 && 2 * x + y <= 10
+          return <circle key={`${x}-${y}`} cx={sx(x)} cy={sy(y)} r="3" fill={ok ? '#3b82f6' : '#cbd5e1'} opacity={ok ? 0.9 : 0.4} />
+        })}
+        {/* 等值线 */}
+        {linePts.length === 2 && (
+          <line x1={sx(linePts[0][0])} y1={sy(linePts[0][1])} x2={sx(linePts[1][0])} y2={sy(linePts[1][1])} stroke="#ea580c" strokeWidth="2.5" />
+        )}
+        {/* 最优整数解 */}
+        <circle cx={sx(best[0])} cy={sy(best[1])} r="9" fill="none" stroke="#ea580c" strokeWidth="2.5" />
+        <circle cx={sx(best[0])} cy={sy(best[1])} r="3.5" fill="#ea580c" />
+        <line x1={pad} y1={sy(0)} x2={W - pad} y2={sy(0)} stroke="#cbd5e1" strokeWidth="1" />
+        <line x1={sx(0)} y1={pad} x2={sx(0)} y2={H - pad} stroke="#cbd5e1" strokeWidth="1" />
+      </svg>
+      <div className="demo-note">
+        蓝色圆点是**可行整数点**（决策变量只能取整数）。线性规划最优在顶点，但整数规划只能在整数点里选——橙圈是最优整数解。现实中很多问题"数量"必须是整数（车辆、人员、批次数）。
+      </div>
+    </div>
+  )
+}
+
+/* ============ 随机森林演示（多树投票） ============ */
+
+function RandomForestDemo() {
+  const [idx, setIdx] = useState(0)
+  const samples = [
+    { a: 3, b: 1, label: '样本①' },
+    { a: 5, b: 4, label: '样本②' },
+    { a: 1, b: 5, label: '样本③' },
+    { a: 6, b: 2, label: '样本④' },
+  ]
+  const s = samples[idx % samples.length]
+  const t1 = s.a > 4 ? 'A' : 'B' // 树1：只看特征 a
+  const t2 = s.b > 3 ? 'A' : 'B' // 树2：只看特征 b
+  const t3 = s.a + s.b > 6 ? 'A' : 'B' // 树3：看组合
+  const votes = [t1, t2, t3]
+  const result = votes.filter((v) => v === 'A').length >= 2 ? 'A' : 'B'
+  const treePos = [[70, 60], [280, 60], [490, 60]]
+  return (
+    <div className="demo">
+      <div className="demo-controls">
+        <button className="btn btn-ghost btn-sm" onClick={() => setIdx(idx + 1)}>换一个样本</button>
+        <span className="hint">当前：{s.label}（a={s.a}，b={s.b}）</span>
+      </div>
+      <svg viewBox="0 0 560 260" className="demo-svg">
+        {/* 三棵树 */}
+        {treePos.map(([cx, cy], i) => {
+          const v = votes[i]
+          return (
+            <g key={i}>
+              <circle cx={cx} cy={cy + 46} r="26" fill="#0f172a" opacity="0.85" />
+              <circle cx={cx} cy={cy + 8} r="30" fill={v === 'A' ? '#2563eb' : '#16a34a'} opacity="0.55" />
+              <rect x={cx - 8} y={cy + 66} width="16" height="26" rx="3" fill="#8b5a2b" />
+              <text x={cx} y={cy + 118} textAnchor="middle" fontSize="13" fontWeight="700" fill={v === 'A' ? '#2563eb' : '#16a34a'}>判为 {v}</text>
+              <text x={cx} y={cy + 136} textAnchor="middle" fontSize="10.5" fill="#94a3b8">树{i + 1}：{i === 0 ? '看 a' : i === 1 ? '看 b' : '看 a+b'}</text>
+            </g>
+          )
+        })}
+        {/* 投票箭头 */}
+        {treePos.map(([cx], i) => (
+          <line key={`l${i}`} x1={cx} y1={158} x2={cx} y2={190} stroke="#cbd5e1" strokeWidth="1.5" />
+        ))}
+        <rect x="195" y="196" width="170" height="44" rx="10" fill={result === 'A' ? '#2563eb' : '#16a34a'} />
+        <text x="280" y="224" textAnchor="middle" fontSize="14" fontWeight="700" fill="#fff">
+          A {votes.filter((v) => v === 'A').length} 票 · B {votes.filter((v) => v === 'B').length} 票 → {result}
+        </text>
+      </svg>
+      <div className="demo-note">
+        3 棵树用不同特征判断，结果可能不一致——最后**少数服从多数**投票。单棵树容易出错（过拟合），但很多棵树"商量"后整体更稳，这就是随机森林的核心思想。
+      </div>
+    </div>
+  )
+}
+
+/* ============ 主成分分析演示（降维投影） ============ */
+
+function PCADemo() {
+  const [t, setT] = useState(0)
+  const W = 560, H = 300, pad = 35
+  const cx = W / 2, cy = H / 2
+  const angle = Math.PI / 6
+  // 沿主轴方向的椭圆散点（固定种子）
+  const pts = useMemo(() => {
+    const rnd = seededRandom(11)
+    return Array.from({ length: 40 }, () => {
+      const along = (rnd() - 0.5) * 2 * 130
+      const perp = (rnd() - 0.5) * 2 * 40
+      const x = along * Math.cos(angle) - perp * Math.sin(angle)
+      const y = along * Math.sin(angle) + perp * Math.cos(angle)
+      return { x, y }
+    })
+  }, [])
+  const sx = (x) => cx + x
+  const sy = (y) => cy - y
+  return (
+    <div className="demo">
+      <div className="demo-controls">
+        <label>
+          沿主成分方向投影
+          <input type="range" min="-130" max="130" value={t} onChange={(e) => setT(+e.target.value)} />
+          <b>{t}</b>
+        </label>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
+        {/* 主轴（第一主成分方向） */}
+        <line x1={sx(-140 * Math.cos(angle))} y1={sy(-140 * Math.sin(angle))} x2={sx(140 * Math.cos(angle))} y2={sy(140 * Math.sin(angle))} stroke="#2563eb" strokeWidth="2" strokeDasharray="6 4" />
+        {/* 散点 */}
+        {pts.map((p, i) => <circle key={i} cx={sx(p.x)} cy={sy(p.y)} r="4" fill="#2563eb" opacity="0.55" />)}
+        {/* 投影点（在主轴上的位置 t） */}
+        <circle cx={sx(t * Math.cos(angle))} cy={sy(t * Math.sin(angle))} r="7" fill="#ea580c" />
+        <text x={sx(t * Math.cos(angle)) + 12} y={sy(t * Math.sin(angle)) - 8} fontSize="12" fill="#ea580c" fontWeight="600">投影位置</text>
+        {/* 坐标轴 */}
+        <line x1={pad} y1={cy} x2={W - pad} y2={cy} stroke="#cbd5e1" strokeWidth="1" />
+        <line x1={cx} y1={pad} x2={cx} y2={H - pad} stroke="#cbd5e1" strokeWidth="1" />
+      </svg>
+      <div className="demo-note">
+        数据大致沿一个方向（蓝色虚线 = 第一主成分）伸展——它保留了最多"差异信息"。把每个点投影到这条线上，2 维变成 1 维，信息损失最少。这就是 PCA 降维：**找保留信息最多的方向**。
+      </div>
+    </div>
+  )
+}
+
 /* ============ 卡片注册表 ============ */
 
 const CARDS = [
@@ -474,7 +644,37 @@ const CARDS = [
     try: '拖动目标值滑块，观察等值线离开可行域的瞬间——为什么最优解总在顶点？',
     related: ['整数规划', '单纯形法'],
   },
+  {
+    id: 'integer-programming',
+    title: '整数规划',
+    tag: '优化 / 整数约束',
+    concept: '线性规划 + "决策变量必须是整数"的约束——车辆、人员、批次数这类不能取小数的数量问题，必须用整数规划。',
+    demo: IntegerProgrammingDemo,
+    try: '对比连续最优（顶点）和整数最优（圆点）的位置——为什么它们常常不一样？',
+    related: ['线性规划', '分支定界法'],
+  },
+  {
+    id: 'random-forest',
+    title: '随机森林',
+    tag: '集成学习 / 分类',
+    concept: '种很多棵"意见不同"的决策树，让它们各自判断后投票——单棵树容易犯错，但很多树商量着来就稳得多。',
+    demo: RandomForestDemo,
+    try: '换几个样本观察：为什么单棵树会判错，投票却能纠正？',
+    related: ['决策树', 'Bagging'],
+  },
+  {
+    id: 'pca',
+    title: '主成分分析（PCA）',
+    tag: '降维 / 特征提取',
+    concept: '数据通常沿某些方向变化最大——PCA 找出这些"主方向"，把高维数据投影到低维，保留最多的差异信息。',
+    demo: PCADemo,
+    try: '拖动投影位置，想想：为什么沿蓝色主轴投影信息损失最少？',
+    related: ['特征值', '降维'],
+  },
 ]
+
+/** 全部卡片 id（知识卡片面板遍历用） */
+export const ALL_CARD_IDS = CARDS.map((c) => c.id)
 
 /**
  * 内嵌知识卡片（读题附属）：AI 输出提到建模概念时，就地出现在内容下方。
@@ -546,16 +746,29 @@ export const CONCEPT_KEYWORDS = [
   { keyword: 'kmeans', cardId: 'kmeans' },
   { keyword: '聚类', cardId: 'kmeans' },
   { keyword: '线性规划', cardId: 'linear-programming' },
-  { keyword: '整数规划', cardId: 'linear-programming' },
+  { keyword: '整数规划', cardId: 'integer-programming' },
+  { keyword: '整数解', cardId: 'integer-programming' },
+  { keyword: '随机森林', cardId: 'random-forest' },
+  { keyword: '集成学习', cardId: 'random-forest' },
+  { keyword: 'bagging', cardId: 'random-forest' },
+  { keyword: '主成分', cardId: 'pca' },
+  { keyword: 'pca', cardId: 'pca' },
+  { keyword: '降维', cardId: 'pca' },
   { keyword: '目标规划', cardId: 'linear-programming' },
 ]
 
-/** 在文本中检测命中的概念（返回首个匹配的词条） */
-export function findConcept(text) {
-  if (!text) return null
+/** 在文本中检测命中的所有概念（按词表顺序去重，返回 cardId 数组） */
+export function findConcepts(text) {
+  if (!text) return []
   const lower = text.toLowerCase()
+  const found = []
   for (const c of CONCEPT_KEYWORDS) {
-    if (lower.includes(c.keyword.toLowerCase())) return c
+    if (lower.includes(c.keyword.toLowerCase()) && !found.includes(c.cardId)) found.push(c.cardId)
   }
-  return null
+  return found
+}
+
+/** 兼容旧用法：返回第一个命中卡片 id */
+export function findConcept(text) {
+  return findConcepts(text)[0] || null
 }

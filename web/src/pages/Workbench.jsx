@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { marked } from 'marked'
 import { streamChat, parseFile, attachSummary } from '../api.js'
-import { KnowledgeCard, findConcept } from './Cards.jsx'
+import { KnowledgeCard, findConcepts, ALL_CARD_IDS } from './Cards.jsx'
 import MD, { sanitize } from '../components/MD.jsx'
 import AttachmentList from '../components/AttachmentList.jsx'
 import ResizeHandle from '../components/ResizeHandle.jsx'
@@ -183,7 +183,7 @@ export default function Workbench({ settings, ws, patchWs, onExpandSidebar, onNe
     setBusy(false)
   }
 
-  const overviewHit = overview ? findConcept(overview) : null
+  const overviewHits = overview ? findConcepts(overview) : []
 
   return (
     <div className="ws" style={{ '--panel-w': panelW }}>
@@ -290,7 +290,7 @@ export default function Workbench({ settings, ws, patchWs, onExpandSidebar, onNe
             <div className="card" style={{ padding: 14, marginBottom: 12 }}>
               <div className="section-label" style={{ marginBottom: 8 }}><IconBook size={14} /> 整体解读</div>
               <MD text={overview} />
-              {overviewHit && <KnowledgeCard cardId={overviewHit.cardId} />}
+              {overviewHits.map((cid) => <KnowledgeCard key={cid} cardId={cid} />)}
             </div>
           )}
           {bookmark === '精读' && (
@@ -340,7 +340,7 @@ export default function Workbench({ settings, ws, patchWs, onExpandSidebar, onNe
           )}
           {bookmark === '卡片' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {['decision-tree', 'linear-regression', 'kmeans', 'linear-programming'].map((id) => (
+              {ALL_CARD_IDS.map((id) => (
                 <KnowledgeCard key={id} cardId={id} />
               ))}
             </div>

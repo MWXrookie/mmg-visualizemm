@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { marked } from 'marked'
 import { streamChat, attachSummary } from '../api.js'
-import { KnowledgeCard } from './Cards.jsx'
+import { KnowledgeCard, findConcepts, ALL_CARD_IDS } from './Cards.jsx'
 import MD, { sanitize } from '../components/MD.jsx'
 import AttachmentList from '../components/AttachmentList.jsx'
 import ResizeHandle from '../components/ResizeHandle.jsx'
@@ -353,6 +353,7 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
                     {/* AI 回复用 MD 渲染（Markdown 生效，sanitize 防 XSS）；用户消息保持纯文本 */}
                     {m.role === 'ai' ? <MD text={m.text} /> : <div className="t">{m.text}</div>}
                     {m.preview && <div className="chip-ref">已生成本地修改预览</div>}
+                    {m.role === 'ai' && <ConceptCards text={m.text} />}
                     <div className="msg-time">{m.time}</div>
                   </div>
                 </div>
@@ -397,7 +398,7 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
                 <input value={kcQuery} onChange={(e) => setKcQuery(e.target.value)} placeholder="搜索知识卡片…" />
               </div>
               <div className="kp-list">
-                {['decision-tree', 'linear-regression', 'kmeans', 'linear-programming'].map((id) => (
+                {ALL_CARD_IDS.map((id) => (
                   <KnowledgeCard key={id} cardId={id} defaultOpen={false} />
                 ))}
               </div>
@@ -426,6 +427,17 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+/** AI 消息中命中建模概念时，就地内嵌知识卡片（联动） */
+function ConceptCards({ text }) {
+  const hits = findConcepts(text || '')
+  if (!hits.length) return null
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+      {hits.map((id) => <KnowledgeCard key={id} cardId={id} />)}
     </div>
   )
 }
