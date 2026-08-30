@@ -507,7 +507,7 @@ app.get('/api/health', (_req, res) => {
 /* ---------- 知识库（RAG） ---------- */
 import { ensureKnowledgeBase, searchKnowledge, knowledgeStats } from './knowledge.js'
 
-// 知识库状态：论文数 / 分块数 / embedding 来源
+// 知识库状态：论文数 / 分块数（按类型）/ embedding 来源
 app.get('/api/knowledge/stats', async (_req, res) => {
   try {
     const provider = { baseUrl: String(_req.query.baseUrl || ''), apiKey: String(_req.query.apiKey || ''), embedModel: String(_req.query.embedModel || '') }

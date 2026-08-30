@@ -9,3 +9,4 @@ data/
 
 # OpenDesign 运行时缓存
 **/.od-skills/
+server/.env.local
