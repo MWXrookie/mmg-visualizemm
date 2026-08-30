@@ -218,6 +218,8 @@ body.resizing * { cursor: col-resize !important; }
 .concept-toggle { margin-left: auto; color: var(--muted); font-size: 12px; }
 .concept-body { padding: 4px 12px 12px; border-top: 1px solid var(--border); }
 .concept-body .kc-concept { margin: 10px 0; font-size: 14px; color: var(--muted); }
+.kc-note { margin: 8px 0; font-size: 13px; color: var(--fg); background: rgba(59, 130, 246, .08); border-left: 3px solid var(--primary); border-radius: var(--radius-sm); padding: 8px 10px; line-height: 1.7; }
+.kc-note b { color: var(--primary); }
 /* 知识卡片演示区（demo 组件通用样式） */
 .kc-demo { margin: 10px 0; }
 .demo { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; }

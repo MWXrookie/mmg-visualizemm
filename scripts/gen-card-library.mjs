@@ -34,6 +34,7 @@ for (const raw of blocks) {
     title: grab('title'),
     tag: grab('tag'),
     concept: grab('concept'),
+    note: grab('note'),
     try: grab('try'),
     freq: grab('freq'),
     src: grab('src'),
@@ -63,6 +64,7 @@ for (const c of cards) {
   lines.push(`### 卡片：${c.title}`)
   lines.push(`- 类型：${c.tag}`)
   lines.push(`- 概念：${c.concept}`)
+  if (c.note) lines.push(`- 小白批注：${c.note}`)
   if (c.try) lines.push(`- 试一试：${c.try}`)
   if (c.freq) lines.push(`- 频率：${c.freq}`)
   if (c.src) lines.push(`- 来源：${c.src}`)
