@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { getPyodide, runPython, onPyodideState } from '../lib/pyodide.js'
-import { streamChat, attachSummary } from '../api.js'
+import { streamChat, attachSummary, retrieveKnowledge, formatKnowledgeContext } from '../api.js'
 import { IconMenu, IconDownload, IconArrowLeft, IconSparkles, IconPlay, IconGear, IconChart, IconTable, IconFile, IconLightbulb, IconZoomIn, IconBookmark, IconClip, IconInfo, IconClock } from '../components/Icons.jsx'
 import { SANITY_CHECK, EXPERT_CORE } from '../lib/modelingExpert.js'
 
@@ -351,8 +351,11 @@ export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
     setGenPreview({ title: '✨ AI 生成代码中…（实时输出）', content: '' })
     try {
       let content = ''
+      // RAG：检索与建模环节相关的获奖论文方法知识，注入生成提示
+      const hits = await retrieveKnowledge(blocksDesc || genText, settings, 3)
+      const kbContext = formatKnowledgeContext(hits)
       await streamChat(settings, [
-        { role: 'system', content: GEN_SYSTEM },
+        { role: 'system', content: GEN_SYSTEM + kbContext },
         { role: 'user', content: user },
       ], { onDelta: (t) => { content = t; setGenPreview((p) => (p ? { ...p, content: t } : p)) } })
       const c = extractCode(content)

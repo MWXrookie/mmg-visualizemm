@@ -162,3 +162,46 @@ export async function fetchAttachmentJson(wsId, idx) {
   if (!res.ok || json.ok === false) throw new Error(json.message || '附件数据获取失败')
   return json
 }
+
+/* ================= 知识库（RAG） ================= */
+
+/**
+ * 从本地获奖论文知识库检索与 query 相关的片段。
+ * 用用户配置的 provider 做 embedding（后端自动降级本地哈希向量）。
+ * 返回 [{file, section, text, score}]；失败时返回 []（不阻塞主流程）。
+ */
+export async function retrieveKnowledge(query, settings, topK = 3) {
+  if (!query || !query.trim()) return []
+  try {
+    const res = await fetch('/api/knowledge/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: query.trim().slice(0, 200),
+        baseUrl: settings.baseUrl,
+        apiKey: settings.apiKey,
+        embedModel: settings.embedModel || '',
+        topK,
+      }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok || json.ok === false) return []
+    return json.hits || []
+  } catch {
+    return [] // 知识库不可用时静默降级，不打断主流程
+  }
+}
+
+/** 把检索到的知识片段格式化为注入 system prompt 的上下文块 */
+export function formatKnowledgeContext(hits, maxChars = 2200) {
+  if (!hits || hits.length === 0) return ''
+  let out = '\n\n【参考：本地获奖论文知识库（检索命中，可在回答中引用，注明论文来源）】\n'
+  let used = 0
+  for (const h of hits) {
+    const block = `\n— 来自《${h.file}》${h.section ? `（${h.section}）` : ''} —\n${h.text}\n`
+    if (used + block.length > maxChars) break
+    out += block
+    used += block.length
+  }
+  return out + '\n【知识库参考结束】\n'
+}

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { marked } from 'marked'
-import { streamChat, parseFile, attachSummary } from '../api.js'
+import { streamChat, parseFile, attachSummary, retrieveKnowledge, formatKnowledgeContext } from '../api.js'
 import { KnowledgeCard, findConcepts, ALL_CARD_IDS } from './Cards.jsx'
 import MD, { sanitize } from '../components/MD.jsx'
 import AttachmentList from '../components/AttachmentList.jsx'
@@ -135,8 +135,11 @@ export default function Workbench({ settings, ws, patchWs, onExpandSidebar, onNe
     const user = summary ? `${problemText}\n\n【数据附件】\n${summary}\n\n请结合附件数据解读题目，并说明每个表格在题目中的角色。` : problemText
     let full = ''
     try {
+      // RAG：从本地获奖论文库检索与题目最相关的方法知识，注入 system prompt
+      const hits = await retrieveKnowledge(problemText, settings, 3)
+      const kbContext = formatKnowledgeContext(hits)
       await streamChat(settings, [
-        { role: 'system', content: OVERVIEW_SYSTEM },
+        { role: 'system', content: OVERVIEW_SYSTEM + kbContext },
         { role: 'user', content: user },
       ], { onDelta: (t) => { full = t; setStreamBuf(t) } })
       patchWs({ overview: full })

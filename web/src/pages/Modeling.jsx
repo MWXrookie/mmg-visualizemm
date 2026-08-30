@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { marked } from 'marked'
-import { streamChat, attachSummary } from '../api.js'
+import { streamChat, attachSummary, retrieveKnowledge, formatKnowledgeContext } from '../api.js'
 import { KnowledgeCard, findConcepts, ALL_CARD_IDS } from './Cards.jsx'
 import MD, { sanitize } from '../components/MD.jsx'
 import AttachmentList from '../components/AttachmentList.jsx'
@@ -153,8 +153,11 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
     const summary = attachSummary(attachments)
     try {
       let content = ''
+      // RAG：检索与用户指令相关的获奖论文知识，注入 system prompt
+      const hits = await retrieveKnowledge(`${text}\n${blocksDesc}`, settings, 3)
+      const kbContext = formatKnowledgeContext(hits)
       await streamChat(settings, [
-        { role: 'system', content: MODIFY_SYSTEM },
+        { role: 'system', content: MODIFY_SYSTEM + kbContext },
         { role: 'user', content: `当前拆解块：\n${blocksDesc || '（暂无拆解块）'}\n\n${summary ? `数据附件摘要：\n${summary}\n\n` : ''}用户指令：「${text}」` },
       ], { onDelta: (t) => { content = t; setStreaming(t) } })
       const parsed = extractJson(content)

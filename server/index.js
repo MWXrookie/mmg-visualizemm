@@ -504,6 +504,33 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true, name: 'mmg-visualizemm', time: new Date().toISOString() })
 })
 
+/* ---------- 知识库（RAG） ---------- */
+import { ensureKnowledgeBase, searchKnowledge, knowledgeStats } from './knowledge.js'
+
+// 知识库状态：论文数 / 分块数 / embedding 来源
+app.get('/api/knowledge/stats', async (_req, res) => {
+  try {
+    const provider = { baseUrl: String(_req.query.baseUrl || ''), apiKey: String(_req.query.apiKey || ''), embedModel: String(_req.query.embedModel || '') }
+    const kb = await ensureKnowledgeBase(provider)
+    res.json({ ok: true, ...knowledgeStats(), vecsReady: !!kb && kb.vecs.length === kb.chunks.length })
+  } catch (e) {
+    res.status(500).json({ ok: false, message: `知识库状态获取失败：${e.message}` })
+  }
+})
+
+// 检索：POST /api/knowledge/search { query, baseUrl, apiKey, embedModel, topK }
+app.post('/api/knowledge/search', async (req, res) => {
+  try {
+    const { query, baseUrl, apiKey, embedModel, topK } = req.body || {}
+    if (!query || !query.trim()) return res.status(400).json({ ok: false, message: '缺少检索词 query' })
+    const provider = { baseUrl: String(baseUrl || ''), apiKey: String(apiKey || ''), embedModel: String(embedModel || '') }
+    const hits = await searchKnowledge(query.trim(), provider, Math.min(Number(topK) || 4, 8))
+    res.json({ ok: true, hits, count: hits.length })
+  } catch (e) {
+    res.status(500).json({ ok: false, message: `检索失败：${e.message}` })
+  }
+})
+
 /* ---------- 静态托管 ---------- */
 const distDir = path.join(__dirname, '..', 'web', 'dist')
 if (fs.existsSync(distDir)) {
