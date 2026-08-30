@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { PROVIDERS, applyProvider, saveSettings } from '../store.js'
 import { testKey } from '../api.js'
+import { IconLightbulb } from '../components/Icons.jsx'
 
 export default function Settings({ settings, setSettings }) {
   const [providerId, setProviderId] = useState(settings.providerId)
@@ -136,7 +137,7 @@ export default function Settings({ settings, setSettings }) {
           <li>进入「API-KEY 管理」，创建并复制一个 Key（形如 sk-…）</li>
           <li>回到本页，选服务商 → 粘贴 Key → 点「测试连接」变绿即成功</li>
         </ol>
-        <p className="hint">💡 国内平台（通义/DeepSeek）充值 10 元即可用很久，无需海外支付。</p>
+        <p className="hint" style={{ display: 'flex', alignItems: 'center', gap: 5 }}><IconLightbulb size={13} /> 国内平台（通义/DeepSeek）充值 10 元即可用很久，无需海外支付。</p>
       </div>
     </div>
   )

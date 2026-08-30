@@ -110,7 +110,8 @@ except Exception as e:
   // 尝试回传 /plot.png（代码中 plt.savefig('/plot.png') 后）
   let img = null
   try {
-    const exists = String(py.runPython('import os; print(os.path.exists("/plot.png"))')).trim()
+    // 注意：必须用 str() 返回字符串而非 print()（print 返回 None，String(None)='None' 恒不等于 'True'，图永远拿不到）
+    const exists = String(py.runPython('import os; str(os.path.exists("/plot.png"))')).trim()
     if (exists === 'True') {
       const bytes = py.FS.readFile('/plot.png', { encoding: 'binary' })
       img = 'data:image/png;base64,' + bytesToBase64(bytes)

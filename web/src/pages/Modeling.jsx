@@ -5,6 +5,7 @@ import { KnowledgeCard } from './Cards.jsx'
 import MD, { sanitize } from '../components/MD.jsx'
 import AttachmentList from '../components/AttachmentList.jsx'
 import ResizeHandle from '../components/ResizeHandle.jsx'
+import { IconMenu, IconDownload, IconArrowLeft, IconFile, IconTable, IconSparkles, IconLayers, IconSearch, IconEdit, IconChevronRight, IconLink, IconClose, IconSend, IconClock } from '../components/Icons.jsx'
 
 const MODIFY_SYSTEM =
   '你是数学建模思路梳理助手。用户在「建模思路梳理台」上工作，页面有一组拆解块，每块含：编号、标题、核心说明(quote)、Markdown 思路正文(body)、思路步骤 steps[{label,desc}]。\n' +
@@ -245,10 +246,10 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
     <div className="ws mdl" style={{ '--panel-w': panelW }}>
       {/* 左图标窄栏 */}
       <aside className="rail">
-        <button className="rail-btn" onClick={onExpandSidebar} title="展开侧栏">≡</button>
-        <button className="rail-btn" onClick={exportIdea} title="导出思路为 Markdown">⤓</button>
+        <button className="rail-btn" onClick={onExpandSidebar} title="展开侧栏"><IconMenu size={16} /></button>
+        <button className="rail-btn" onClick={exportIdea} title="导出思路为 Markdown"><IconDownload size={16} /></button>
         <div style={{ flex: 1 }} />
-        <button className="rail-btn rail-back" onClick={() => { location.hash = '#/workbench' }} title="返回读题工作台">←</button>
+        <button className="rail-btn rail-back" onClick={() => { location.hash = '#/workbench' }} title="返回读题工作台"><IconArrowLeft size={16} /></button>
       </aside>
 
       {/* 主区：拆解块 */}
@@ -267,7 +268,7 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
           {/* 题干 + 附件上下文（来自读题工作台，可折叠） */}
           <div className="ctx-card">
             <button className="ctx-toggle" onClick={() => setCtxOpen(!ctxOpen)}>
-              <span>📄 题干与附件</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><IconFile size={14} /> 题干与附件</span>
               <span className="hint">{ws?.title || '未命名题目'} · 附件 {attachments.length} 个</span>
               <span className="ctx-chev">{ctxOpen ? '▲ 收起' : '▼ 展开'}</span>
             </button>
@@ -332,7 +333,7 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
         {panel === 'chat' ? (
           <>
             <header className="ai-head">
-              <div className="ai-title"><span className="ai-brand">✦</span>AI 助手 <span className="suffix">· 拆解中</span></div>
+              <div className="ai-title"><span className="ai-brand"><IconSparkles size={14} /></span>AI 助手 <span className="suffix">· 拆解中</span></div>
             </header>
             <div className="chat" ref={chatRef}>
               {msgs.length === 0 && (
@@ -340,7 +341,7 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
               )}
               {msgs.map((m, i) => (
                 <div key={i} className={`msg ${m.role}`}>
-                  <span className="avatar">{m.role === 'ai' ? '✦' : '我'}</span>
+                  <span className="avatar">{m.role === 'ai' ? <IconSparkles size={14} /> : '我'}</span>
                   <div className="bubble">
                     {/* AI 回复用 MD 渲染（Markdown 生效，sanitize 防 XSS）；用户消息保持纯文本 */}
                     {m.role === 'ai' ? <MD text={m.text} /> : <div className="t">{m.text}</div>}
@@ -351,12 +352,12 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
               ))}
               {busy && (
                 <div className="msg ai">
-                  <span className="avatar">✦</span>
+                  <span className="avatar"><IconSparkles size={14} /></span>
                   <div className="bubble">
                     {streaming ? (
                       // JSON 输出时不展示原文，显示友好进度；自然语言则实时渲染
                       streaming.trim().startsWith('{') ? (
-                        <div className="t" style={{ color: 'var(--muted)' }}>⏳ AI 正在生成修改方案…</div>
+                        <div className="t" style={{ color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 6 }}><IconClock size={13} /> AI 正在生成修改方案…</div>
                       ) : (
                         <MD text={streaming} />
                       )
@@ -375,17 +376,17 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
                 placeholder="输入指令，AI 会就地给出修改预览…"
                 rows="1"
               />
-              <button className="send-btn" onClick={sendInstruction} disabled={busy || !input.trim()} title="发送">➤</button>
+              <button className="send-btn" onClick={sendInstruction} disabled={busy || !input.trim()} title="发送"><IconSend size={16} /></button>
             </div>
           </>
         ) : (
           <>
             <header className="ai-head">
-              <div className="ai-title"><span className="ai-brand">📇</span>知识卡片</div>
+              <div className="ai-title"><span className="ai-brand"><IconLayers size={14} /></span>知识卡片</div>
             </header>
             <div className="kp">
               <div className="kp-search">
-                <span>🔍</span>
+                <span><IconSearch size={14} /></span>
                 <input value={kcQuery} onChange={(e) => setKcQuery(e.target.value)} placeholder="搜索知识卡片…" />
               </div>
               <div className="kp-list">
@@ -409,7 +410,7 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
             {doneTables.map((a) => (
               <div key={a.id} className="check-opt" onClick={() => linkAttachment(relateId, a.name)}>
                 <span className="box">✓</span>
-                <div><div className="opt-t">📊 {a.name}</div><div className="opt-d">{(a.sheets || []).map((s) => s.name).join(' · ') || '表格'}</div></div>
+                <div><div className="opt-t" style={{ display: 'flex', alignItems: 'center', gap: 5 }}><IconTable size={14} /> {a.name}</div><div className="opt-d">{(a.sheets || []).map((s) => s.name).join(' · ') || '表格'}</div></div>
               </div>
             ))}
             <div className="sheet-actions">
@@ -429,8 +430,8 @@ function Block({ b, index, open, preview, editing, draft, setDraft, onToggle, on
         <span className="block-no">{index + 1}</span>
         <span className="block-title">{b.title}</span>
         <span className="block-ops">
-          <button className="ico-btn" title="编辑" onClick={(e) => { e.stopPropagation(); onEdit() }}>✎</button>
-          <button className="ico-btn block-toggle" title={open ? '收起' : '展开'} onClick={(e) => { e.stopPropagation(); onToggle() }}>▶</button>
+          <button className="ico-btn" title="编辑" onClick={(e) => { e.stopPropagation(); onEdit() }}><IconEdit size={14} /></button>
+          <button className="ico-btn block-toggle" title={open ? '收起' : '展开'} onClick={(e) => { e.stopPropagation(); onToggle() }}><IconChevronRight size={14} /></button>
         </span>
       </button>
       <div className="block-body">
@@ -448,10 +449,10 @@ function Block({ b, index, open, preview, editing, draft, setDraft, onToggle, on
                   placeholder={'用 Markdown 自由表达思路，例如：\n**目标**：最小化总成本\n\n- 步骤一：读取数据\n- 步骤二：构造特征\n\n> 引用题干："车辆更新须满足…"'}
                   rows={6}
                 />
-                <div className="bk-md-hint">✨ 支持 Markdown：`**加粗**` · `- 列表` · `> 引用` · `# 标题` · `` `代码` `` · `![图](url)`</div>
+                <div className="bk-md-hint"><IconSparkles size={12} /> 支持 Markdown：`**加粗**` · `- 列表` · `> 引用` · `# 标题` · `` `代码` `` · `![图](url)`</div>
                 <div className="bk-ai-row">
                   <button className="btn btn-ghost btn-sm" onClick={onAiBody} disabled={aiBusy} title="让 AI 根据标题与核心说明生成思路正文，填入下方输入框">
-                    {aiBusy ? '✨ AI 生成中…' : '✨ AI 帮我写思路'}
+                    {aiBusy ? <><IconSparkles size={13} /> AI 生成中…</> : <><IconSparkles size={13} /> AI 帮我写思路</>}
                   </button>
                 </div>
                 <div className="bk-label">步骤链（可选，用结构化步骤图展示）</div>
@@ -476,13 +477,13 @@ function Block({ b, index, open, preview, editing, draft, setDraft, onToggle, on
                   </div>
                 )}
                 {b.refs?.length > 0 && (
-                  <div className="block-refs">{b.refs.map((r) => <span key={r} className="ref-chip">📊 {r}</span>)}</div>
+                  <div className="block-refs">{b.refs.map((r) => <span key={r} className="ref-chip"><IconTable size={12} /> {r}</span>)}</div>
                 )}
                 <div className="row-ops">
-                  <button className="link-btn" onClick={onEdit}>✎ 编辑</button>
-                  <button className="link-btn" onClick={onRelate}>⛓ 关联</button>
+                  <button className="link-btn" onClick={onEdit}><IconEdit size={13} /> 编辑</button>
+                  <button className="link-btn" onClick={onRelate}><IconLink size={13} /> 关联</button>
                   <button className="link-btn" onClick={onToggle}>{open ? '▲ 收起' : '▼ 展开'}</button>
-                  <button className="link-btn danger" onClick={onRemove}>✕ 删除</button>
+                  <button className="link-btn danger" onClick={onRemove}><IconClose size={13} /> 删除</button>
                 </div>
               </>
             )}

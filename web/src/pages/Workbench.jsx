@@ -5,6 +5,7 @@ import { KnowledgeCard, findConcept } from './Cards.jsx'
 import MD, { sanitize } from '../components/MD.jsx'
 import AttachmentList from '../components/AttachmentList.jsx'
 import ResizeHandle from '../components/ResizeHandle.jsx'
+import { IconSparkles, IconFile, IconTable, IconBookmark, IconBook, IconClock, IconMenu, IconPlus } from '../components/Icons.jsx'
 
 const OVERVIEW_SYSTEM =
   '你是数学建模辅导助手。用户会给你一道数学建模题目（可能含数据说明），请做「整体解读」，输出四部分：\n' +
@@ -188,8 +189,8 @@ export default function Workbench({ settings, ws, patchWs, onExpandSidebar, onNe
     <div className="ws" style={{ '--panel-w': panelW }}>
       {/* 左侧收起图标栏 */}
       <aside className="rail">
-        <button className="rail-btn" onClick={onExpandSidebar} title="展开侧栏">≡</button>
-        <button className="rail-btn rail-back" onClick={onNewWorkspace} title="新建工作区">＋</button>
+        <button className="rail-btn" onClick={onExpandSidebar} title="展开侧栏"><IconMenu size={16} /></button>
+        <button className="rail-btn rail-back" onClick={onNewWorkspace} title="新建工作区"><IconPlus size={16} /></button>
       </aside>
 
       {/* 主区 */}
@@ -199,7 +200,7 @@ export default function Workbench({ settings, ws, patchWs, onExpandSidebar, onNe
           {hasContent && (
             <div className="ws-head-actions">
               <button className="btn btn-primary btn-sm" onClick={runOverview} disabled={busy}>
-                {busy ? 'AI 解读中…' : '✦ AI 整体解读'}
+                {busy ? 'AI 解读中…' : <><IconSparkles size={14} /> AI 整体解读</>}
               </button>
               <button className="btn btn-ghost btn-sm" onClick={() => { setEditText(problemText); setEditOpen(true) }}>编辑题干</button>
               <button className="btn btn-ghost btn-sm" onClick={clearProblem}>清空</button>
@@ -230,8 +231,8 @@ export default function Workbench({ settings, ws, patchWs, onExpandSidebar, onNe
               </div>
               <div className="empty-divider"><span>或上传文件</span></div>
               <div className="empty-grid">
-                <button className="empty-btn" onClick={() => problemFileInputRef.current?.click()}><span className="ic">📄</span>上传题干</button>
-                <button className="empty-btn" onClick={() => fileInputRef.current?.click()}><span className="ic">📊</span>上传附件</button>
+                <button className="empty-btn" onClick={() => problemFileInputRef.current?.click()}><span className="ic"><IconFile size={20} /></span>上传题干</button>
+                <button className="empty-btn" onClick={() => fileInputRef.current?.click()}><span className="ic"><IconTable size={20} /></span>上传附件</button>
               </div>
               <span className="hint">支持粘贴题目文本 / 上传 PDF/MD/TXT 题干 · xlsx/csv/pdf 附件</span>
               {error && <div className="alert error">{error}</div>}
@@ -268,7 +269,7 @@ export default function Workbench({ settings, ws, patchWs, onExpandSidebar, onNe
           {/* 划词浮动工具栏：absolute 锁定在选区旁（随正文滚动） */}
           {floatSel && (
             <div className="float-toolbar" style={{ left: floatSel.x, top: floatSel.y }} onMouseDown={(e) => e.preventDefault()}>
-              <button className="btn btn-primary btn-sm" onClick={explainSelection} disabled={busy}>✂️ AI 解读</button>
+              <button className="btn btn-primary btn-sm" onClick={explainSelection} disabled={busy}><IconSparkles size={13} /> AI 解读</button>
               <button className="btn btn-ghost btn-sm" onClick={() => setFloatSel(null)}>取消</button>
             </div>
           )}
@@ -287,7 +288,7 @@ export default function Workbench({ settings, ws, patchWs, onExpandSidebar, onNe
         <div className="ai-panel-body">
           {overview && (
             <div className="card" style={{ padding: 14, marginBottom: 12 }}>
-              <div className="section-label" style={{ marginBottom: 8 }}>📖 整体解读</div>
+              <div className="section-label" style={{ marginBottom: 8 }}><IconBook size={14} /> 整体解读</div>
               <MD text={overview} />
               {overviewHit && <KnowledgeCard cardId={overviewHit.cardId} />}
             </div>
@@ -297,13 +298,13 @@ export default function Workbench({ settings, ws, patchWs, onExpandSidebar, onNe
               {selResults.length === 0 && !busy && <div className="hint" style={{ textAlign: 'center', padding: 24 }}>在左侧选中任意一段题干，AI 将判定它的角色（约束/目标/已知/假设/背景）</div>}
               {busy && roleStream && (
                 <div className="card" style={{ padding: 14, marginBottom: 10 }}>
-                  <div className="section-label" style={{ marginBottom: 6 }}>⏳ AI 正在判定…</div>
+                  <div className="section-label" style={{ marginBottom: 6 }}><IconClock size={13} /> AI 正在判定…</div>
                   <pre className="role-stream">{roleStream}</pre>
                 </div>
               )}
               {selResults.length > 0 && (
                 <div className="sel-clear-row">
-                  <span className="hint">📌 精读记录 {selResults.length} 条（划词结果累积保留，便于整理疑惑点）</span>
+                  <span className="hint" style={{ display: 'flex', alignItems: 'center', gap: 5 }}><IconBookmark size={13} /> 精读记录 {selResults.length} 条（划词结果累积保留，便于整理疑惑点）</span>
                   <button className="btn btn-ghost btn-sm" onClick={() => setSelResults([])} title="清空全部精读记录">清空</button>
                 </div>
               )}

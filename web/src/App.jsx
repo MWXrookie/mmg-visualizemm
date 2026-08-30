@@ -5,11 +5,12 @@ import Coding from './pages/Coding.jsx'
 import Settings from './pages/Settings.jsx'
 import { loadSettings, loadTheme, saveTheme, getCurrentWsId, setCurrentWsId } from './store.js'
 import { loadWorkspace, saveWorkspace, listWorkspaces, deleteWorkspace } from './api.js'
+import { IconBook, IconCompass, IconCode, IconGear, IconSun, IconMoon, IconClose } from './components/Icons.jsx'
 
 const VIEWS = [
-  { id: 'workbench', label: '读题工作台', icon: '📖' },
-  { id: 'modeling', label: '建模思路梳理', icon: '🧩' },
-  { id: 'coding', label: '编程工作台', icon: '💻' },
+  { id: 'workbench', label: '读题工作台', icon: <IconBook size={18} /> },
+  { id: 'modeling', label: '建模思路梳理', icon: <IconCompass size={18} /> },
+  { id: 'coding', label: '编程工作台', icon: <IconCode size={18} /> },
 ]
 
 /** 向后端保存工作区（keepalive 兼容 pagehide 强刷；请求体超 64KB 时降级同步 XHR，保证数据不静默丢失） */
@@ -264,7 +265,7 @@ export default function App() {
             {wsList.map((w) => (
               <div key={w.id} className={`sb-ws-item ${wsId === w.id ? 'active' : ''}`} onClick={() => switchWs(w.id)} onDoubleClick={() => renameWs(w.id)} title={w.title || '未命名题目' + '（双击重命名）'}>
                 <span className="sb-ws-title">{w.title || '未命名题目'}</span>
-                <button className="sb-ws-del" onClick={(e) => { e.stopPropagation(); removeWs(w.id) }} title="删除工作区">✕</button>
+                <button className="sb-ws-del" onClick={(e) => { e.stopPropagation(); removeWs(w.id) }} title="删除工作区"><IconClose size={13} /></button>
               </div>
             ))}
             <button className="sb-ws-new" onClick={newWorkspace}>＋ 新建工作区</button>
@@ -272,7 +273,7 @@ export default function App() {
         )}
         <div className="sb-foot">
           <button className={`nav-item ${view === 'settings' ? 'active' : ''}`} onClick={() => go('settings')} title="模型设置">
-            <span className="ic">⚙️</span>
+            <span className="ic"><IconGear size={18} /></span>
             {!wsCollapsed && '模型设置'}
           </button>
           <button
@@ -280,7 +281,7 @@ export default function App() {
             onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
             title={theme === 'dark' ? '切换浅色' : '切换深色'}
           >
-            <span className="ic">{theme === 'dark' ? '☀️' : '🌙'}</span>
+            <span className="ic">{theme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}</span>
             {!wsCollapsed && (theme === 'dark' ? '浅色模式' : '深色模式')}
           </button>
         </div>

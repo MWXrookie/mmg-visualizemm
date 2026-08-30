@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { IconTable, IconClose } from './Icons.jsx'
 
 /** 附件表格预览（多 sheet tab）——读题台 / 梳理台共用。onRemove(id)：可选，显示删除按钮 */
 export default function AttachmentTable({ a, onRemove }) {
@@ -9,9 +10,9 @@ export default function AttachmentTable({ a, onRemove }) {
   return (
     <div className="card table-card">
       <div className="table-head">
-        <h4>📊 {a.name} <span className="hint">（{tables.length} 个表单）</span></h4>
+        <h4 style={{ display: 'flex', alignItems: 'center', gap: 6 }}><IconTable size={15} /> {a.name} <span className="hint">（{tables.length} 个表单）</span></h4>
         {onRemove && (
-          <button className="att-del" onClick={() => onRemove(a.id)} title="删除附件">✕</button>
+          <button className="att-del" onClick={() => onRemove(a.id)} title="删除附件"><IconClose size={13} /></button>
         )}
       </div>
       {tables.length > 1 && (

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { loadFavorites, saveFavorites } from '../store.js'
+import { IconLightbulb, IconStar, IconPlay, IconRefresh } from '../components/Icons.jsx'
 
 /* ============ 数学工具 ============ */
 
@@ -107,7 +108,7 @@ function DecisionTreeDemo() {
           <b>{depth}</b>
         </label>
         <button className="btn btn-primary btn-sm" onClick={onPlayToggle}>
-          {playing ? '⏸ 暂停' : revealed >= depth ? '↺ 重播' : '▶ 播放逐层生长'}
+          {playing ? '暂停' : revealed >= depth ? <><IconRefresh size={13} /> 重播</> : <><IconPlay size={13} /> 播放逐层生长</>}
         </button>
         {!playing && revealed > 1 && revealed < depth && (
           <button className="btn btn-ghost btn-sm" onClick={() => setRevealed(revealed + 1)}>下一步</button>
@@ -503,7 +504,7 @@ export function KnowledgeCard({ cardId, defaultOpen = false }) {
           if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(!open) }
         }}
       >
-        <span className="concept-badge">💡 相关概念</span>
+        <span className="concept-badge"><IconLightbulb size={13} /> 相关概念</span>
         <b>{card.title}</b>
         <span className="hint">{card.tag}</span>
         <span className="concept-toggle">{open ? '收起 ▴' : '展开演示 ▾'}</span>
@@ -513,7 +514,7 @@ export function KnowledgeCard({ cardId, defaultOpen = false }) {
           title={isFav ? '取消收藏' : '收藏'}
           aria-pressed={isFav}
         >
-          {isFav ? '⭐' : '☆'}
+          {isFav ? <IconStar size={14} filled /> : <IconStar size={14} />}
         </button>
       </div>
       {open && (

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { getPyodide, runPython, onPyodideState } from '../lib/pyodide.js'
 import { streamChat, attachSummary } from '../api.js'
+import { IconMenu, IconDownload, IconArrowLeft, IconSparkles, IconPlay, IconGear, IconChart, IconTable, IconFile, IconLightbulb, IconZoomIn, IconBookmark, IconClip, IconInfo, IconClock } from '../components/Icons.jsx'
 
 const DEFAULT_CODE = `# 数学建模编程工作台 · Python (Pyodide)
 # N / NOISE / DEGREE 由右侧调参面板自动注入
@@ -160,6 +161,7 @@ export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
   const [log, setLog] = useState([])
   const [img, setImg] = useState(null)
   const [chartTitle, setChartTitle] = useState('')
+  const [runTime, setRunTime] = useState('') // 最近一次运行完成时间
   const [runOutput, setRunOutput] = useState('') // 最近一次运行的输出（右侧结果区展示）
   const [running, setRunning] = useState(false)
   const [error, setError] = useState('')
@@ -170,8 +172,9 @@ export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
   const [pyState, setPyState] = useState('idle') // Pyodide 加载状态（首次下载提示）
   useEffect(() => onPyodideState(setPyState), [])
   const [params, setParams] = useState({ N: 40, NOISE: 0.2, DEGREE: 3 })
-  const [outW, setOutW] = useState(() => { try { const v = localStorage.getItem('mmg_out_w_v1'); if (v && /^\d+px$/.test(v)) return v } catch { /* ignore */ } return '45%' }) // 右侧栏宽度（可拖拽）
+  const [outW, setOutW] = useState(() => { try { const v = localStorage.getItem('mmg_out_w_v1'); if (v && /^\d+px$/.test(v)) return v } catch { /* ignore */ } return '50%' }) // 右侧栏宽度（可拖拽，默认 50%）
   const [outOpen, setOutOpen] = useState(false) // 运行输出展开
+  const [imgModal, setImgModal] = useState(false) // 图表放大查看
   const [genInfo, setGenInfo] = useState(null) // AI 生成/改进详情 {action, source, lines, time}
   const runTimer = useRef(null)
   const codeTimer = useRef(null)
@@ -276,7 +279,7 @@ export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
       }
       if (r.img) {
         setImg(r.img)
-        setChartTitle(`degree=${P.DEGREE} · noise=${P.NOISE.toFixed(2)} · n=${P.N}`)
+        setChartTitle(`degree=${P.DEGREE} · noise=${P.NOISE.toFixed(3)} · n=${P.N}`)
         pushLog('ok', '✓ 图表已生成 → /plot.png')
       } else {
         setChartTitle('（代码未保存图表，右侧显示上一次结果）')
@@ -288,6 +291,7 @@ export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
       pushLog('err', '运行失败：' + e.message)
     } finally {
       setRunning(false)
+      setRunTime(new Date().toTimeString().slice(0, 8))
       // 日志自动滚到底，让用户看到最新输出
       requestAnimationFrame(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight })
     }
@@ -402,10 +406,10 @@ export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
     <div className="code-split" style={{ '--out-w': outW }}>
       {/* 左图标窄栏 */}
       <aside className="rail">
-        <button className="rail-btn" onClick={onExpandSidebar} title="展开侧栏">≡</button>
-        <button className="rail-btn" onClick={exportCode} title="导出代码 .py">⤓</button>
+        <button className="rail-btn" onClick={onExpandSidebar} title="展开侧栏"><IconMenu size={16} /></button>
+        <button className="rail-btn" onClick={exportCode} title="导出代码 .py"><IconDownload size={16} /></button>
         <div style={{ flex: 1 }} />
-        <button className="rail-btn rail-back" onClick={() => { location.hash = '#/modeling' }} title="返回梳理台">←</button>
+        <button className="rail-btn rail-back" onClick={() => { location.hash = '#/modeling' }} title="返回梳理台"><IconArrowLeft size={16} /></button>
       </aside>
 
       {/* 左 50%：代码区 */}
@@ -413,9 +417,9 @@ export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
         <div className="code-head">
           <span className="panel-tag" style={{ fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '.12em', color: 'var(--primary)', textTransform: 'uppercase' }}>代码区 · Python</span>
           <div style={{ flex: 1 }} />
-          <button className="btn btn-primary btn-sm" onClick={() => setGenOpen(true)}>✨ AI生成</button>
-          <button className="btn btn-ghost btn-sm" onClick={improveCode} disabled={running}>✨ AI改进</button>
-          <button className="btn btn-ghost btn-sm" onClick={doRun} disabled={running}>{running ? '运行中…' : '▶ 运行'}</button>
+          <button className="btn btn-primary btn-sm" onClick={() => setGenOpen(true)}><IconSparkles size={13} /> AI生成</button>
+          <button className="btn btn-ghost btn-sm" onClick={improveCode} disabled={running}><IconSparkles size={13} /> AI改进</button>
+          <button className="btn btn-ghost btn-sm" onClick={doRun} disabled={running}>{running ? '运行中…' : <><IconPlay size={13} /> 运行</>}</button>
           <button className="btn btn-ghost btn-sm" onClick={() => { if (confirm('用示例代码替换当前代码？当前代码将被覆盖。')) applyCode(DEFAULT_CODE) }}>示例</button>
         </div>
 
@@ -483,65 +487,82 @@ export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
               <div className="gen-info-item"><span className="gi-label">代码</span><b>{genInfo.lines} 行</b></div>
               <div className="gen-info-item"><span className="gi-label">时间</span><b>{genInfo.time}</b></div>
             </div>
-            {genInfo.source && <div className="gen-info-source">📌 来源：{genInfo.source}</div>}
+            {genInfo.source && <div className="gen-info-source" style={{ display: 'flex', alignItems: 'center', gap: 5 }}><IconBookmark size={12} /> 来源：{genInfo.source}</div>}
           </div>
         )}
 
         {/* 运行输出（print 结果，醒目展示，可展开） */}
         <div className="result-card">
           <div className="result-head">
-            <span>⚙️ 运行输出</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><IconGear size={13} /> 运行输出</span>
             <button className="result-toggle" onClick={() => setOutOpen(!outOpen)}>{outOpen ? '收起 ▲' : '展开 ▼'}</button>
           </div>
           {runOutput ? (
             <pre className={`result-box ${outOpen ? 'expanded' : ''}`}>{runOutput}</pre>
           ) : (
-            <div className="result-empty">点击「▶ 运行」后，这里显示代码的输出结果（print 的内容）。</div>
+            <div className="result-empty">点击「<IconPlay size={12} /> 运行」后，这里显示代码的输出结果（print 的内容）。</div>
           )}
         </div>
 
         {attachments.length > 0 && (
           <div className="att-strip">
-            <span>📎 附件：</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><IconClip size={13} /> 附件：</span>
             {attachments.map((a) => (
               <span key={a.id} className="att-strip-chip">
-                {a.status === 'error' ? '⚠️' : a.status === 'parsing' ? '⏳' : a.type === 'table' ? '📊' : '📄'} {a.name}
+                {a.status === 'error' ? <IconInfo size={12} /> : a.status === 'parsing' ? <IconClock size={12} /> : a.type === 'table' ? <IconTable size={12} /> : <IconFile size={12} />} {a.name}
               </span>
             ))}
           </div>
         )}
 
         <div className="viz-note" style={{ display: 'flex', gap: 10, fontSize: 13, color: 'var(--muted)', padding: '11px 14px', border: '1px dashed var(--border)', borderRadius: 10, alignItems: 'flex-start' }}>
-          <span>💡</span>
+          <span><IconLightbulb size={14} /></span>
           <span>点击「<b>运行</b>」后，左侧代码产出图表与日志；右侧调参面板改动会自动重算（需代码使用 N / NOISE / DEGREE 变量）。</span>
         </div>
 
         <div className="chart-card">
-          <div className="chart-title">
-            <h3>运行结果图表</h3>
-            <span className="chart-sub" style={{ fontSize: 12, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>{chartTitle}</span>
+          <div className="chart-head">
+            <div className="chart-title-left">
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: 6 }}><IconChart size={15} /> 运行结果图表</h3>
+              {img ? (
+                <span className="chart-badge ok">● 已生成</span>
+              ) : (
+                <span className="chart-badge idle">○ 等待运行</span>
+              )}
+            </div>
+            {img && <button className="chart-zoom" onClick={() => setImgModal(true)} title="点击放大查看图表"><IconZoomIn size={13} /> 放大</button>}
           </div>
-          {img ? (
-            <img src={img} alt="运行结果" style={{ width: '100%', borderRadius: 8, background: '#fff' }} />
-          ) : (
-            <div className="chart-svg" style={{ display: 'grid', placeItems: 'center', color: 'var(--muted)' }}>
-              <div style={{ textAlign: 'center', fontSize: 13 }}>暂无图表<br /><span style={{ fontSize: 12 }}>运行代码并 plt.savefig('/plot.png') 后显示</span></div>
+          {img && (
+            <div className="chart-params">
+              {chartTitle && <span className="chart-param-chip">{chartTitle}</span>}
+              {runTime && <span className="chart-time">⏱ {runTime}</span>}
             </div>
           )}
+          <div className="chart-body">
+            {img ? (
+              <img src={img} alt="运行结果" className="chart-img" onClick={() => setImgModal(true)} />
+            ) : (
+              <div className="chart-empty">
+                <div className="chart-empty-ic"><IconChart size={36} /></div>
+                <div className="chart-empty-text">暂无图表</div>
+                <div className="chart-empty-hint">运行代码并 <code>plt.savefig('/plot.png')</code> 后，这里显示图表</div>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="params">
           <h4>调参面板</h4>
           <div className="ctl-row">
-            <div className="ctl-top"><span>样本点数 N</span><span className="val">{params.N}</span></div>
-            <input type="range" min="10" max="100" step="5" value={params.N} onChange={(e) => setParam('N', Number(e.target.value))} />
+            <div className="ctl-top"><span>样本点数 N</span><input type="number" className="param-input" min="10" max="100" step="1" value={params.N} onChange={(e) => setParam('N', Math.min(100, Math.max(10, Number(e.target.value) || 10)))} /></div>
+            <input type="range" min="10" max="100" step="1" value={params.N} onChange={(e) => setParam('N', Number(e.target.value))} />
           </div>
           <div className="ctl-row">
-            <div className="ctl-top"><span>噪声水平 NOISE</span><span className="val">{params.NOISE.toFixed(2)}</span></div>
-            <input type="range" min="0" max="1" step="0.01" value={params.NOISE} onChange={(e) => setParam('NOISE', Number(e.target.value))} />
+            <div className="ctl-top"><span>噪声水平 NOISE</span><input type="number" className="param-input" min="0" max="1" step="0.001" value={params.NOISE} onChange={(e) => setParam('NOISE', Math.min(1, Math.max(0, Number(e.target.value) || 0)))} /></div>
+            <input type="range" min="0" max="1" step="0.001" value={params.NOISE} onChange={(e) => setParam('NOISE', Number(e.target.value))} />
           </div>
           <div className="ctl-row">
-            <div className="ctl-top"><span>多项式次数 DEGREE</span><span className="val">{params.DEGREE}</span></div>
+            <div className="ctl-top"><span>多项式次数 DEGREE</span><input type="number" className="param-input" min="1" max="8" step="1" value={params.DEGREE} onChange={(e) => setParam('DEGREE', Math.min(8, Math.max(1, Math.round(Number(e.target.value) || 1))))} /></div>
             <input type="range" min="1" max="8" step="1" value={params.DEGREE} onChange={(e) => setParam('DEGREE', Number(e.target.value))} />
           </div>
           <div className="live-tag"><span className="pulse" />改动即重算，图表/数值实时反馈</div>
@@ -567,6 +588,21 @@ export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
             <div className="sheet-actions">
               <button className="btn btn-ghost" onClick={() => setGenOpen(false)}>取消</button>
               <button className="btn btn-primary" onClick={generateCode} disabled={running}>生成</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 图表放大模态 */}
+      {imgModal && img && (
+        <div className="scrim" onClick={() => setImgModal(false)}>
+          <div className="img-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="img-modal-head">
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><IconChart size={15} /> {chartTitle || '运行结果图表'}</span>
+              <button className="btn btn-ghost btn-sm" onClick={() => setImgModal(false)}><IconClose size={13} /> 关闭</button>
+            </div>
+            <div className="img-modal-body">
+              <img src={img} alt="运行结果放大" />
             </div>
           </div>
         </div>
