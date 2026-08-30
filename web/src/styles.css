@@ -533,3 +533,12 @@ pre.code { white-space: pre; font-size: 13.5px; line-height: 1.7; font-family: v
 .result-head { padding: 8px 14px; font-size: 12px; font-weight: 600; color: var(--primary); border-bottom: 1px solid var(--border); background: var(--surface-2); }
 .result-box { margin: 0; padding: 12px 14px; font-family: var(--mono); font-size: 13px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; background: var(--code); color: var(--code-fg); max-height: 220px; overflow: auto; }
 .result-empty { padding: 14px; font-size: 12.5px; color: var(--muted); }
+
+/* ============ VS Code Dark+ 风格语法高亮（代码区恒深色） ============ */
+.code-body .k, .gen-preview-body .k { color: #569CD6; }   /* 关键字：蓝 */
+.code-body .b, .gen-preview-body .b { color: #4EC9B0; }   /* 内置函数/库别名：青 */
+.code-body .s, .gen-preview-body .s { color: #CE9178; }   /* 字符串：橙 */
+.code-body .n, .gen-preview-body .n { color: #B5CEA8; }   /* 数字：浅绿 */
+.code-body .c, .gen-preview-body .c { color: #6A9955; font-style: italic; } /* 注释：绿斜体 */
+.code-body .f, .gen-preview-body .f { color: #DCDCAA; }   /* 函数/类名：黄 */
+.code-body .d, .gen-preview-body .d { color: #DCDCAA; }   /* 装饰器：黄 */

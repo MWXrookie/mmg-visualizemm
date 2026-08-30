@@ -50,26 +50,105 @@ function extractCode(text) {
 
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
-const KEYWORDS = new Set(['import', 'from', 'def', 'return', 'if', 'else', 'elif', 'for', 'while', 'range', 'in', 'and', 'or', 'not', 'with', 'as', 'try', 'except', 'lambda', 'True', 'False', 'None', 'class', 'break', 'continue', 'print'])
-const MODS = new Set(['np', 'plt', 'pd', 'plt', 'sklearn', 'scipy'])
+/* ---------- VS Code 风格语法高亮 ---------- */
+const KEYWORDS = new Set([
+  'import', 'from', 'def', 'return', 'if', 'elif', 'else', 'for', 'while', 'in',
+  'and', 'or', 'not', 'with', 'as', 'try', 'except', 'finally', 'lambda', 'class',
+  'break', 'continue', 'pass', 'yield', 'global', 'nonlocal', 'raise', 'assert',
+  'del', 'is', 'None', 'True', 'False',
+])
+// 内置函数/常用方法/库别名（VS Code 中青色）
+const BUILTINS = new Set([
+  'print', 'len', 'range', 'str', 'int', 'float', 'bool', 'list', 'dict', 'set',
+  'tuple', 'sum', 'min', 'max', 'abs', 'round', 'enumerate', 'zip', 'map', 'filter',
+  'sorted', 'reversed', 'type', 'open', 'input', 'format', 'isinstance', 'super',
+  'join', 'append', 'extend', 'keys', 'values', 'items', 'get', 'split', 'strip',
+  'replace', 'lower', 'upper', 'np', 'plt', 'pd', 'sklearn', 'scipy',
+])
+const isIdentStart = (ch) => /[A-Za-z_]/.test(ch)
+const isIdent = (ch) => /[A-Za-z0-9_]/.test(ch)
+const isDigit = (ch) => /[0-9]/.test(ch)
 
+/** 单行高亮：注释(绿斜体)/字符串(橙)/关键字(蓝)/内置(青)/数字(浅绿)/函数名与装饰器(黄) */
 function highlightLine(line) {
-  let h = esc(line)
-  const re = /\b([A-Za-z_]\w*)\b|(\d+(?:\.\d+)?)|('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")/g
-  let out = '', last = 0, m
-  while ((m = re.exec(h)) !== null) {
-    if (m.index > last) out += h.slice(last, m.index)
-    const tok = m[1]
-    if (tok !== undefined) {
-      if (KEYWORDS.has(tok)) out += `<span class="t">${tok}</span>`
-      else if (MODS.has(tok)) out += `<span class="t">${tok}</span>`
-      else out += tok
-    } else if (m[2] !== undefined) out += `<span class="n">${m[2]}</span>`
-    else out += `<span class="s">${m[3]}</span>`
-    last = re.lastIndex
+  let html = ''
+  let i = 0
+  const n = line.length
+  while (i < n) {
+    const ch = line[i]
+    // 注释（字符串外的 # 到行尾）
+    if (ch === '#') {
+      html += `<span class="c">${esc(line.slice(i))}</span>`
+      break
+    }
+    // 字符串（单/双引号，支持转义与三引号开头）
+    if (ch === '"' || ch === "'") {
+      const quote = ch
+      // 三引号
+      if (line[i + 1] === quote && line[i + 2] === quote) {
+        let j = i + 3
+        while (j < n && !(line[j] === quote && line[j + 1] === quote && line[j + 2] === quote)) j++
+        html += `<span class="s">${esc(line.slice(i, Math.min(j + 3, n)))}</span>`
+        i = Math.min(j + 3, n)
+        continue
+      }
+      let j = i + 1
+      while (j < n) {
+        if (line[j] === '\\') { j += 2; continue }
+        if (line[j] === quote) { j++; break }
+        j++
+      }
+      html += `<span class="s">${esc(line.slice(i, j))}</span>`
+      i = j
+      continue
+    }
+    // 标识符 / 关键字 / 函数名
+    if (isIdentStart(ch)) {
+      let j = i
+      while (j < n && isIdent(line[j])) j++
+      const word = line.slice(i, j)
+      // def/class 后的函数/类名 → 黄色
+      if (word === 'def' || word === 'class') {
+        html += `<span class="k">${word}</span>`
+        i = j
+        while (i < n && /\s/.test(line[i])) i++
+        let k = i
+        while (k < n && isIdent(line[k])) k++
+        if (k > i) { html += `<span class="f">${esc(line.slice(i, k))}</span>`; i = k }
+        continue
+      }
+      if (KEYWORDS.has(word)) html += `<span class="k">${esc(word)}</span>`
+      else if (BUILTINS.has(word)) html += `<span class="b">${esc(word)}</span>`
+      else html += esc(word)
+      i = j
+      continue
+    }
+    // 数字
+    if (isDigit(ch) || (ch === '.' && isDigit(line[i + 1] || ''))) {
+      let j = i
+      while (j < n && /[0-9._a-fA-FxX]/.test(line[j])) j++
+      // 科学计数法 1e-5
+      if (/[eE]/.test(line[j - 1] || '') === false && (line[j] === 'e' || line[j] === 'E') && /[0-9+-]/.test(line[j + 1] || '')) {
+        j += 2
+        while (j < n && /[0-9]/.test(line[j])) j++
+      }
+      html += `<span class="n">${esc(line.slice(i, j))}</span>`
+      i = j
+      continue
+    }
+    // 装饰器 @
+    if (ch === '@') {
+      let j = i + 1
+      while (j < n && /[A-Za-z0-9_.]/.test(line[j])) j++
+      html += `<span class="d">${esc(line.slice(i, j))}</span>`
+      i = j
+      continue
+    }
+    // 运算符/其他
+    html += esc(ch)
+    i++
   }
-  if (last < h.length) out += h.slice(last)
-  return out
+  return html
 }
 
 const now = () => new Date().toTimeString().slice(0, 5)
