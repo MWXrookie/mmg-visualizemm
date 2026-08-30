@@ -15,6 +15,7 @@
     "dev": "concurrently -n WEB,SRV -c blue,green \"npm:dev:web\" \"npm:dev:server\""
   },
   "dependencies": {
+    "dompurify": "^3.4.14",
     "exceljs": "^4.4.0",
     "express": "^4.21.2",
     "marked": "^18.0.11",
