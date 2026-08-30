@@ -1412,6 +1412,766 @@ function GreyPredictionDemo() {
   )
 }
 
+/* ============ 贪心算法演示（逐个选最优） ============ */
+
+function GreedyDemo() {
+  const [step, setStep] = useState(0)
+  const W = 560, H = 300, pad = 34
+  // 场景：选供货商凑够 100 单位需求，候选按"性价比"从高到低排序
+  const candidates = [
+    { name: 'S₁', score: 0.95, qty: 20 }, { name: 'S₂', score: 0.88, qty: 25 },
+    { name: 'S₃', score: 0.82, qty: 30 }, { name: 'S₄', score: 0.75, qty: 40 },
+    { name: 'S₅', score: 0.70, qty: 35 }, { name: 'S₆', score: 0.60, qty: 50 },
+  ]
+  const need = 100
+  let acc = 0
+  const chosen = []
+  for (let i = 0; i < candidates.length && acc < need; i++) {
+    chosen.push(i)
+    acc += candidates[i].qty
+  }
+  const shown = Math.min(step, chosen.length)
+  const got = chosen.slice(0, shown).reduce((s, i) => s + candidates[i].qty, 0)
+  const sx = (x) => pad + (x / 6) * (W - pad * 2)
+  const maxH = 55
+  return (
+    <div className="demo">
+      <div className="demo-controls">
+        <button className="btn btn-primary btn-sm" onClick={() => setStep(Math.min(chosen.length, step + 1))} disabled={step >= chosen.length}>贪心选一步</button>
+        {step > 0 && <button className="btn btn-ghost btn-sm" onClick={() => setStep(0)}>重置</button>}
+        <span className="hint">目标：凑够 {need} 单位 · 已选 {got}/{need}</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
+        {[0, 20, 40, 60].map((g) => <line key={g} x1={pad} y1={sy(0)} x2={pad} y2={sy(0)} stroke="#f1f5f9" />)}
+        {candidates.map((c, i) => {
+          const selected = i < shown
+          const x = sx(i + 0.5)
+          const h = (c.qty / maxH) * (H - pad * 2)
+          return (
+            <g key={c.name}>
+              <rect x={x - 30} y={H - pad - h} width="60" height={h} rx="6" fill={selected ? '#2563eb' : '#e2e8f0'} stroke={selected ? '#2563eb' : '#cbd5e1'} strokeWidth="1" />
+              <text x={x} y={H - pad - h - 8} textAnchor="middle" fontSize="12" fill={selected ? '#2563eb' : '#94a3b8'} fontWeight={selected ? 700 : 400}>{c.qty}</text>
+              <text x={x} y={H - pad + 16} textAnchor="middle" fontSize="11" fill={selected ? '#2563eb' : '#94a3b8'}>{c.name}</text>
+              <text x={x} y={H - pad + 30} textAnchor="middle" fontSize="10" fill="#94a3b8">评分 {c.score}</text>
+            </g>
+          )
+        })}
+        <line x1={pad} y1={sy(0)} x2={W - pad} y2={sy(0)} stroke="#cbd5e1" strokeWidth="1" />
+      </svg>
+      <div className="demo-note">
+        每次选当前评分最高的供货商（按 0.95→0.60 排序），直到凑够需求——<b>每一步只看当前最优、不回头</b>。
+        {shown === chosen.length ? `共选 ${chosen.length} 家（${chosen.map((i) => candidates[i].name).join('、')}）凑到 ${got} 单位。` : ''}
+        注意：这里"评分最高=性价比最高"的排序让贪心恰好最优；但若目标变成 0-1 背包（每家有容量上限），贪心可能失效（2021 年 C 题用双层贪心选供应商+转运商）。
+      </div>
+    </div>
+  )
+}
+
+/* ============ 爬山 + A* 演示（地形寻优） ============ */
+
+function HillClimbingDemo() {
+  const [mode, setMode] = useState('hill') // hill | astar
+  const [seed, setSeed] = useState(0)
+  const W = 560, H = 300, pad = 30
+  // 地形：多峰函数（用固定种子生成）
+  const peaks = useMemo(() => [
+    { x: 0.2, y: 0.3, h: 0.5 }, { x: 0.55, y: 0.65, h: 0.9 }, { x: 0.8, y: 0.2, h: 0.6 },
+    { x: 0.4, y: 0.8, h: 0.7 }, { x: 0.7, y: 0.85, h: 0.8 },
+  ], [])
+  const height = (x, y) => peaks.reduce((s, p) => s + p.h * Math.exp(-40 * ((x - p.x) ** 2 + (y - p.y) ** 2)), 0)
+  // 爬山：从随机起点沿梯度爬（模拟 8 邻域）
+  const climb = useMemo(() => {
+    const rnd = seededRandom(100 + seed)
+    let x = rnd(), y = rnd()
+    const path = [{ x, y }]
+    for (let it = 0; it < 30; it++) {
+      let bx = x, by = y, bh = height(x, y)
+      for (const [dx, dy] of [[0.05, 0], [-0.05, 0], [0, 0.05], [0, -0.05], [0.035, 0.035], [-0.035, 0.035], [0.035, -0.035], [-0.035, -0.035]]) {
+        const nx = Math.min(1, Math.max(0, x + dx)), ny = Math.min(1, Math.max(0, y + dy))
+        if (height(nx, ny) > bh) { bh = height(nx, ny); bx = nx; by = ny }
+      }
+      if (bx === x && by === y) break
+      x = bx; y = by
+      path.push({ x, y })
+    }
+    return path
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seed, mode])
+  const globalBest = peaks.reduce((b, p) => (p.h > b.h ? p : b), peaks[0])
+  const sx = (x) => pad + x * (W - pad * 2)
+  const sy = (y) => H - pad - y * (H - pad * 2)
+  return (
+    <div className="demo">
+      <div className="demo-controls">
+        {['hill', 'astar'].map((m) => (
+          <button key={m} className={`btn ${mode === m ? 'btn-primary' : 'btn-ghost'} btn-sm`} onClick={() => setMode(m)}>
+            {m === 'hill' ? '爬山' : 'A* 搜索'}
+          </button>
+        ))}
+        <button className="btn btn-ghost btn-sm" onClick={() => setSeed(seed + 1)}>换起点</button>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
+        {/* 地形网格色块（简化热力） */}
+        {Array.from({ length: 20 }, (_, i) => Array.from({ length: 30 }, (_, j) => {
+          const x = (j + 0.5) / 30, y = (i + 0.5) / 20
+          const h = height(x, y)
+          return <rect key={`${i}-${j}`} x={sx(x - 1 / 30)} y={sy(y + 1 / 20)} width={sx(x) - sx(x - 1 / 30)} height={sy(y) - sy(y + 1 / 20)} fill={h > 0.6 ? '#16a34a' : h > 0.3 ? '#84cc16' : '#e2e8f0'} opacity="0.5" />
+        }))}
+        {/* 全局最高峰 */}
+        <circle cx={sx(globalBest.x)} cy={sy(globalBest.y)} r="8" fill="none" stroke="#ea580c" strokeWidth="2.5" />
+        <text x={sx(globalBest.x) + 12} y={sy(globalBest.y) + 4} fontSize="11" fill="#ea580c">全局最高</text>
+        {/* 爬山路径 */}
+        {climb.map((p, i) => <circle key={i} cx={sx(p.x)} cy={sy(p.y)} r={i === climb.length - 1 ? 6 : 3.5} fill={i === climb.length - 1 ? '#2563eb' : '#3b82f6'} opacity={0.8} />)}
+        {climb.length > 1 && (
+          <polyline points={climb.map((p) => `${sx(p.x)},${sy(p.y)}`).join(' ')} fill="none" stroke="#2563eb" strokeWidth="1.5" strokeDasharray="3 2" />
+        )}
+        <text x={sx(climb[0].x)} y={sy(climb[0].y) - 8} fontSize="10" fill="#2563eb">起点</text>
+        <line x1={pad} y1={sy(0)} x2={W - pad} y2={sy(0)} stroke="#cbd5e1" strokeWidth="1" />
+        <line x1={sx(0)} y1={pad} x2={sx(0)} y2={H - pad} stroke="#cbd5e1" strokeWidth="1" />
+      </svg>
+      <div className="demo-note">
+        绿色越高越优。爬山从随机起点沿最陡方向爬（蓝线），<b>容易困在局部峰</b>（蓝点停在非橙圈处）；换起点结果不同——所以爬山要多随机起点。
+        A* 用启发式+优先队列遍历全局（2020 年 A 题在 7×10⁶ 状态空间用"爬山+ A* 混合"求炉温最优）。
+      </div>
+    </div>
+  )
+}
+
+/* ============ PLS-DA 判别分析演示（VIP 特征筛选） ============ */
+
+function PlsdaDemo() {
+  const [showVIP, setShowVIP] = useState(false)
+  const W = 560, H = 300, pad = 34
+  // 两类玻璃样本（高钾=蓝，铅钡=橙），投影方向展示
+  const rnd = seededRandom(31)
+  const classA = Array.from({ length: 20 }, () => ({ x: 0.3 + rnd() * 0.15, y: 0.65 + rnd() * 0.15 }))
+  const classB = Array.from({ length: 20 }, () => ({ x: 0.65 + rnd() * 0.15, y: 0.25 + rnd() * 0.15 }))
+  const sx = (x) => pad + x * (W - pad * 2)
+  const sy = (y) => H - pad - y * (H - pad * 2)
+  // VIP 值（示例：PbO/K2O/BaO/SrO 高，其余低）
+  const vip = [
+    { name: 'PbO', v: 1.9 }, { name: 'K₂O', v: 1.6 }, { name: 'BaO', v: 1.3 },
+    { name: 'SrO', v: 1.1 }, { name: 'CaO', v: 0.8 }, { name: 'Na₂O', v: 0.5 },
+  ]
+  const vipW = 150
+  const vx = (i) => W - vipW + 20 + (i % 2) * 65
+  const vy = (i) => pad + 30 + Math.floor(i / 2) * 42
+  const vh = 26
+  return (
+    <div className="demo">
+      <div className="demo-controls">
+        <button className="btn btn-primary btn-sm" onClick={() => setShowVIP(!showVIP)}>{showVIP ? '隐藏 VIP' : '显示 VIP 特征筛选'}</button>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
+        {classA.map((p, i) => <circle key={`a${i}`} cx={sx(p.x)} cy={sy(p.y)} r="5" fill="#2563eb" opacity="0.75" />)}
+        {classB.map((p, i) => <circle key={`b${i}`} cx={sx(p.x)} cy={sy(p.y)} r="5" fill="#ea580c" opacity="0.75" />)}
+        {/* 判别方向 */}
+        <line x1={sx(0.15)} y1={sy(0.85)} x2={sx(0.85)} y2={sy(0.15)} stroke="#16a34a" strokeWidth="2" strokeDasharray="6 4" />
+        <text x={sx(0.5)} y={sy(0.5) - 10} textAnchor="middle" fontSize="11" fill="#16a34a" fontWeight="600">判别投影方向（PLS 主成分）</text>
+        {showVIP && (
+          <g>
+            {vip.map((v, i) => (
+              <g key={v.name}>
+                <rect x={vx(i)} y={vy(i) - vh / 2} width={Math.min(60, v.v / 2 * 60)} height={vh} rx="5" fill={v.v > 1 ? '#16a34a' : '#cbd5e1'} />
+                <text x={vx(i) + 4} y={vy(i) + 4} fontSize="11" fill="#fff" fontWeight="600">{v.name}</text>
+                <text x={vx(i) + 64} y={vy(i) + 4} fontSize="10" fill={v.v > 1 ? '#16a34a' : '#94a3b8'}>VIP {v.v.toFixed(1)}</text>
+              </g>
+            ))}
+            <text x={W - vipW + 20} y={pad + 14} fontSize="11" fill="#334155" fontWeight="600">VIP &gt; 1 保留</text>
+          </g>
+        )}
+        <line x1={pad} y1={sy(0)} x2={W - pad} y2={sy(0)} stroke="#cbd5e1" strokeWidth="1" />
+        <line x1={sx(0)} y1={pad} x2={sx(0)} y2={H - pad} stroke="#cbd5e1" strokeWidth="1" />
+      </svg>
+      <div className="demo-note">
+        蓝=高钾玻璃、橙=铅钡玻璃。PLS-DA 找一条判别投影方向把它们分开，再用 <b>VIP 值筛出真正重要的变量（&gt;1 保留）</b>——2022 年 C 题一等奖论文筛出 PbO/K₂O/BaO/SrO 四个成分，与决策树结果互证。
+      </div>
+    </div>
+  )
+}
+
+/* ============ 几何坐标变换演示（旋转矩阵） ============ */
+
+function CoordinateTransformDemo() {
+  const [angle, setAngle] = useState(30)
+  const W = 560, H = 300, pad = 40
+  const cx = W / 2, cy = H / 2
+  const r = 90
+  // 原坐标系点 P（在 x 轴上的点 (1,0) 放大）
+  const px = 0.8 * r, py = 0
+  const a = (angle * Math.PI) / 180
+  // 旋转后新坐标
+  const nx = px * Math.cos(a) - py * Math.sin(a)
+  const ny = px * Math.sin(a) + py * Math.cos(a)
+  const sx = (x) => cx + x
+  const sy = (y) => cy - y
+  return (
+    <div className="demo">
+      <div className="demo-controls">
+        <label>旋转角 θ = <b>{angle}°</b><input type="range" min="0" max="180" step="5" value={angle} onChange={(e) => setAngle(+e.target.value)} /></label>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
+        {/* 原坐标轴 */}
+        <line x1={pad} y1={cy} x2={W - pad} y2={cy} stroke="#94a3b8" strokeWidth="1" />
+        <line x1={cx} y1={pad} x2={cx} y2={H - pad} stroke="#94a3b8" strokeWidth="1" />
+        {/* 旋转后的新坐标轴 */}
+        <line x1={cx - r * 1.3 * Math.cos(a)} y1={cy + r * 1.3 * Math.sin(a)} x2={cx + r * 1.3 * Math.cos(a)} y2={cy - r * 1.3 * Math.sin(a)} stroke="#2563eb" strokeWidth="1.5" strokeDasharray="5 3" />
+        <line x1={cx + r * 1.3 * Math.sin(a)} y1={cy + r * 1.3 * Math.cos(a)} x2={cx - r * 1.3 * Math.sin(a)} y2={cy - r * 1.3 * Math.cos(a)} stroke="#2563eb" strokeWidth="1.5" strokeDasharray="5 3" />
+        {/* 原坐标下的点 P */}
+        <circle cx={sx(px)} cy={sy(py)} r="6" fill="#ea580c" />
+        <text x={sx(px) + 12} y={sy(py) + 4} fontSize="11.5" fill="#ea580c" fontWeight="600">P (原坐标)</text>
+        {/* 旋转后的点 P' */}
+        <circle cx={sx(nx)} cy={sy(ny)} r="6" fill="#16a34a" />
+        <text x={sx(nx) + 12} y={sy(ny) + 4} fontSize="11.5" fill="#16a34a" fontWeight="600">P' (旋转后)</text>
+        {/* 圆弧 */}
+        <path d={`M ${sx(px)} ${sy(py)} A ${r} ${r} 0 0 ${angle > 180 ? 1 : 0} ${sx(nx)} ${sy(ny)}`} fill="none" stroke="#ea580c" strokeWidth="1" strokeDasharray="3 3" />
+        <text x={cx + r * 0.55 * Math.cos(a / 2)} y={cy - r * 0.55 * Math.sin(a / 2)} fontSize="11" fill="#ea580c">θ</text>
+      </svg>
+      <div className="demo-note">
+        点 P 在原坐标 (0.8, 0)，旋转 θ 后变成 P'：x' = x·cosθ − y·sinθ = <b>{nx.toFixed(2)}</b>，y' = x·sinθ + y·cosθ = <b>{ny.toFixed(2)}</b>。
+        旋转矩阵保持距离不变（RᵀR=I）。<b>几何建模高频</b>：2021A 用三维旋转复用三问、2022B 极坐标、2023A 坐标转换矩阵、2015A 相似变换——"一次建模、多问复用"。
+      </div>
+    </div>
+  )
+}
+
+/* ============ 有限差分法演示（热传导数值解） ============ */
+
+function FiniteDifferenceDemo() {
+  const [tStep, setTStep] = useState(20) // 时间步进（迭代次数）
+  const [alpha, setAlpha] = useState(0.15)
+  const W = 560, H = 300, pad = 40
+  // 一维热传导：∂u/∂t = α·∂²u/∂x²，两端 0℃，初始中间高温
+  const N = 40
+  const u0 = Array.from({ length: N }, (_, i) => (i >= 14 && i <= 25 ? 100 : 0))
+  const u = useMemo(() => {
+    let cur = [...u0]
+    for (let t = 0; t < tStep; t++) {
+      const next = [...cur]
+      for (let i = 1; i < N - 1; i++) {
+        next[i] = cur[i] + alpha * (cur[i - 1] - 2 * cur[i] + cur[i + 1])
+      }
+      cur = next
+    }
+    return cur
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tStep, alpha])
+  const maxV = 100
+  const sx = (x) => pad + (x / (N - 1)) * (W - pad * 2)
+  const sy = (y) => H - pad - (y / maxV) * (H - pad * 2)
+  return (
+    <div className="demo">
+      <div className="demo-controls">
+        <label>时间步 t = <b>{tStep}</b><input type="range" min="0" max="200" value={tStep} onChange={(e) => setTStep(+e.target.value)} /></label>
+        <label>α = <b>{alpha.toFixed(2)}</b><input type="range" min="0.05" max="0.3" step="0.01" value={alpha} onChange={(e) => setAlpha(+e.target.value)} /></label>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
+        {[0, 50, 100].map((g) => <line key={g} x1={pad} y1={sy(g)} x2={W - pad} y2={sy(g)} stroke="#f1f5f9" />)}
+        <polyline points={u.map((v, i) => `${sx(i)},${sy(v)}`).join(' ')} fill="none" stroke="#ea580c" strokeWidth="2.5" />
+        {u.map((v, i) => <circle key={i} cx={sx(i)} cy={sy(v)} r="2.5" fill="#ea580c" opacity="0.7" />)}
+        <text x={W - pad - 90} y={pad + 14} fontSize="11" fill="#ea580c">u[i] = u[i] + α·(u[i-1] − 2u[i] + u[i+1])</text>
+        <line x1={pad} y1={sy(0)} x2={W - pad} y2={sy(0)} stroke="#cbd5e1" strokeWidth="1" />
+      </svg>
+      <div className="demo-note">
+        中间高温向两端扩散。把连续空间切成 N 个网格，用差分近似二阶导数逐格迭代——这就是<b>有限差分法</b>（2020 年 A 题用显式差分求解回焊炉炉温，R²=0.9813）。
+        <b>试试把 α 调到 0.3 以上或大步进——数值可能爆炸</b>（稳定性条件：α·Δt/Δx² ≤ 0.5）。
+      </div>
+    </div>
+  )
+}
+
+/* ============ 光线追迹演示（反射路径） ============ */
+
+function RayTracingDemo() {
+  const [angle, setAngle] = useState(20)
+  const W = 560, H = 300, pad = 40
+  const mirrorY = H * 0.62
+  // 入射光从左上射到镜面中点，反射到接收器
+  const srcX = 120, srcY = 70
+  const hitX = W / 2, hitY = mirrorY
+  const rad = (angle * Math.PI) / 180
+  // 入射方向
+  const inDir = { x: hitX - srcX, y: hitY - srcY }
+  const inLen = Math.hypot(inDir.x, inDir.y)
+  const inN = { x: inDir.x / inLen, y: inDir.y / inLen }
+  // 法线（竖直）
+  const norm = { x: 0, y: 1 }
+  // 反射：r = i - 2(i·n)n
+  const dot = inN.x * norm.x + inN.y * norm.y
+  const refN = { x: inN.x - 2 * dot * norm.x, y: inN.y - 2 * dot * norm.y }
+  const refLen = 200
+  const refEnd = { x: hitX + refN.x * refLen, y: hitY + refN.y * refLen }
+  // 接收器
+  const recvX = W - 90, recvY = 95
+  return (
+    <div className="demo">
+      <div className="demo-controls">
+        <label>入射角 θ = <b>{angle}°</b><input type="range" min="5" max="80" step="5" value={angle} onChange={(e) => setAngle(+e.target.value)} /></label>
+        <span className="hint">反射角 = 入射角 = {angle}°</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
+        {/* 镜面 */}
+        <line x1={pad} y1={mirrorY} x2={W - pad} y2={mirrorY} stroke="#334155" strokeWidth="4" />
+        <text x={W - pad - 70} y={mirrorY - 8} fontSize="11" fill="#334155">镜面</text>
+        {/* 法线 */}
+        <line x1={hitX} y1={mirrorY} x2={hitX} y2={mirrorY - 90} stroke="#94a3b8" strokeWidth="1" strokeDasharray="4 3" />
+        <text x={hitX + 6} y={mirrorY - 80} fontSize="10" fill="#94a3b8">法线</text>
+        {/* 入射光 */}
+        <line x1={srcX} y1={srcY} x2={hitX} y2={hitY} stroke="#ea580c" strokeWidth="2.5" />
+        <circle cx={srcX} cy={srcY} r="5" fill="#ea580c" />
+        <text x={srcX - 8} y={srcY - 10} fontSize="10.5" fill="#ea580c">光源</text>
+        {/* 反射光 */}
+        <line x1={hitX} y1={hitY} x2={refEnd.x} y2={refEnd.y} stroke="#2563eb" strokeWidth="2.5" />
+        {/* 接收器 */}
+        <circle cx={recvX} cy={recvY} r="8" fill="#16a34a" />
+        <text x={recvX + 12} y={recvY + 4} fontSize="10.5" fill="#16a34a">接收器</text>
+        {/* 角度标注 */}
+        <path d={`M ${hitX + 40} ${hitY} A 40 40 0 0 1 ${hitX + 40 * Math.cos(rad)} ${hitY - 40 * Math.sin(rad)}`} fill="none" stroke="#ea580c" strokeWidth="1" strokeDasharray="2 2" />
+      </svg>
+      <div className="demo-note">
+        入射角 θ 与反射角 θ 相等（反射定律）。把光源→镜面→接收器的路径逐段模拟、判断是否命中接收器——这就是<b>光线追迹</b>（2023A 定日镜用 60×60 镜面离散 + 无效点判断，2021A FAST 用反射定律向量化+射线-面求交）。
+      </div>
+    </div>
+  )
+}
+
+/* ============ RFM/FMS 用户价值演示（百分位分级） ============ */
+
+function RfmDemo() {
+  const [th, setTh] = useState(50) // 百分位阈值
+  const W = 560, H = 300, pad = 34
+  const rnd = seededRandom(44)
+  const members = useMemo(() => Array.from({ length: 40 }, (_, i) => ({
+    id: `M${i + 1}`,
+    f: rnd() * 100, // 频次
+    m: rnd() * 100, // 金额
+  })), [])
+  const sx = (x) => pad + (x / 100) * (W - pad * 2)
+  const sy = (y) => H - pad - (y / 100) * (H - pad * 2)
+  const tier = (p) => {
+    const hi = p.f >= th && p.m >= th ? 3 : p.f >= th || p.m >= th ? 2 : p.f + p.m >= th ? 1 : 0
+    return hi
+  }
+  const colors = ['#94a3b8', '#d97706', '#f59e0b', '#7c3aed'] // 青铜/白银/黄金/铂金
+  const tierNames = ['青铜', '白银', '黄金', '铂金']
+  return (
+    <div className="demo">
+      <div className="demo-controls">
+        <label>百分位阈值 = <b>{th}%</b><input type="range" min="20" max="80" value={th} onChange={(e) => setTh(+e.target.value)} /></label>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
+        {[0, 25, 50, 75, 100].map((g) => (
+          <g key={g}>
+            <line x1={sx(g)} y1={pad} x2={sx(g)} y2={H - pad} stroke="#f1f5f9" />
+            <line x1={pad} y1={sy(g)} x2={W - pad} y2={sy(g)} stroke="#f1f5f9" />
+          </g>
+        ))}
+        <line x1={sx(th)} y1={pad} x2={sx(th)} y2={H - pad} stroke="#ea580c" strokeWidth="1.5" strokeDasharray="5 3" />
+        <line x1={pad} y1={sy(th)} x2={W - pad} y2={sy(th)} stroke="#ea580c" strokeWidth="1.5" strokeDasharray="5 3" />
+        <text x={sx(th) + 4} y={pad + 10} fontSize="10" fill="#ea580c">F 阈值</text>
+        <text x={W - pad - 46} y={sy(th) - 5} fontSize="10" fill="#ea580c">M 阈值</text>
+        {members.map((p, i) => {
+          const t = tier(p)
+          return <circle key={i} cx={sx(p.f)} cy={sy(p.m)} r="4.5" fill={colors[t]} opacity="0.8"><title>{p.id} 频次{p.f.toFixed(0)} 金额{p.m.toFixed(0)}</title></circle>
+        })}
+        <line x1={pad} y1={sy(0)} x2={W - pad} y2={sy(0)} stroke="#cbd5e1" strokeWidth="1" />
+        <line x1={sx(0)} y1={pad} x2={sx(0)} y2={H - pad} stroke="#cbd5e1" strokeWidth="1" />
+      </svg>
+      <div className="kc-legend" style={{ marginTop: 8 }}>
+        {tierNames.map((n, i) => <span key={n}><i style={{ background: colors[i] }} />{n}</span>)}
+      </div>
+      <div className="demo-note">
+        用<b>频次 F × 金额 M</b>（再加最近消费 R 就是 RFM）给用户分级：双高=铂金、单高=黄金、中=白银、低=青铜。阈值越高分级越严——<b>阈值是主观选择，要解释依据</b>（2018 年 C 题用 FMS 百分位打分分级，含随机检验）。
+      </div>
+    </div>
+  )
+}
+
+/* ============ 连带率/关联挖掘演示（商品网络） ============ */
+
+function CrossSellingDemo() {
+  const [sel, setSel] = useState(0)
+  const W = 560, H = 300, pad = 30
+  // 商品网络：6 个商品，边=连带率
+  const nodes = [
+    { name: '化妆品', x: 0.5, y: 0.2 },
+    { name: '珠宝', x: 0.2, y: 0.35 },
+    { name: '女装', x: 0.8, y: 0.35 },
+    { name: '母婴', x: 0.3, y: 0.7 },
+    { name: '运动', x: 0.7, y: 0.7 },
+    { name: '家居', x: 0.5, y: 0.9 },
+  ]
+  // 连带率（对称）
+  const edges = [
+    [0, 1, 4.2], [0, 2, 3.1], [0, 3, 2.5], [1, 3, 3.8], [2, 4, 2.9],
+    [3, 4, 1.8], [3, 5, 2.2], [4, 5, 3.4], [0, 5, 1.5], [1, 2, 1.2],
+  ]
+  const sx = (x) => pad + x * (W - pad * 2)
+  const sy = (y) => H - pad - y * (H - pad * 2)
+  const selEdges = edges.filter(([a, b]) => a === sel || b === sel)
+  return (
+    <div className="demo">
+      <div className="demo-controls">
+        {nodes.map((n, i) => (
+          <button key={n.name} className={`btn ${sel === i ? 'btn-primary' : 'btn-ghost'} btn-sm`} onClick={() => setSel(i)}>{n.name}</button>
+        ))}
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
+        {/* 全部边 */}
+        {edges.map(([a, b, r], i) => (
+          <line key={i} x1={sx(nodes[a].x)} y1={sy(nodes[a].y)} x2={sx(nodes[b].x)} y2={sy(nodes[b].y)} stroke={a === sel || b === sel ? '#ea580c' : '#e2e8f0'} strokeWidth={a === sel || b === sel ? 2.5 : 1} opacity={a === sel || b === sel ? 1 : 0.5} />
+        ))}
+        {/* 节点 */}
+        {nodes.map((n, i) => (
+          <g key={n.name}>
+            <circle cx={sx(n.x)} cy={sy(n.y)} r={i === sel ? 22 : 18} fill={i === sel ? '#ea580c' : '#2563eb'} opacity={i === sel ? 1 : 0.85} onClick={() => setSel(i)} style={{ cursor: 'pointer' }} />
+            <text x={sx(n.x)} y={sy(n.y) + 4} textAnchor="middle" fontSize="11" fill="#fff" fontWeight="600">{n.name}</text>
+          </g>
+        ))}
+        {/* 选中商品的连带标注 */}
+        {selEdges.map(([a, b, r], i) => {
+          const o = a === sel ? b : a
+          const midX = (sx(nodes[sel].x) + sx(nodes[o].x)) / 2
+          const midY = (sy(nodes[sel].y) + sy(nodes[o].y)) / 2
+          return <text key={i} x={midX} y={midY - 4} textAnchor="middle" fontSize="10" fill="#ea580c" fontWeight="600">{r.toFixed(1)}</text>
+        })}
+      </svg>
+      <div className="demo-note">
+        边越粗连带率越高（数字标注）。选中商品看它最适合和谁捆绑促销——<b>连带率 = 销售总数量 / 有效单据数</b>（2018 年 C 题算交叉连带率设计中秋促销，化妆品 5.05 最高）。
+      </div>
+    </div>
+  )
+}
+
+/* ============ 图论 TSP 演示（最短回路） ============ */
+
+function TspDemo() {
+  const [n, setN] = useState(6)
+  const [iter, setIter] = useState(0)
+  const W = 560, H = 300, pad = 40
+  const cx = W / 2, cy = H / 2
+  const r = 95
+  const rnd = seededRandom(55)
+  const cities = useMemo(() => {
+    // 环形布置 + 随机扰动（让 TSP 有实际意义）
+    return Array.from({ length: n }, (_, i) => {
+      const a = (i / n) * Math.PI * 2 + rnd() * 0.3
+      return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [n])
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y)
+  // 贪心近邻回路（从 0 出发）
+  const route = useMemo(() => {
+    const path = [0]
+    const visited = new Set([0])
+    for (let k = 0; k < n - 1; k++) {
+      const cur = path[path.length - 1]
+      let best = -1, bd = Infinity
+      for (let i = 0; i < n; i++) {
+        if (!visited.has(i)) {
+          const d = dist(cities[cur], cities[i])
+          if (d < bd) { bd = d; best = i }
+        }
+      }
+      path.push(best)
+      visited.add(best)
+    }
+    path.push(0)
+    return path
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cities, iter, n])
+  const total = route.slice(1).reduce((s, ci, i) => s + dist(cities[route[i]], cities[ci]), 0)
+  const showEdges = Math.min(iter + 1, route.length)
+  return (
+    <div className="demo">
+      <div className="demo-controls">
+        <label>城市数 = <b>{n}</b><input type="range" min="5" max="9" value={n} onChange={(e) => { setN(+e.target.value); setIter(0) }} /></label>
+        <button className="btn btn-primary btn-sm" onClick={() => setIter(iter + 1)} disabled={iter >= route.length - 1}>走一步</button>
+        <button className="btn btn-ghost btn-sm" onClick={() => setIter(0)}>重置</button>
+        <span className="hint">回路长 {total.toFixed(0)}</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
+        {route.slice(0, showEdges).map((ci, i) => i > 0 && (
+          <line key={i} x1={cities[route[i - 1]].x} y1={cities[route[i - 1]].y} x2={cities[ci].x} y2={cities[ci].y} stroke="#2563eb" strokeWidth="2" opacity={0.85} />
+        ))}
+        {showEdges >= route.length && <line x1={cities[route[route.length - 2]].x} y1={cities[route[route.length - 2]].y} x2={cities[0].x} y2={cities[0].y} stroke="#ea580c" strokeWidth="2" strokeDasharray="5 3" />}
+        {cities.map((c, i) => (
+          <g key={i}>
+            <circle cx={c.x} cy={c.y} r="7" fill="#fff" stroke="#2563eb" strokeWidth="2" />
+            <text x={c.x} y={c.y + 4} textAnchor="middle" fontSize="10" fill="#2563eb" fontWeight="700">{i + 1}</text>
+          </g>
+        ))}
+      </svg>
+      <div className="demo-note">
+        找一条经过所有城市一次的最短回路（TSP）。这里用<b>贪心近邻</b>演示（每步去最近未访城市），回路长 {total.toFixed(0)}——<b>但不保证最优</b>！
+        城市从 5 加到 9，穷举从 12 种涨到 20160 种——所以真实 TSP 用模拟退火/遗传算法（2013 年 B 题碎纸复原把拼接顺序建模为 TSP 求解）。
+      </div>
+    </div>
+  )
+}
+
+/* ============ 图像处理演示（二值化阈值） ============ */
+
+function ImageProcessingDemo() {
+  const [th, setTh] = useState(128)
+  const W = 560, H = 300, pad = 20
+  // 用 SVG 绘制"字母 A"像素（简化 10x14 点阵）
+  const letter = useMemo(() => {
+    const rows = [
+      '....##....',
+      '...####...',
+      '..##..##..',
+      '..##..##..',
+      '.########.',
+      '.########.',
+      '##....##..',
+      '##....##..',
+      '##....##..',
+      '##....##..',
+      '..........',
+      '..........',
+      '..........',
+      '..........',
+    ]
+    // 模拟灰度：有字符处 200，空白处 50（加一点噪声让二值化有意义）
+    const rnd = seededRandom(7)
+    return rows.map((row, i) => row.split('').map((ch) => {
+      const base = ch === '#' ? 200 : 50
+      return Math.min(255, Math.max(0, base + (rnd() - 0.5) * 60))
+    }))
+  }, [])
+  const cellW = 18, cellH = 18
+  const startX = (W - letter[0].length * cellW) / 2
+  const startY = (H - letter.length * cellH) / 2
+  const dark = letter.flat().filter((v) => v < th).length
+  const total = letter.flat().length
+  return (
+    <div className="demo">
+      <div className="demo-controls">
+        <label>阈值 = <b>{th}</b><input type="range" min="40" max="220" value={th} onChange={(e) => setTh(+e.target.value)} /></label>
+        <span className="hint">低于阈值 → 黑（字符）</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
+        {letter.map((row, i) => row.map((v, j) => (
+          <rect key={`${i}-${j}`} x={startX + j * cellW} y={startY + i * cellH} width={cellW - 1} height={cellH - 1} fill={v < th ? '#0f172a' : '#e2e8f0'} />
+        )))}
+      </svg>
+      <div className="demo-note">
+        原始图是带噪声的灰度"字母 A"。二值化：把低于阈值的像素变黑（字符）、其余变白（背景）。当前阈值 {th} → 黑像素 {dark}/{total}。
+        <b>阈值太高/太低都会让字符与背景分离失败</b>（2013 年 B 题碎纸复原用二值化+特征提取；2015 年 A 题视频截帧→灰度→边缘提取）。
+      </div>
+    </div>
+  )
+}
+
+/* ============ Dirichlet 回归演示（成分数据单纯形） ============ */
+
+function DirichletDemo() {
+  const [w, setW] = useState(0.5) // 风化程度（0=未风化, 1=风化）
+  const W = 560, H = 300, pad = 30
+  // 三成分（SiO2, PbO, K2O）的单纯形三角图：三个角=纯成分，中间=等比例
+  // 未风化成分点（示例：玻璃）
+  const a0 = 0.72, b0 = 0.18, c0 = 0.10 // SiO2/PbO/K2O 未风化
+  // 风化后成分（PbO 相对升高，K2O 降低，SiO2 略降）——模拟论文发现
+  const a1 = 0.68, b1 = 0.26, c1 = 0.06
+  // 插值
+  const a = a0 + (a1 - a0) * w
+  const b = b0 + (b1 - b0) * w
+  const c = 1 - a - b
+  // 三角坐标 → 直角坐标（等边三角形）
+  const T = 220, ox = (W - T) / 2 + T / 2, oy = H - pad - 30
+  const top = { x: ox, y: oy - T * Math.sqrt(3) / 2 }
+  const bl = { x: ox - T / 2, y: oy }
+  const br = { x: ox + T / 2, y: oy }
+  const toXY = (pa, pb, pc) => {
+    // 重心坐标：a 对应底左(b角), b 对应底右... 用三顶点线性组合
+    // 约定：a→顶, b→左下, c→右下
+    return {
+      x: pa * top.x + pb * bl.x + pc * br.x,
+      y: pa * top.y + pb * bl.y + pc * br.y,
+    }
+  }
+  const p0 = toXY(a0, b0, c0)
+  const p1 = toXY(a1, b1, c1)
+  const p = toXY(a, b, c)
+  return (
+    <div className="demo">
+      <div className="demo-controls">
+        <label>风化程度 = <b>{w.toFixed(2)}</b><input type="range" min="0" max="1" step="0.05" value={w} onChange={(e) => setW(+e.target.value)} /></label>
+        <span className="kc-tag">成分和 = {(a + b + c).toFixed(2)}</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
+        <polygon points={`${top.x},${top.y} ${bl.x},${bl.y} ${br.x},${br.y}`} fill="#f8fafc" stroke="#cbd5e1" strokeWidth="1.5" />
+        <text x={top.x} y={top.y - 10} textAnchor="middle" fontSize="12" fill="#334155">SiO₂</text>
+        <text x={bl.x - 8} y={bl.y + 18} textAnchor="middle" fontSize="12" fill="#334155">PbO</text>
+        <text x={br.x + 8} y={br.y + 18} textAnchor="middle" fontSize="12" fill="#334155">K₂O</text>
+        {/* 未风化/风化点 */}
+        <circle cx={p0.x} cy={p0.y} r="6" fill="#16a34a" />
+        <text x={p0.x + 10} y={p0.y - 6} fontSize="10.5" fill="#16a34a">未风化</text>
+        <circle cx={p1.x} cy={p1.y} r="6" fill="#94a3b8" />
+        <text x={p1.x - 30} y={p1.y + 16} fontSize="10.5" fill="#94a3b8">风化</text>
+        {/* 当前点 + 连线 */}
+        <line x1={p0.x} y1={p0.y} x2={p.x} y2={p.y} stroke="#ea580c" strokeWidth="1.5" strokeDasharray="4 3" />
+        <circle cx={p.x} cy={p.y} r="8" fill="#ea580c" />
+        <text x={p.x + 12} y={p.y + 4} fontSize="10.5" fill="#ea580c" fontWeight="600">预测</text>
+        <text x={W / 2} y={H - 12} textAnchor="middle" fontSize="11" fill="#94a3b8">当前成分：SiO₂ {a.toFixed(2)} · PbO {b.toFixed(2)} · K₂O {c.toFixed(2)}</text>
+      </svg>
+      <div className="demo-note">
+        成分数据（和=100%）必须落在三角形（单纯形）内——普通回归可能预测出"负成分"或"和≠1"。<b>Dirichlet 回归</b>定义在单纯形上，保证预测合法（2022 年 C 题用它将"风化"替换为"未风化"预测风化前成分）。拖动滑块看风化→未风化的成分迁移。
+      </div>
+    </div>
+  )
+}
+
+/* ============ 时间序列 VAR 演示（多变量互影响） ============ */
+
+function VarDemo() {
+  const [lag, setLag] = useState(2)
+  const [horizon, setHorizon] = useState(5)
+  const W = 560, H = 300, pad = 34
+  const hist = 30
+  // 两条互相影响的序列：y1 影响 y2（滞后 lag 期），加噪声
+  const series = useMemo(() => {
+    const rnd = seededRandom(66)
+    const y1 = [], y2 = []
+    let v1 = 10, v2 = 8
+    for (let t = 0; t < hist + horizon; t++) {
+      if (t > 0) {
+        v1 = v1 + 0.3 * (Math.sin(t / 3)) + (rnd() - 0.5) * 2
+        v2 = v2 + 0.25 * (y1[Math.max(0, t - lag)] - v2) + (rnd() - 0.5) * 1.5
+      }
+      y1.push(v1)
+      y2.push(v2)
+    }
+    return { y1, y2 }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lag])
+  const maxV = Math.max(...series.y1, ...series.y2) * 1.05
+  const minV = Math.min(...series.y1, ...series.y2) * 0.95
+  const sx = (x) => pad + (x / (hist + horizon - 1)) * (W - pad * 2)
+  const sy = (y) => H - pad - ((y - minV) / (maxV - minV)) * (H - pad * 2)
+  const draw = (arr, color) => (
+    <polyline points={arr.map((v, i) => `${sx(i)},${sy(v)}`).join(' ')} fill="none" stroke={color} strokeWidth="2" />
+  )
+  return (
+    <div className="demo">
+      <div className="demo-controls">
+        <label>滞后阶数 = <b>{lag}</b><input type="range" min="1" max="5" value={lag} onChange={(e) => setLag(+e.target.value)} /></label>
+        <label>预测期 = <b>{horizon}</b><input type="range" min="2" max="8" value={horizon} onChange={(e) => setHorizon(+e.target.value)} /></label>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
+        {[minV, (minV + maxV) / 2, maxV].map((g) => <line key={g} x1={pad} y1={sy(g)} x2={W - pad} y2={sy(g)} stroke="#f1f5f9" />)}
+        {draw(series.y1, '#2563eb')}
+        {draw(series.y2, '#ea580c')}
+        <line x1={sx(hist - 0.5)} y1={pad} x2={sx(hist - 0.5)} y2={H - pad} stroke="#94a3b8" strokeWidth="1" strokeDasharray="4 3" />
+        <text x={sx(hist - 0.5) + 4} y={pad + 12} fontSize="10.5" fill="#94a3b8">预测区</text>
+        <text x={W - pad - 90} y={pad + 12} fontSize="10.5" fill="#2563eb">y₁</text>
+        <text x={W - pad - 50} y={pad + 12} fontSize="10.5" fill="#ea580c">y₂</text>
+      </svg>
+      <div className="demo-note">
+        蓝线 y₁ 与橙线 y₂ 互相影响：y₂ 的当前值依赖 y₁ 的<b>滞后 {lag} 期</b>值。VAR 用矩阵描述这种多变量滞后依赖并外推预测（2023 年 C 题用 VAR(2) 预测蔬菜销量）。<b>滞后阶数选多少</b>要看 AIC/显著性——这是 VAR 的关键决策。
+      </div>
+    </div>
+  )
+}
+
+/* ============ 盈亏平衡演示（保本点） ============ */
+
+function BreakEvenDemo() {
+  const [price, setPrice] = useState(20)
+  const [fixed, setFixed] = useState(500)
+  const W = 560, H = 300, pad = 40
+  const unitCost = 12
+  const maxQ = 100, maxY = 2200
+  const sx = (x) => pad + (x / maxQ) * (W - pad * 2)
+  const sy = (y) => H - pad - (y / maxY) * (H - pad * 2)
+  // 保本点：收入=成本 → Q* = fixed/(price-unitCost)
+  const qStar = fixed / (price - unitCost)
+  const be = qStar >= 0 && qStar <= maxQ ? qStar : null
+  // 成本线：fixed + unitCost*Q；收入线：price*Q
+  const costPts = [[0, fixed], [maxQ, fixed + unitCost * maxQ]]
+  const revPts = [[0, 0], [maxQ, price * maxQ]]
+  return (
+    <div className="demo">
+      <div className="demo-controls">
+        <label>单价 = <b>{price}</b><input type="range" min="12" max="40" value={price} onChange={(e) => setPrice(+e.target.value)} /></label>
+        <label>固定成本 = <b>{fixed}</b><input type="range" min="200" max="1500" step="50" value={fixed} onChange={(e) => setFixed(+e.target.value)} /></label>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
+        {[0, 500, 1000, 1500, 2000].map((g) => <line key={g} x1={pad} y1={sy(g)} x2={W - pad} y2={sy(g)} stroke="#f1f5f9" />)}
+        <line x1={sx(costPts[0][0])} y1={sy(costPts[0][1])} x2={sx(costPts[1][0])} y2={sy(costPts[1][1])} stroke="#ea580c" strokeWidth="2.5" />
+        <text x={W - pad - 60} y={sy(costPts[1][1]) + 4} fontSize="11" fill="#ea580c">成本 = {fixed} + {unitCost}·Q</text>
+        <line x1={sx(revPts[0][0])} y1={sy(revPts[0][1])} x2={sx(revPts[1][0])} y2={sy(revPts[1][1])} stroke="#16a34a" strokeWidth="2.5" />
+        <text x={W - pad - 60} y={sy(revPts[1][1]) - 6} fontSize="11" fill="#16a34a">收入 = {price}·Q</text>
+        {be !== null && (
+          <g>
+            <line x1={sx(be)} y1={pad} x2={sx(be)} y2={H - pad} stroke="#2563eb" strokeWidth="1.5" strokeDasharray="5 3" />
+            <circle cx={sx(be)} cy={sy(price * be)} r="6" fill="#2563eb" />
+            <text x={sx(be) + 6} y={sy(price * be) - 8} fontSize="11.5" fill="#2563eb" fontWeight="600">保本点 Q*={be.toFixed(0)}</text>
+          </g>
+        )}
+        {be === null && <text x={W / 2} y={pad + 16} textAnchor="middle" fontSize="12" fill="#dc2626">单价 ≤ 单位成本，无法保本！</text>}
+        <line x1={pad} y1={sy(0)} x2={W - pad} y2={sy(0)} stroke="#cbd5e1" strokeWidth="1" />
+      </svg>
+      <div className="demo-note">
+        收入线与成本线相交处就是<b>保本点</b>：Q* = 固定成本 / (单价 − 单位成本) = {be ? be.toFixed(0) : '—'}。
+        左侧亏损、右侧盈利。拖单价/固定成本看保本点移动（2014 年 C 题用盈亏平衡求保本产仔量，模型递进Ⅰ→Ⅱ→Ⅲ）。
+      </div>
+    </div>
+  )
+}
+
+/* ============ 平衡方程组演示（稳态结构） ============ */
+
+function BalanceEquationsDemo() {
+  const [cull, setCull] = useState(0.25) // 年淘汰率
+  const W = 560, H = 300, pad = 30
+  // 猪群平衡：母猪 M + 公猪 M/20 + 仔猪 9M = 总量；淘汰 = cull·(M+M/20)
+  // 稳态：M + M/20 + 9M = 10000 + cull·(1+1/20)M  → M = 10000/(10.05 - 1.05*cull)
+  const M = 10000 / (10.05 - 1.05 * cull)
+  const boars = M / 20
+  const piglets = 9 * M
+  const culled = cull * (M + boars)
+  const total = M + boars + piglets
+  const items = [
+    { name: '母猪', v: M, color: '#2563eb' },
+    { name: '公猪', v: boars, color: '#16a34a' },
+    { name: '仔猪', v: piglets, color: '#ea580c' },
+    { name: '年淘汰', v: culled, color: '#94a3b8' },
+  ]
+  const maxV = Math.max(...items.map((i) => i.v)) * 1.1
+  const sx = (x) => pad + (x / 3.5) * (W - pad * 2)
+  const sy = (y) => H - pad - (y / maxV) * (H - pad * 2)
+  return (
+    <div className="demo">
+      <div className="demo-controls">
+        <label>年淘汰率 = <b>{cull.toFixed(2)}</b><input type="range" min="0.1" max="0.4" step="0.01" value={cull} onChange={(e) => setCull(+e.target.value)} /></label>
+        <span className="kc-tag">总量 {total.toFixed(0)}</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
+        {[0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000].map((g) => <line key={g} x1={pad} y1={sy(g)} x2={W - pad} y2={sy(g)} stroke="#f1f5f9" />)}
+        {items.map((it, i) => {
+          const x = sx(i + 0.5)
+          const h = (it.v / maxV) * (H - pad * 2)
+          return (
+            <g key={it.name}>
+              <rect x={x - 38} y={H - pad - h} width="76" height={h} rx="8" fill={it.color} opacity="0.85" />
+              <text x={x} y={H - pad - h - 8} textAnchor="middle" fontSize="12" fill={it.color} fontWeight="700">{it.v.toFixed(0)}</text>
+              <text x={x} y={H - pad + 16} textAnchor="middle" fontSize="11.5" fill="#334155">{it.name}</text>
+            </g>
+          )
+        })}
+        <line x1={pad} y1={sy(0)} x2={W - pad} y2={sy(0)} stroke="#cbd5e1" strokeWidth="1" />
+      </svg>
+      <div className="demo-note">
+        稳态下各群体满足<b>平衡方程</b>：母猪 + 公猪 + 仔猪 = 总量（+淘汰补进）。这里 M = 总量/(10.05 − 1.05×淘汰率)。
+        淘汰率从 {cull.toFixed(2)} 调大 → 母猪存栏从 {M.toFixed(0)} 变化（2014 年 C 题用猪群结构平衡方程组，模型Ⅳ→Ⅴ 修正周期）。
+      </div>
+    </div>
+  )
+}
+
 /* ============ 卡片注册表 ============ */
 
 const CARDS = [
@@ -1691,6 +2451,174 @@ const CARDS = [
     freqLevel: 'high',
     src: '国赛预测类公认高频（README 方法地图）；2022 国赛 C 题一等奖论文 C229 §8.3 展望提及灰色关联分析作为改进方向',
   },
+  {
+    id: 'greedy',
+    title: '贪心算法',
+    tag: '优化 / 启发式',
+    concept: '每一步都选当前看起来最好的、不回头——在候选可严格排序（如按性价比选供应商）的场景下简单高效。中频率：候选可严格排序、局部最优能推出全局最优时最简解法（2021 年 C 题双层贪心、2022 年 B 题贪心三步调整）。',
+    demo: GreedyDemo,
+    try: '为什么贪心在"按评分排序选供应商"这里恰好最优，但在 0-1 背包（每家有容量上限）里可能失效？',
+    related: ['动态规划', '遗传算法'],
+    freq: '● 中频率',
+    freqLevel: 'mid',
+    src: '2021 国赛 C 题一等奖论文 C283 §6.2（双层贪心：外层选供货商+内层选转运商）；2022 国赛 B 题优秀论文 B086 §5.4（贪心三步调整无人机编队）',
+  },
+  {
+    id: 'hill-climbing-a-star',
+    title: '爬山算法 + A*',
+    tag: '优化 / 搜索',
+    concept: '状态空间太大无法穷举时：爬山（贪心跳邻域，快但易困局部最优）与 A*（启发式+优先队列，全局但慢）常混合使用。中频率：大规模离散搜索用爬山+A* 混合（2020 年 A 题优秀论文在 700 万状态空间求解炉温优化）。',
+    demo: HillClimbingDemo,
+    try: '点"换起点"几次——为什么爬山从不同起点出发结果不同？A* 相比爬山多了什么保证？',
+    related: ['模拟退火', '遗传算法'],
+    freq: '● 中频率',
+    freqLevel: 'mid',
+    src: '2020 国赛 A 题优秀论文 A147 §5.3.3（搜索空间 21⁴×36≈7×10⁶，爬山多随机起点 + A* 优先队列混合）',
+  },
+  {
+    id: 'pls-da',
+    title: 'PLS-DA 判别分析',
+    tag: '分类 / 降维判别',
+    concept: '样本少、变量多且强相关时普通分类易过拟合——PLS-DA 先提取主成分再判别，用 VIP 值筛出真正重要的变量。中频率：变量多、样本少、强相关的分类（成分/光谱数据）用它 + VIP 特征筛选（2022 年 C 题一等奖论文 Q2）。',
+    demo: PlsdaDemo,
+    try: '为什么"变量多但样本少"时直接分类会过拟合？VIP 值大于 1 的变量意味着什么？',
+    related: ['决策树', 'PCA'],
+    freq: '● 中频率',
+    freqLevel: 'mid',
+    src: '2022 国赛 C 题一等奖论文 C229 §6.2.1/§6.2.2（PLS-DA 分类玻璃 + VIP 筛出 PbO/K₂O/BaO/SrO，与决策树结果互证）',
+  },
+  {
+    id: 'coordinate-transform',
+    title: '几何建模 + 坐标变换',
+    tag: '机理 / 几何',
+    concept: '把世界坐标系的几何关系，通过旋转/平移/缩放变换到方便计算的坐标系——"一次建模、多问复用"。高频率：2021 年 A 题（三维旋转复用三问）、2015 年 A 题（相似变换）、2022 年 B 题（极坐标）、2023 年 A 题（坐标转换矩阵）四篇获奖论文都靠坐标变换打通几何建模。',
+    demo: CoordinateTransformDemo,
+    try: '旋转矩阵为什么必须保持正交（RᵀR=I）？如果不正交，距离会怎样变化？',
+    related: ['微分方程', '光线追迹'],
+    freq: '★ 高频率',
+    freqLevel: 'high',
+    src: '2021 国赛 A 题优秀论文 A217 §6.1.1（复合三维旋转矩阵）；2015 国赛 A 题 §4.1.2（相似变换）；2022 国赛 B 题 §5.1（极坐标+正弦定理）；2023 国赛 A 题 §5.1（坐标转换矩阵）',
+  },
+  {
+    id: 'finite-difference',
+    title: '有限差分法',
+    tag: '机理 / 数值解',
+    concept: '偏微分方程没有解析解时，把连续区域离散成网格，用差分近似导数逐格迭代。中频率：微分方程无解析解时的数值求解标配（2020 年 A 题优秀论文用显式差分迭代求解炉温 R²=0.9813）。',
+    demo: FiniteDifferenceDemo,
+    try: '把 α 调到 0.3 以上或大步进——为什么数值会爆炸？（稳定性条件 α·Δt/Δx² ≤ 0.5）',
+    related: ['微分方程', '蒙特卡洛'],
+    freq: '● 中频率',
+    freqLevel: 'mid',
+    src: '2020 国赛 A 题优秀论文 A147 §5.1.7（一维热传导方程有限差分显式格式求解）',
+  },
+  {
+    id: 'ray-tracing',
+    title: '光线追迹',
+    tag: '机理 / 光学模拟',
+    concept: '模拟光线从发射、反射到接收的路径——光学/雷达/通信类题目的核心模拟手段。中频率：光学/物理类题目（2023 年 A 题定日镜、2021 年 A 题 FAST 反射面）用离散化光线追迹精确模拟。',
+    demo: RayTracingDemo,
+    try: '入射角 30° 时反射光偏多少？把镜面角度调大，反射光还能命中接收器吗？',
+    related: ['几何坐标变换', '蒙特卡洛'],
+    freq: '● 中频率',
+    freqLevel: 'mid',
+    src: '2023 国赛 A 题优秀论文 A127 §5.3.1（镜面 60×60 离散+无效点判断）；2021 国赛 A 题优秀论文 A217 §7.1（反射定律向量化+射线-面求交）',
+  },
+  {
+    id: 'rfm',
+    title: 'RFM / FMS 用户价值',
+    tag: '数据挖掘 / 用户画像',
+    concept: '用"最近消费 R / 频次 F / 金额 M"给用户分级——铂金/黄金/白银/青铜。中频率：用户画像/客户价值类题标准模型（2018 年 C 题优秀论文 Q2 用 FMS 打分分级，含随机检验）。',
+    demo: RfmDemo,
+    try: '把阈值从 50% 拖到 30%，更多会员变"铂金"——分级的意义还在吗？阈值该依据什么定？',
+    related: ['多指标评价体系', 'TOPSIS'],
+    freq: '● 中频率',
+    freqLevel: 'mid',
+    src: '2018 国赛 C 题优秀论文 RFMS 会员画像 §5.3（FMS 购买力模型：G = 100×F + 10×M + 1×S 百分位打分分级）',
+  },
+  {
+    id: 'cross-selling',
+    title: '连带率 / 关联挖掘',
+    tag: '数据挖掘 / 关联',
+    concept: '顾客一次买 A 还会买什么？用"连带率"量化商品组合关联度，支撑促销/推荐决策。中频率：营销/零售类题数据挖掘点（2018 年 C 题优秀论文 Q5 用连带率设计连带促销方案）。',
+    demo: CrossSellingDemo,
+    try: '选中"化妆品"——它最适合和谁捆绑促销？连带率只反映共现，能说明因果吗？',
+    related: ['RFM', '数据预处理'],
+    freq: '● 中频率',
+    freqLevel: 'mid',
+    src: '2018 国赛 C 题优秀论文 RFMS 会员画像 §5.6（交叉连带率 = 销售总数量/有效单据数，化妆品 5.05 最高）',
+  },
+  {
+    id: 'tsp',
+    title: '图论 TSP',
+    tag: '图论 / 组合优化',
+    concept: '把"按顺序排好 N 个对象"的问题化为 TSP：找一条经过所有顶点一次的最短回路。中频率：排序/拼接类问题化归 TSP（2013 年 B 题碎纸复原把拼接顺序建模为 TSP 用模拟退火求解）。',
+    demo: TspDemo,
+    try: '城市从 5 加到 9，穷举从 12 种涨到 20160 种——为什么真实 TSP 要用启发式算法？',
+    related: ['模拟退火', '贪心算法'],
+    freq: '● 中频率',
+    freqLevel: 'mid',
+    src: '2013 国赛 B 题优秀论文 碎纸片拼接复原 §4.1.5（碎纸为顶点、距离为边权求最短哈密顿回路）',
+  },
+  {
+    id: 'image-processing',
+    title: '图像处理（二值化）',
+    tag: '算法 / 图像',
+    concept: '把图像变成可计算的数据：灰度化、二值化、特征提取（宽度/边缘/坐标）——图像/视频类题目的数据提取入口。中频率：图像/视频类题目第一步（2013 年 B 题碎纸复原、2015 年 A 题太阳影子视频处理）。',
+    demo: ImageProcessingDemo,
+    try: '把阈值拖到 40 或 220——为什么字符和背景分离会失败？阈值怎么选才稳？',
+    related: ['数据预处理', 'TSP'],
+    freq: '● 中频率',
+    freqLevel: 'mid',
+    src: '2013 国赛 B 题优秀论文 碎纸片拼接复原 §4.1.1-4.1.2（像素矩阵二值化+字符特征提取）；2015 国赛 A 题 §4.1.1（视频截帧→灰度→边缘→坐标）',
+  },
+  {
+    id: 'dirichlet',
+    title: 'Dirichlet 回归（成分数据）',
+    tag: '预测 / 专有场景',
+    concept: '因变量是"组成成分"（各项和=100%）时普通回归不合适——Dirichlet 分布天然定义在单纯形上，保证预测合法。低频率但专有场景必备：成分数据（各项和为 100%）时替代普通回归（2022 年 C 题一等奖论文 Q1）。',
+    demo: DirichletDemo,
+    try: '把某成分拖到负值区域看看——为什么成分数据不允许？普通回归预测成分会出什么问题？',
+    related: ['回归', '相关性分析'],
+    freq: '○ 低频率',
+    freqLevel: 'low',
+    src: '2022 国赛 C 题一等奖论文 C229 §6.1.3（Dirichlet 回归预测风化前化学成分）',
+  },
+  {
+    id: 'var',
+    title: '时间序列 VAR',
+    tag: '预测 / 时序',
+    concept: '多变量互相影响的时间序列，用 VAR 描述彼此的滞后依赖并外推预测。中频率：多变量时序预测用（2023 年 C 题优秀论文用 VAR(2) 预测蔬菜销量）。',
+    demo: VarDemo,
+    try: '把滞后阶数从 1 调到 5——y₂ 对 y₁ 的响应延迟怎么变？滞后阶数该依据什么选？',
+    related: ['灰色预测', '线性回归'],
+    freq: '● 中频率',
+    freqLevel: 'mid',
+    src: '2023 国赛 C 题优秀论文 C126（VAR(2) 时序预测蔬菜销量，EViews 实现）',
+  },
+  {
+    id: 'break-even',
+    title: '盈亏平衡分析',
+    tag: '数据挖掘 / 经济决策',
+    concept: '总收入=总成本时的"保本点"——经济学管理类题目的核心分析工具。低频率但经济管理题核心：2014 年 C 题一等奖论文用盈亏平衡分析求保本产仔量（模型递进Ⅰ→Ⅱ→Ⅲ）。',
+    demo: BreakEvenDemo,
+    try: '固定成本涨 20%，保本量怎么变？单价降到等于单位成本时会发生什么？',
+    related: ['线性规划', '数据预处理'],
+    freq: '○ 低频率',
+    freqLevel: 'low',
+    src: '2014 国赛 C 题一等奖论文 生猪养殖场经营管理 §6.11-6.13（盈亏平衡模型Ⅰ→Ⅱ→Ⅲ 递进）',
+  },
+  {
+    id: 'balance-equations',
+    title: '平衡方程组（稳态建模）',
+    tag: '数据挖掘 / 守恒',
+    concept: '稳态/饱和状态下各数量满足的平衡关系——猪群结构、人口、库存等"总量守恒"建模。低频率：稳态/饱和场景的守恒建模（2014 年 C 题一等奖论文用猪群结构平衡方程组）。',
+    demo: BalanceEquationsDemo,
+    try: '把淘汰率从 0.25 调到 0.4——母猪存栏为什么变化？周期从年改半年会怎样？',
+    related: ['盈亏平衡', '存贮模型'],
+    freq: '○ 低频率',
+    freqLevel: 'low',
+    src: '2014 国赛 C 题一等奖论文 生猪养殖场经营管理 §6.21-6.22（猪群结构平衡方程组，模型Ⅳ→Ⅴ 周期修正）',
+  },
 ]
 
 /** 全部卡片 id（知识卡片面板遍历用） */
@@ -1867,6 +2795,67 @@ export const CONCEPT_KEYWORDS = [
   { keyword: '累加生成', cardId: 'grey-prediction' },
   { keyword: 'ago', cardId: 'grey-prediction' },
   { keyword: '灰色关联', cardId: 'grey-prediction' },
+  { keyword: '贪心', cardId: 'greedy' },
+  { keyword: 'greedy', cardId: 'greedy' },
+  { keyword: '双层贪心', cardId: 'greedy' },
+  { keyword: '爬山算法', cardId: 'hill-climbing-a-star' },
+  { keyword: '爬山', cardId: 'hill-climbing-a-star' },
+  { keyword: 'a*', cardId: 'hill-climbing-a-star' },
+  { keyword: 'a-star', cardId: 'hill-climbing-a-star' },
+  { keyword: '启发式搜索', cardId: 'hill-climbing-a-star' },
+  { keyword: '邻域搜索', cardId: 'hill-climbing-a-star' },
+  { keyword: '偏最小二乘', cardId: 'pls-da' },
+  { keyword: 'pls-da', cardId: 'pls-da' },
+  { keyword: 'plsda', cardId: 'pls-da' },
+  { keyword: 'vip值', cardId: 'pls-da' },
+  { keyword: '判别分析', cardId: 'pls-da' },
+  { keyword: '坐标变换', cardId: 'coordinate-transform' },
+  { keyword: '旋转矩阵', cardId: 'coordinate-transform' },
+  { keyword: '相似变换', cardId: 'coordinate-transform' },
+  { keyword: '极坐标', cardId: 'coordinate-transform' },
+  { keyword: '几何建模', cardId: 'coordinate-transform' },
+  { keyword: '有限差分', cardId: 'finite-difference' },
+  { keyword: '差分法', cardId: 'finite-difference' },
+  { keyword: '显式格式', cardId: 'finite-difference' },
+  { keyword: '数值解', cardId: 'finite-difference' },
+  { keyword: '光线追迹', cardId: 'ray-tracing' },
+  { keyword: '射线求交', cardId: 'ray-tracing' },
+  { keyword: '反射定律', cardId: 'ray-tracing' },
+  { keyword: 'ray tracing', cardId: 'ray-tracing' },
+  { keyword: 'rfm', cardId: 'rfm' },
+  { keyword: 'fms', cardId: 'rfm' },
+  { keyword: '会员价值', cardId: 'rfm' },
+  { keyword: '用户画像', cardId: 'rfm' },
+  { keyword: '百分位', cardId: 'rfm' },
+  { keyword: '连带率', cardId: 'cross-selling' },
+  { keyword: '关联分析', cardId: 'cross-selling' },
+  { keyword: '交叉销售', cardId: 'cross-selling' },
+  { keyword: '商品组合', cardId: 'cross-selling' },
+  { keyword: 'tsp', cardId: 'tsp' },
+  { keyword: '旅行商', cardId: 'tsp' },
+  { keyword: '哈密顿回路', cardId: 'tsp' },
+  { keyword: '最短回路', cardId: 'tsp' },
+  { keyword: '图像处理', cardId: 'image-processing' },
+  { keyword: '二值化', cardId: 'image-processing' },
+  { keyword: '灰度化', cardId: 'image-processing' },
+  { keyword: '特征提取', cardId: 'image-processing' },
+  { keyword: '阈值分割', cardId: 'image-processing' },
+  { keyword: 'dirichlet', cardId: 'dirichlet' },
+  { keyword: '成分数据', cardId: 'dirichlet' },
+  { keyword: '单纯形', cardId: 'dirichlet' },
+  { keyword: 'compositional', cardId: 'dirichlet' },
+  { keyword: 'var', cardId: 'var' },
+  { keyword: '向量自回归', cardId: 'var' },
+  { keyword: '时间序列', cardId: 'var' },
+  { keyword: 'eviews', cardId: 'var' },
+  { keyword: '盈亏平衡', cardId: 'break-even' },
+  { keyword: '保本点', cardId: 'break-even' },
+  { keyword: 'break-even', cardId: 'break-even' },
+  { keyword: '成本分析', cardId: 'break-even' },
+  { keyword: '平衡方程组', cardId: 'balance-equations' },
+  { keyword: '稳态建模', cardId: 'balance-equations' },
+  { keyword: '总量平衡', cardId: 'balance-equations' },
+  { keyword: '守恒', cardId: 'balance-equations' },
 ]
 
 /** 在文本中检测命中的所有概念（按词表顺序去重，返回 cardId 数组） */
