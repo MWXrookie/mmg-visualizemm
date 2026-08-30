@@ -99,14 +99,19 @@ export default function App() {
 
   // wsId 变化 → 从后端加载工作区（刷新/新建/恢复）
   // 防回退：本地已有同一 id 的工作区数据（自动创建/上传竞态）时，绝不用后端空状态覆盖
+  // 防竞态：快速连续切换工作区时，用请求序号丢弃过期响应（否则后到的旧响应会覆盖当前工作区）
+  const loadSeqRef = useRef(0)
   useEffect(() => {
     if (!wsId) { setWs(null); return }
     if (wsRef.current?.id === wsId) return
+    const seq = ++loadSeqRef.current
     loadWorkspace(wsId)
       .then((w) => {
+        if (seq !== loadSeqRef.current) return // 过期响应：已有更新的切换请求
         if (!wsRef.current?.id || wsRef.current.id !== wsId) setWs(w)
       })
       .catch(() => {
+        if (seq !== loadSeqRef.current) return
         if (!wsRef.current?.id) setWs(null)
       })
   }, [wsId])

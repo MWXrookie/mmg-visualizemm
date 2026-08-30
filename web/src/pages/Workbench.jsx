@@ -103,11 +103,11 @@ export default function Workbench({ settings, ws, patchWs, onExpandSidebar, onNe
     }
   }
 
-  /** 清空题干（保留附件；overview 一并清，避免解读与题干不匹配） */
+  /** 清空题干（保留附件；overview 一并清，标题重置为"未命名题目"，避免与内容不符） */
   function clearProblem() {
     if (!confirm('清空当前题干？附件与已生成内容将保留。')) return
-    patchWs({ problemText: '', overview: '' })
-    setSelResult(null)
+    patchWs({ problemText: '', overview: '', title: '' })
+    setSelResults([])
   }
 
   async function handleProblemFile(file) {
@@ -240,11 +240,25 @@ export default function Workbench({ settings, ws, patchWs, onExpandSidebar, onNe
             <>
               {error && <div className="alert error">{error}</div>}
               {!hasContent && (
-                <div className="slim-bar">
-                  <span>已上传 {attachments.length} 个附件，可继续上传题干或粘贴题目文本</span>
-                  <button className="btn btn-ghost btn-sm" onClick={() => problemFileInputRef.current?.click()}>上传题干</button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => fileInputRef.current?.click()}>上传附件</button>
-                </div>
+                <>
+                  <div className="slim-bar">
+                    <span>已上传 {attachments.length} 个附件，可继续上传题干或粘贴题目文本</span>
+                    <button className="btn btn-ghost btn-sm" onClick={() => problemFileInputRef.current?.click()}>上传题干</button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => fileInputRef.current?.click()}>上传附件</button>
+                  </div>
+                  <div className="paste-box" style={{ marginBottom: 12 }}>
+                    <textarea
+                      className="paste-input"
+                      placeholder="在此粘贴题目文本…"
+                      value={pasteText}
+                      onChange={(e) => setPasteText(e.target.value)}
+                      rows={4}
+                    />
+                    <div className="paste-actions">
+                      <button className="btn btn-primary btn-sm" onClick={confirmPaste} disabled={!pasteText.trim()}>使用此题目</button>
+                    </div>
+                  </div>
+                </>
               )}
               {hasContent && <div className="problem-text" dangerouslySetInnerHTML={{ __html: sanitize(marked.parse(problemText)) }} />}
               <AttachmentList attachments={attachments} onRemove={(id) => patchWs((prev) => ({ attachments: (prev?.attachments || []).filter((a) => a.id !== id) }))} />
