@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MMG_VisualizeMM · AI 辅助读题 + 自主建模</title>
+  <style>
+    /* ─── tokens ───────────────────────────────────────────────────────── */
+    :root {
+      /* base */
+      --bg:      oklch(98.2% 0.006 250);   /* 极浅蓝白 */
+      --surface: oklch(100% 0 0);
+      --fg:      oklch(26% 0.035 250);     /* 深海军蓝 */
+      --muted:   oklch(50% 0.022 248);
+      --border:  oklch(91.5% 0.012 248);
+      --accent:  oklch(55% 0.21 255);      /* MMG 蓝 */
+
+      /* derived gradients — decisive blue wash, never purple */
+      --accent-soft: color-mix(in oklch, var(--accent) 13%, transparent);
+      --accent-faint:color-mix(in oklch, var(--accent) 6%, transparent);
+      --fg-soft:     color-mix(in oklch, var(--fg) 6%, transparent);
+      --grad-bg: radial-gradient(120% 90% at 78% 0%, var(--accent-faint), transparent 62%, transparent 100%);
+      --grad-hero: linear-gradient(180deg, var(--accent-faint), transparent 70%);
+      --grad-blue: linear-gradient(135deg, oklch(55% 0.20 255), oklch(52% 0.16 275));
+      --grad-card: linear-gradient(160deg, color-mix(in oklch, var(--surface) 55%, var(--accent-faint)), var(--surface) 78%);
+
+      /* shadow */
+      --shadow-1: 0 1px 2px rgba(26,32,64,.05);
+      --shadow-2: 0 14px 40px -18px rgba(26,65,140,.28);
+      --shadow-3: 0 26px 70px -24px rgba(26,65,140,.34);
+
+      /* type */
+      --font-display: 'Iowan Old Style', 'Charter', Georgia, 'Times New Roman', serif;
+      --font-body:    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+      --font-mono:    ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+
+      /* scale */
+      --fs-h1: clamp(46px, 6.2vw, 78px);
+      --fs-h2: clamp(32px, 4vw, 50px);
+      --fs-h3: 22px;
+      --fs-lead: 19px;
+      --fs-body: 16px;
+      --fs-meta: 13px;
+
+      /* spacing */
+      --gap-xs: 8px;  --gap-sm: 12px; --gap-md: 20px;
+      --gap-lg: 32px; --gap-xl: 56px; --gap-2xl: 96px;
+      --container: 1180px;
+      --gutter: 32px;
+
+      --radius: 12px;
+      --radius-lg: 20px;
+      --radius-xl: 28px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      background-image: var(--grad-bg);
+      background-repeat: no-repeat;
+      background-attachment: fixed;
+      color: var(--fg);
+      font-family: var(--font-body);
+      font-size: var(--fs-body);
+      line-height: 1.6;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+    img, svg { display: block; max-width: 100%; }
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; cursor: pointer; }
+    p { text-wrap: pretty; }
+    h1, h2, h3, h4 { text-wrap: balance; }
+
+    /* ─── scroll reveal ─────────────────────────────────────────────── */
+    [data-reveal] { opacity: 0; transform: translateY(26px); transition: opacity .7s cubic-bezier(.2,.7,.2,1), transform .7s cubic-bezier(.2,.7,.2,1); }
+    [data-reveal].in { opacity: 1; transform: none; }
+    [data-reveal-delay="1"] { transition-delay: .08s; }
+    [data-reveal-delay="2"] { transition-delay: .16s; }
+    [data-reveal-delay="3"] { transition-delay: .24s; }
+
+    /* ─── layout primitives ─────────────────────────────────────────── */
+    .container { max-width: var(--container); margin-inline: auto; padding-inline: var(--gutter); }
+    .section { padding-block: clamp(48px, 8vw, var(--gap-2xl)); }
+    .section + .section { border-top: 1px solid var(--border); }
+    .stack { display: flex; flex-direction: column; }
+    .stack > * + * { margin-top: var(--gap-md); }
+    .row { display: flex; align-items: center; gap: var(--gap-md); }
+    .row-between { display: flex; align-items: center; justify-content: space-between; gap: var(--gap-md); }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--gap-lg); }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap-lg); }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--gap-md); }
+    .grid-2-1 { display: grid; grid-template-columns: 2fr 1fr; gap: var(--gap-xl); align-items: start; }
+    .grid-1-2 { display: grid; grid-template-columns: 1fr 2fr; gap: var(--gap-xl); align-items: start; }
+    /* asymmetric offsets */
+    .grid-asym { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: var(--gap-2xl); align-items: center; }
+    .offset-up { margin-top: clamp(-40px, -6vw, -12px); }
+    @media (max-width: 920px) {
+      .grid-2, .grid-3, .grid-4, .grid-2-1, .grid-1-2, .grid-asym { grid-template-columns: 1fr; }
+      .offset-up { margin-top: 0; }
+    }
+
+    /* ─── type ──────────────────────────────────────────────────────── */
+    .h1, h1 { font-family: var(--font-display); font-size: var(--fs-h1); line-height: 1.02; letter-spacing: -0.022em; margin: 0; }
+    .h2, h2 { font-family: var(--font-display); font-size: var(--fs-h2); line-height: 1.08; letter-spacing: -0.018em; margin: 0; }
+    .h3, h3 { font-size: var(--fs-h3); font-weight: 650; line-height: 1.3; letter-spacing: -0.008em; margin: 0; }
+    .lead { font-size: var(--fs-lead); line-height: 1.6; color: var(--muted); max-width: 60ch; margin: 0; }
+    .eyebrow {
+      font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--accent); margin: 0;
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    .eyebrow::before { content: ''; width: 22px; height: 1px; background: var(--accent); opacity: .5; }
+    .meta { font-family: var(--font-mono); font-size: var(--fs-meta); color: var(--muted); }
+    .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .grad-text {
+      background: linear-gradient(100deg, var(--accent), oklch(50% 0.16 275));
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent; color: transparent;
+    }
+
+    /* ─── chrome: nav + footer ──────────────────────────────────────── */
+    .topnav {
+      position: sticky; top: 0; z-index: 20;
+      background: color-mix(in oklch, var(--bg) 82%, transparent);
+      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+    }
+    .topnav-inner { display: flex; align-items: center; justify-content: space-between; padding-block: 14px; }
+    .topnav .logo { font-family: var(--font-display); font-size: 20px; font-weight: 700; letter-spacing: -0.01em; display: inline-flex; align-items: center; gap: 10px; }
+    .logo-mark { width: 26px; height: 26px; border-radius: 8px; background: var(--grad-blue); display: grid; place-items: center; color: var(--surface); box-shadow: var(--shadow-1); }
+    .topnav nav { display: flex; gap: var(--gap-lg); }
+    .topnav nav a { font-size: 14.5px; color: var(--muted); font-weight: 500; transition: color .15s ease; }
+    .topnav nav a:hover { color: var(--fg); }
+    @media (max-width: 820px) { .topnav nav { display: none; } }
+    .pagefoot { padding-block: var(--gap-xl); color: var(--muted); font-size: 13px; border-top: 1px solid var(--border); background: var(--surface); }
+    .pagefoot .row-between { flex-wrap: wrap; gap: var(--gap-md); }
+
+    /* ─── buttons ───────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 22px; border-radius: 999px;
+      border: 1px solid transparent;
+      font-size: 15px; font-weight: 600; letter-spacing: -0.005em;
+      transition: transform .18s ease, background .18s ease, border-color .18s ease, box-shadow .18s ease;
+      min-height: 44px;
+    }
+    .btn:focus-visible { outline: 3px solid var(--accent-soft); outline-offset: 2px; }
+    .btn-primary { background: var(--grad-blue); color: var(--surface); box-shadow: var(--shadow-1); }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: var(--shadow-3); }
+    .btn-primary:active { transform: translateY(0); }
+    .btn-secondary { background: var(--surface); color: var(--fg); border-color: var(--border); box-shadow: var(--shadow-1); }
+    .btn-secondary:hover { transform: translateY(-2px); border-color: color-mix(in oklch, var(--accent) 45%, var(--border)); box-shadow: var(--shadow-2); }
+    .btn-secondary:active { transform: translateY(0); }
+    .btn-ghost { background: transparent; color: var(--fg); border-color: transparent; padding-inline: 10px; }
+    .btn-ghost:hover { color: var(--accent); }
+    .btn-arrow::after { content: '→'; transition: transform .15s ease; }
+    .btn-arrow:hover::after { transform: translateX(3px); }
+
+    /* ─── card / surface ────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 30px;
+    }
+    .card-float { transition: transform .28s cubic-bezier(.2,.8,.2,1), box-shadow .28s ease, border-color .28s ease; }
+    .card-float:hover, .card-float:focus-within { transform: translateY(-6px); border-color: color-mix(in oklch, var(--accent) 30%, var(--border)); box-shadow: var(--shadow-3); }
+    .card-float:hover h3 { color: var(--accent); transition: color .2s ease; }
+    .card-flat { background: transparent; border: 0; padding: 0; }
+
+    /* ─── feature cell ──────────────────────────────────────────────── */
+    .feature .feature-mark {
+      width: 44px; height: 44px; display: grid; place-items: center;
+      border-radius: 13px; color: var(--surface); background: var(--grad-blue);
+      box-shadow: var(--shadow-1); margin-bottom: 18px;
+      transition: transform .25s ease, box-shadow .25s ease;
+    }
+    .card-float:hover .feature-mark { transform: translateY(-3px) scale(1.04); box-shadow: var(--shadow-3); }
+    .feature .feature-mark svg { width: 21px; height: 21px; }
+    .feature h3 { margin-bottom: 8px; }
+    .feature p { margin: 0; color: var(--muted); font-size: 15px; }
+
+    /* ─── stat ──────────────────────────────────────────────────────── */
+    .stat .stat-num {
+      font-family: var(--font-display); font-size: clamp(58px, 8vw, 104px);
+      line-height: 0.95; letter-spacing: -0.04em; font-weight: 600;
+      background: linear-gradient(120deg, var(--fg), var(--accent));
+      -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent;
+    }
+    .stat .stat-label { color: var(--muted); font-size: 14.5px; margin-top: 10px; max-width: 26ch; }
+    .stat .stat-unit { font-size: 0.52em; opacity: .75; margin-left: 2px; letter-spacing: -0.02em; }
+
+    /* ─── quote ─────────────────────────────────────────────────────── */
+    .quote { font-family: var(--font-display); font-size: clamp(26px, 3vw, 36px); line-height: 1.3; letter-spacing: -0.01em; max-width: 30ch; }
+    .quote-author { color: var(--muted); font-size: 14.5px; margin-top: var(--gap-md); }
+    .quote-mark { font-family: var(--font-display); font-size: 150px; line-height: 0.6; color: var(--accent); opacity: .16; margin-bottom: -34px; }
+
+    /* ─── pill / tag ────────────────────────────────────────────────── */
+    .pill {
+      display: inline-flex; align-items: center; gap: 8px; padding: 6px 13px;
+      background: var(--accent-soft); color: var(--accent);
+      border-radius: 999px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.05em;
+    }
+    .tag { display: inline-flex; align-items: center; padding: 5px 12px; background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; font-size: 12.5px; }
+
+    /* ─── rule / divider ────────────────────────────────────────────── */
+    .rule { border: 0; border-top: 1px solid var(--border); margin: 0; }
+    .rule-strong { border: 0; border-top: 1px solid var(--fg); margin: 0; }
+
+    /* ─── hero ──────────────────────────────────────────────────────── */
+    .hero { padding-block: clamp(72px, 10vw, 148px) clamp(60px, 8vw, 110px); }
+    .hero-inner { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: var(--gap-2xl); align-items: center; }
+    @media (max-width: 920px) { .hero-inner { grid-template-columns: 1fr; gap: var(--gap-xl); } }
+    .hero .eyebrow { margin-bottom: var(--gap-md); }
+    .hero h1 { margin-bottom: var(--gap-md); }
+    .hero .lead { margin-bottom: var(--gap-lg); }
+    .hero-cta { display: inline-flex; gap: var(--gap-sm); flex-wrap: wrap; }
+    .hero-note { margin-top: var(--gap-md); color: var(--muted); font-size: 13px; }
+
+    /* ─── product app window mock ───────────────────────────────────── */
+    .app-window {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-xl); box-shadow: var(--shadow-3);
+      overflow: hidden; transform: translateY(0); transition: transform .35s ease, box-shadow .35s ease;
+    }
+    .app-window:hover { transform: translateY(-6px); box-shadow: 0 34px 90px -28px rgba(26,65,140,.4); }
+    .app-bar { display: flex; align-items: center; gap: 7px; padding: 13px 16px; border-bottom: 1px solid var(--border); }
+    .app-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .app-dot.r { background: color-mix(in oklch, var(--accent) 55%, white); } .app-dot.y { background: color-mix(in oklch, var(--accent) 40%, white); } .app-dot.g { background: color-mix(in oklch, var(--accent) 70%, white); }
+    .app-url { margin-left: 12px; font-family: var(--font-mono); font-size: 11px; color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-radius: 7px; padding: 5px 12px; }
+    .app-body { padding: 22px; background: var(--bg); }
+    .chat { display: flex; flex-direction: column; gap: 12px; }
+    .chat-row { max-width: 82%; padding: 12px 15px; border-radius: 14px; font-size: 14px; line-height: 1.5; animation: rise .5s ease backwards; }
+    .chat-row.user { align-self: flex-end; background: var(--grad-blue); color: var(--surface); border-bottom-right-radius: 4px; }
+    .chat-row.bot { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); border-bottom-left-radius: 4px; box-shadow: var(--shadow-1); }
+    .chat-row.bot b { color: var(--accent); }
+    @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+    .chat-row.b2 { animation-delay: .1s; }
+    .chat-row.b3 { animation-delay: .2s; }
+    /* floating detached card over hero mock */
+    .float-note {
+      position: absolute; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: 12px 16px; box-shadow: var(--shadow-3);
+      display: flex; align-items: center; gap: 12px;
+      animation: bob 5s ease-in-out infinite;
+    }
+    .float-note .icon { width: 34px; height: 34px; border-radius: 10px; background: var(--grad-blue); display: grid; place-items: center; color: var(--surface); }
+    .float-note .label { font-size: 13px; font-weight: 650; line-height: 1.25; }
+    .float-note .sub { font-size: 11.5px; color: var(--muted); }
+    .float-a { top: 46px; left: -34px; }
+    .float-b { bottom: 54px; right: -22px; animation-delay: 1.6s; }
+    @keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
+    @media (max-width: 920px) { .float-a { left: 6px; } .float-b { right: 6px; } }
+
+    /* ─── showcase split ────────────────────────────────────────────── */
+    .showcase-panel {
+      border-radius: var(--radius-xl); padding: clamp(28px, 4vw, 46px);
+      background: var(--grad-card); border: 1px solid var(--border);
+      box-shadow: var(--shadow-1); position: relative; overflow: hidden;
+    }
+    .showcase-panel::after {
+      content: ''; position: absolute; inset: 0; pointer-events: none;
+      background: radial-gradient(90% 90% at 100% 0%, var(--accent-faint), transparent 60%);
+    }
+    .steps { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 18px; }
+    .step { display: grid; grid-template-columns: 40px 1fr; gap: 16px; align-items: start; }
+    .step-num {
+      width: 40px; height: 40px; border-radius: 12px; background: var(--surface);
+      border: 1px solid var(--border); display: grid; place-items: center;
+      font-family: var(--font-mono); font-size: 14px; font-weight: 700; color: var(--accent);
+      box-shadow: var(--shadow-1);
+    }
+    .step h3 { font-size: 18px; margin-bottom: 5px; }
+    .step p { margin: 0; color: var(--muted); font-size: 14.5px; }
+
+    /* ─── log list ──────────────────────────────────────────────────── */
+    .log-row { display: grid; grid-template-columns: 120px 1fr 100px; gap: var(--gap-lg); padding: 22px 0; border-top: 1px solid var(--border); align-items: baseline; }
+    .log-row .meta { color: var(--muted); }
+    .log-row h3 { font-size: 19px; }
+    .log-row h3 a:hover { color: var(--accent); }
+    @media (max-width: 820px) { .log-row { grid-template-columns: 90px 1fr; } .log-row .pull { display: none; } }
+
+    .ph-img {
+      background: linear-gradient(135deg, var(--accent-soft), var(--fg-soft)), var(--surface);
+      border: 1px solid var(--border); border-radius: var(--radius-lg);
+      aspect-ratio: 16 / 10; display: grid; place-items: center;
+      color: var(--muted); font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.04em;
+    }
+    .ph-img.wide { aspect-ratio: 16 / 9; }
+  </style>
+</head>
+<body>
+  <header class="topnav" data-od-id="topnav">
+    <div class="container topnav-inner">
+      <span class="logo"><span class="logo-mark">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/><circle cx="12" cy="12" r="3"/></svg>
+      </span>MMG_VisualizeMM</span>
+      <nav>
+        <a href="#features">产品能力</a>
+        <a href="#workflow">使用流程</a>
+        <a href="#features-2">核心功能</a>
+        <a href="#knowledge">知识库</a>
+      </nav>
+      <a class="btn btn-primary" href="/" data-od-id="nav-cta">进入应用 →</a>
+    </div>
+  </header>
+
+  <main id="content">
+    <!-- HERO · asymmetric split + gradient + animated app mock -->
+    <section class="section hero" data-od-id="hero" style="padding-bottom: clamp(40px,6vw,72px);">
+      <div class="container hero-inner">
+        <div>
+          <p class="eyebrow" data-reveal>面向数模新手的 AI 辅导工具</p>
+          <h1 data-reveal data-reveal-delay="1">AI 帮你看懂题，<br>建模始终由你<span class="grad-text">主导</span></h1>
+          <p class="lead" data-reveal data-reveal-delay="2" style="margin-top: 22px;">上传题目与附件，AI 划词判定每一段是约束、目标还是已知条件；对话深挖只引导不代做，知识卡片就地演示模型原理——把「读题」这第一步，走扎实。</p>
+          <div class="hero-cta" data-reveal data-reveal-delay="3" style="margin-top: 30px;">
+            <a class="btn btn-primary" href="/">进入应用 · 开始使用</a>
+            <a class="btn btn-secondary btn-arrow" href="#workflow">查看使用流程</a>
+          </div>
+          <p class="hero-note" data-reveal data-reveal-delay="3">自托管 BYOK · 自带 API Key <span style="color:var(--muted);">· 数据不出浏览器</span></p>
+        </div>
+
+        <div style="position: relative;" data-reveal data-reveal-delay="2">
+          <div class="float-note float-a">
+            <span class="icon">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/><circle cx="12" cy="12" r="3"/></svg>
+            </span>
+            <span><span class="label">角色判定 · 置信度 92%</span><br><span class="sub">划词精读 · 结构化角色卡</span></span>
+          </div>
+          <div class="app-window">
+            <div class="app-bar">
+              <span class="app-dot r"></span><span class="app-dot y"></span><span class="app-dot g"></span>
+              <span class="app-url">mmg.local / 读题工作台</span>
+            </div>
+            <div class="app-body">
+              <div class="chat">
+                <div class="chat-row user">上传题目，「2022 C 题 · 古代玻璃制品的成分分析与鉴别」</div>
+                <div class="chat-row bot b2">已解析附件 <b>表单1/表单2（Excel）</b> 并建立列名↔题干术语关联。选出关键句圈定题意：</div>
+                <div class="chat-row bot b3">
+                  <span style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                    <span style="width:8px;height:8px;border-radius:50%;background:var(--accent);display:inline-block"></span>
+                    <b>已知条件 · 已圈选</b>
+                  </span>
+                  <em style="color:var(--muted);font-size:13px;font-style:normal;">“玻璃文物…共 22 件…铅钡玻璃与高钾玻璃两种类型”</em>
+                  <span style="display:block;color:var(--fg);font-size:13px;margin-top:2px;">参照率 0.87 · 置信度 92%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="float-note float-b">
+            <span class="icon">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
+            </span>
+            <span><span class="label">模型可行域 · 已求解</span><br><span class="sub">M4 知识卡片 · 交互演示</span></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FEATURES · three offset cards with float-up hover -->
+    <section class="section" data-od-id="features" id="features">
+      <div class="container">
+        <div class="grid-asym" style="align-items:end; gap: var(--gap-xl);">
+          <div data-reveal style="max-width: 40ch;">
+            <p class="eyebrow">产品能力 · 已实现</p>
+            <h2 style="margin-top:16px;">覆盖读题到建模的完整功能链路</h2>
+          </div>
+          <p class="lead" data-reveal data-reveal-delay="1" style="justify-self:end; text-align:left;">把「读懂题目」这件新手最容易卡住的事拆成可见可交互的步骤——AI 只负责看懂，判断与建模始终握在你自己手里。</p>
+        </div>
+
+        <div class="grid-3" style="margin-top: 56px;">
+          <div class="card card-float feature" data-od-id="feature-card-select" data-reveal style="grid-column: span 2; margin-bottom: var(--gap-lg);">
+            <div class="feature-mark">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M7 10h10M5 14h9"/><path d="M15 17l2 2 4-4"/></svg>
+            </div>
+            <h3>划词精读 · 看清每一句的角色</h3>
+            <p style="max-width:56ch;">选中任意文字，AI 判定它属于约束、目标、已知、假设还是背景，带置信度与结构化角色卡。可质疑重新论证、连续深挖；点选引用即可定位原文高亮，双向引用 + SSE 流式解读。</p>
+          </div>
+          <div class="card card-float feature" data-od-id="feature-card-dialogue" data-reveal data-reveal-delay="1" style="margin-top: clamp(20px,4vw,56px);">
+            <div class="feature-mark">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a8 8 0 0 1-8 8H4l3-3a8 8 0 1 1 14-5z"/><path d="M8 12h.01M12 12h.01M16 12h.01"/></svg>
+            </div>
+            <h3>对话深挖 · 只引导，不代做</h3>
+            <p>三步引导漏斗（读题 → 精读 → 方向）。引导模式开启后，AI 反问引导你把思路想透；支持 👍/👎/重新生成 与打字机流式输出。</p>
+          </div>
+          <div class="card card-float feature" data-od-id="feature-card-cards" data-reveal data-reveal-delay="2" style="grid-column: span 2; justify-self:start;">
+            <div class="feature-mark">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 9h8M8 13h5"/><path d="M8 17h3"/></svg>
+            </div>
+            <h3>知识卡片 · 模型原理就地演示</h3>
+            <p>提到建模概念时，卡片就地浮现：决策树逐层生长、线性回归拟合滑块、K-means 迭代拖拽、线性规划可行域交互求解。可展开演示、可收藏持久化——理解，不止于一句定义。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FEATURES · secondary bands: 上传 / 编程 / BYOK -->
+    <section class="section" data-od-id="features-2">
+      <div class="container grid-3">
+        <div class="card card-float feature" data-od-id="feature-card-upload" data-reveal>
+          <div class="feature-mark">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 9l5-5 5 5M12 4v12"/></svg>
+          </div>
+          <h3>上传与读题</h3>
+          <p>Excel / CSV / PDF / TXT 附件拖拽上传、表格预览，自动建立附件列名与题干术语的数据联动。</p>
+        </div>
+        <div class="card card-float feature" data-od-id="feature-card-code" data-reveal data-reveal-delay="1">
+          <div class="feature-mark">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>
+          </div>
+          <h3>编程与沉淀</h3>
+          <p>浏览器内 Python（Pyodide）+ matplotlib 出图内嵌；会话自动保存、历史列表继续/删除、一键导出 Markdown。</p>
+        </div>
+        <div class="card card-float feature" data-od-id="feature-card-byok" data-reveal data-reveal-delay="2">
+          <div class="feature-mark">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+          </div>
+          <h3>BYOK · 自带密钥</h3>
+          <p>通义百炼 / DeepSeek / OpenAI / 自定义端点预设，Key 经 AES-GCM 加密只存本地，可测试连接。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- STATS · data billboard -->
+    <section class="section" data-od-id="stats">
+      <div class="container">
+        <p class="eyebrow" data-reveal style="margin-bottom: 40px;">功能亮点 · 2026</p>
+        <div class="grid-3">
+          <div class="stat" data-reveal>
+            <div class="stat-num num">3<span class="stat-unit">台</span></div>
+            <p class="stat-label">工作台：读题 → 建模思路 → 编程出图，全链路覆盖。</p>
+          </div>
+          <div class="stat" data-reveal data-reveal-delay="1">
+            <div class="stat-num num">4<span class="stat-unit">类</span></div>
+            <p class="stat-label">附件格式（Excel / CSV / PDF / TXT）上传解析，自动表格预览与列名联动。</p>
+          </div>
+          <div class="stat" data-reveal data-reveal-delay="2">
+            <div class="stat-num num">23<span class="stat-unit">+</span></div>
+            <p class="stat-label">知识卡片：模型原理就地交互演示，另有获奖论文知识库加持。</p>
+          </div>
+        </div>
+        <p class="meta" data-reveal style="margin-top: 16px;">注：以上为当前版本功能口径。</p>
+      </div>
+    </section>
+
+    <!-- SHOWCASE · asymmetric split workflow 使用流程 -->
+    <section class="section" data-od-id="workflow" id="workflow">
+      <div class="container grid-asym">
+        <div>
+          <p class="eyebrow" data-reveal>使用流程</p>
+          <h2 data-reveal style="margin-top:16px;">从第一遍读题，到真正开始建模</h2>
+          <p class="lead" data-reveal data-reveal-delay="1" style="margin-top:20px;">丢给 AI 一整份题并不等于读懂。MMG_VisualizeMM 把读题拆成可交互的五步，每一步都有痕、可回退、可深挖。</p>
+          <div class="hero-cta" data-reveal data-reveal-delay="2" style="margin-top:30px;">
+            <a class="btn btn-ghost btn-arrow" href="#features-2">查看核心功能</a>
+          </div>
+        </div>
+        <div class="showcase-panel" data-reveal data-reveal-delay="1">
+          <div class="steps">
+            <div class="step">
+              <span class="step-num">01</span>
+              <div><h3>上传题目与附件</h3><p>粘贴题目，拖入 Excel / CSV / PDF / TXT，表格自动预览与列名解析。</p></div>
+            </div>
+            <div class="step">
+              <span class="step-num">02</span>
+              <div><h3>划词精读</h3><p>选中任意文字，AI 判定角色、给置信度、附结构卡；可质疑、可深挖、可点选定位原文。</p></div>
+            </div>
+            <div class="step">
+              <span class="step-num">03</span>
+              <div><h3>对话深挖</h3><p>三步引导漏斗与引导模式，AI 反问推着你把约束与目标想透。</p></div>
+            </div>
+            <div class="step">
+              <span class="step-num">04</span>
+              <div><h3>知识卡片 + 编程</h3><p>模型原理就地演示；浏览器内 Python 出图，会话保存、可导出 Markdown。</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- QUOTE -->
+    <section class="section" data-od-id="quote">
+      <div class="container" style="max-width: 860px;">
+        <div class="quote-mark" data-reveal>"</div>
+        <blockquote class="quote" data-reveal>我最容易卡住的就是「题目读完，不知道从哪下手里」。划词精读把每个条件标清楚之后，思路一下就通了。</blockquote>
+        <p class="quote-author" data-reveal>—— 数模新手使用反馈（示意）</p>
+      </div>
+    </section>
+
+    <!-- KNOWLEDGE · 知识库介绍（替代原开发进展） -->
+    <section class="section" data-od-id="knowledge" id="knowledge">
+      <div class="container">
+        <div class="row-between" data-reveal style="margin-bottom: 28px;">
+          <div>
+            <p class="eyebrow">知识库 · RAG</p>
+            <h2 style="margin-top:14px;">AI 不是凭空回答，而是有"参考文献"的</h2>
+          </div>
+          <a class="btn btn-ghost btn-arrow" href="/">进入应用体验 →</a>
+        </div>
+        <div class="grid-3" data-reveal>
+          <div class="card card-float feature">
+            <div class="feature-mark">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+            </div>
+            <h3>方法库 · 24 种高频方法</h3>
+            <p>熵权法、TOPSIS、AHP、遗传算法、灰色预测等，每条含适用场景 / 步骤 / 失效边界 / 评委视角，来自获奖论文精读。</p>
+          </div>
+          <div class="card card-float feature" data-reveal data-reveal-delay="1">
+            <div class="feature-mark">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 9h8M8 13h5M8 17h3"/></svg>
+            </div>
+            <h3>知识卡片 · 23+ 张</h3>
+            <p>决策树、K-means、线性规划、贝叶斯、蒙特卡洛等，AI 回答提到概念时卡片就地浮现，可交互演示、可收藏。</p>
+          </div>
+          <div class="card card-float feature" data-reveal data-reveal-delay="2">
+            <div class="feature-mark">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 9l5-5 5 5M12 4v12"/></svg>
+            </div>
+            <h3>获奖论文 · 15 篇</h3>
+            <p>历年国赛优秀论文全文入库，语义检索后注入 AI 上下文，回答可注明论文来源——每一个方法建议都有出处。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA STRIP -->
+    <section class="section" data-od-id="cta-strip" style="text-align:center;">
+      <div class="container" style="max-width: 640px;">
+        <p class="eyebrow" data-reveal style="justify-content:center;">开源 · 自托管 · BYOK</p>
+        <h2 data-reveal>把读题这第一步，走扎实</h2>
+        <p class="lead" data-reveal data-reveal-delay="1" style="margin:18px auto 32px;">免费开源、非商业公益。自带 API Key 即可上手，Key 只存浏览器本地，数据不出浏览器。</p>
+        <div class="hero-cta" data-reveal data-reveal-delay="2" style="justify-content:center;">
+          <a class="btn btn-primary" href="/">进入应用 · 开始使用</a>
+          <a class="btn btn-ghost" href="#knowledge">了解知识库</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="pagefoot" data-od-id="footer">
+    <div class="container row-between">
+      <span>© 2026 MMG_VisualizeMM · 面向数模新手的 AI 读题辅导工具 · 非商业公益</span>
+      <span class="meta">核心组件 MIT / Apache-2.0 · 欢迎 issue / PR 传承</span>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+        });
+      }, { threshold: 0.14, rootMargin: '0px 0px -8% 0px' });
+      document.querySelectorAll('[data-reveal]').forEach(function (el) { io.observe(el); });
+    })();
+  </script>
+</body>
+</html>
