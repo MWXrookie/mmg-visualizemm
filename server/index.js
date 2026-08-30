@@ -563,5 +563,16 @@ app.use((err, _req, res, next) => {
 })
 
 app.listen(PORT, () => {
-  console.log(`[server] MMG_VisualizeMM 后端已启动: http://127.0.0.1:${PORT}`)
+  // 监听所有网卡（0.0.0.0）：本机用 127.0.0.1，局域网内其他人用本机局域网 IP
+  const nets = require('os').networkInterfaces()
+  const lanIps = []
+  for (const name of Object.keys(nets)) {
+    for (const ni of nets[name] || []) {
+      if (ni.family === 'IPv4' && !ni.internal) lanIps.push(ni.address)
+    }
+  }
+  const lan = lanIps.length > 0 ? lanIps.map((ip) => `http://${ip}:${PORT}`).join(' 或 ') : '（未检测到局域网 IP）'
+  console.log(`[server] MMG_VisualizeMM 后端已启动`)
+  console.log(`  · 本机访问: http://127.0.0.1:${PORT}`)
+  console.log(`  · 局域网访问(同一网络的其他设备): ${lan}`)
 })
