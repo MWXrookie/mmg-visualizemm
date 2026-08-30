@@ -2,18 +2,28 @@ import React, { useEffect, useRef, useState } from 'react'
 import { marked } from 'marked'
 import { streamChat, attachSummary } from '../api.js'
 import { KnowledgeCard } from './Cards.jsx'
-import { sanitize } from '../components/MD.jsx'
+import MD, { sanitize } from '../components/MD.jsx'
 import AttachmentList from '../components/AttachmentList.jsx'
 import ResizeHandle from '../components/ResizeHandle.jsx'
 
 const MODIFY_SYSTEM =
-  '你是数学建模思路梳理助手。用户在「建模思路梳理台」上工作，页面有一组拆解块，每块含：编号、标题、核心说明(quote)、思路步骤 steps[{label,desc}]。\n' +
+  '你是数学建模思路梳理助手。用户在「建模思路梳理台」上工作，页面有一组拆解块，每块含：编号、标题、核心说明(quote)、Markdown 思路正文(body)、思路步骤 steps[{label,desc}]。\n' +
   '用户会给一句中文指令（可能指定某块，如「拆解块2」「第2块」，也可能不指定）。请判断：\n' +
-  '1) 用户想修改哪个拆解块（blockId：数字）；未指定时选最相关的一块。\n' +
-  '2) 如何修改：给出修改后的完整标题/quote/steps。\n' +
-  '只输出一个 JSON 对象，不要任何其他文字（不要 markdown 代码块）：\n' +
-  '{"blockId":2,"patch":{"title":"新标题","quote":"新核心说明","steps":[{"label":"步骤名","desc":"步骤说明"}]}}\n' +
-  '要求：patch 必须完整给出修改后内容（title/quote/steps 都要给，steps 可为空数组）；全部用中文；quote 简明概括该块任务。'
+  '1) 用户想修改哪个拆解块（blockId：数字，从 1 开始；未指定时选最相关的一块）\n' +
+  '2) 如何修改：给出修改后的完整标题/quote/body/steps。\n' +
+  '只输出一个 JSON 对象，不要任何其他文字（不要 markdown 代码块、不要解释、不要注释）：\n' +
+  '{"blockId":2,"patch":{"title":"新标题","quote":"新核心说明","body":"**思路正文**（可用 Markdown：列表、引用、公式等）","steps":[{"label":"步骤名","desc":"步骤说明"}]}}\n' +
+  '要求：\n' +
+  '- patch 必须完整给出修改后内容（title/quote/body/steps 都要给；body 用 Markdown 撰写，可包含 **加粗**、- 列表、> 引用；steps 可为空数组）\n' +
+  '- 全部用中文；quote 简明概括该块任务\n' +
+  '- blockId 从 1 开始编号（第 1 个拆解块 = 1，第 2 个 = 2，以此类推）\n' +
+  '- 示例：用户说「把拆解块2 补充数据步骤」→ {"blockId":2,"patch":{"title":"数据处理","quote":"清洗并构造特征","body":"## 思路\\n- **读数据**：读取附件表\\n- **清洗**：处理缺失值\\n> 注意保留原始编号","steps":[{"label":"读数据","desc":"读取附件表"},{"label":"清洗","desc":"处理缺失值"}]}}\n' +
+  '- 如果用户指令无法对应任何拆解块，blockId 填 1，并在 patch 中给出最合理的建议内容'
+
+const BODY_GEN_SYSTEM =
+  '你是数学建模思路梳理助手。用户正在编辑一个拆解块，需要你用 Markdown 撰写一份「思路正文」，直接填入编辑框使用。\n' +
+  '根据拆解块的标题与核心说明，展开一份思路：可用 **加粗** 强调关键点、- 列表列要点、> 引用题干或假设。\n' +
+  '要求：只输出 Markdown 正文（不要 markdown 代码块包裹、不要任何解释文字），控制在 150 字以内，全部中文。'
 
 function extractJson(text) {
   if (!text) return null
@@ -96,7 +106,7 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
   }
 
   function addBlock() {
-    setBlocks((prev) => [...prev, { id: nid(), title: `拆解块 ${prev.length + 1}（未命名）`, quote: '新建拆解块，点击「编辑」填写内容。', steps: [], refs: [] }])
+    setBlocks((prev) => [...prev, { id: nid(), title: `拆解块 ${prev.length + 1}（未命名）`, quote: '新建拆解块，点击「编辑」填写内容。', body: '', steps: [], refs: [] }])
     setOpenSet((prev) => new Set([...prev, blocks.length]))
   }
 
@@ -106,7 +116,7 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
 
   function startEdit(b) {
     setEditingId(b.id)
-    setDraft({ title: b.title, quote: b.quote, stepsText: b.steps.map((s) => `${s.label}：${s.desc}`).join('\n') })
+    setDraft({ title: b.title, quote: b.quote, body: b.body || '', stepsText: b.steps.map((s) => `${s.label}：${s.desc}`).join('\n') })
   }
 
   function commitEdit() {
@@ -117,7 +127,7 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
         const idx = l.indexOf('：')
         return idx > 0 ? { label: l.slice(0, idx).trim(), desc: l.slice(idx + 1).trim() } : { label: l, desc: '' }
       })
-    setBlocks((prev) => prev.map((b) => (b.id === editingId ? { ...b, title: draft.title || b.title, quote: draft.quote, steps } : b)))
+    setBlocks((prev) => prev.map((b) => (b.id === editingId ? { ...b, title: draft.title || b.title, quote: draft.quote, body: draft.body || '', steps } : b)))
     setEditingId(null); setDraft(null)
   }
 
@@ -129,7 +139,7 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
     setBusy(true); setError(''); setInput(''); setStreaming('')
     setMsgs((prev) => [...prev, { role: 'user', text, time: now() }])
 
-    const blocksDesc = blocks.map((b, i) => `【拆解块${i + 1}】标题：${b.title}\n核心说明：${b.quote}\n步骤：${b.steps.map((s) => `${s.label}：${s.desc}`).join('；') || '（无）'}`).join('\n\n')
+    const blocksDesc = blocks.map((b, i) => `【拆解块${i + 1}】标题：${b.title}\n核心说明：${b.quote}\n思路正文：${b.body || '（无）'}\n步骤：${b.steps.map((s) => `${s.label}：${s.desc}`).join('；') || '（无）'}`).join('\n\n')
     const summary = attachSummary(attachments)
     try {
       let content = ''
@@ -148,10 +158,10 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
           }])
         } else {
           setPreview({ blockId: parsed.blockId, patch: parsed.patch })
-          // 流式全文转为正式消息（无缝转正，避免内容消失）
+          // 友好提示而非 JSON 原文：具体修改在拆解块的"修改预览"卡片里展示
           setMsgs((prev) => [...prev, {
             role: 'ai', time: now(),
-            text: content || `已生成拆解块 ${parsed.blockId} 的修改预览，检查后点击「确认」写入。`,
+            text: `✅ 已生成拆解块 ${parsed.blockId} 的修改预览（标题：${parsed.patch.title || '（未命名）'}），请在左侧检查后点击「确认写入」。`,
             preview: true,
           }])
         }
@@ -169,8 +179,33 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
   function applyPreview() {
     if (!preview) return
     const idx = preview.blockId - 1
-    setBlocks((prev) => prev.map((b, i) => (i === idx ? { ...b, title: preview.patch.title || b.title, quote: preview.patch.quote || b.quote, steps: preview.patch.steps || [] } : b)))
+    setBlocks((prev) => prev.map((b, i) => (i === idx ? { ...b, title: preview.patch.title || b.title, quote: preview.patch.quote || b.quote, body: preview.patch.body ?? b.body, steps: preview.patch.steps || [] } : b)))
+    // 若正在编辑该块，同步更新草稿，避免用户保存时用旧草稿覆盖 AI 写入的内容
+    if (editingId === preview.blockId) {
+      setDraft((d) => (d ? { ...d, title: preview.patch.title || d.title, quote: preview.patch.quote || d.quote, body: preview.patch.body ?? d.body, stepsText: (preview.patch.steps || []).map((s) => `${s.label}：${s.desc}`).join('\n') } : d))
+    }
     setPreview(null)
+  }
+
+  /** 编辑框内：AI 直接生成思路正文并填入 body（流式） */
+  async function aiWriteBody(block, setDraftFn) {
+    if (!settings.apiKey) return setError('请先在「模型设置」配置 API Key')
+    setBusy(true); setError(''); setStreaming('')
+    try {
+      let content = ''
+      await streamChat(settings, [
+        { role: 'system', content: BODY_GEN_SYSTEM },
+        { role: 'user', content: `拆解块标题：${block.title}\n核心说明：${block.quote}\n题目背景：${(ws?.problemText || '').slice(0, 500) || '（无）'}` },
+      ], { onDelta: (t) => { content = t; setStreaming(t); setDraftFn((d) => (d ? { ...d, body: t } : d)) } })
+      let body = content.trim()
+      const fence = body.match(/```(?:markdown|md)?\s*([\s\S]*?)```/i)
+      if (fence) body = fence[1].trim()
+      setDraftFn((d) => (d ? { ...d, body } : d))
+    } catch (e) {
+      setError(e.message)
+    }
+    setStreaming('')
+    setBusy(false)
   }
 
   function linkAttachment(blockId, name) {
@@ -188,6 +223,7 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
         `## ${i + 1}. ${b.title}`,
         '',
         b.quote,
+        ...(b.body ? ['', b.body] : []),
         '',
         ...b.steps.map((s) => `- **${s.label}**：${s.desc}`),
         ...(b.refs?.length ? ['', `关联：${b.refs.join('、')}`] : []),
@@ -275,6 +311,8 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
                 onRemove={() => removeBlock(b.id)}
                 onApply={applyPreview}
                 onCancelPreview={() => setPreview(null)}
+                onAiBody={() => aiWriteBody(b, setDraft)}
+                aiBusy={busy}
               />
             ))}
             <button className="new-block" onClick={addBlock}>＋ 新建拆解块</button>
@@ -304,7 +342,8 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
                 <div key={i} className={`msg ${m.role}`}>
                   <span className="avatar">{m.role === 'ai' ? '✦' : '我'}</span>
                   <div className="bubble">
-                    <div className="t">{m.text}</div>
+                    {/* AI 回复用 MD 渲染（Markdown 生效，sanitize 防 XSS）；用户消息保持纯文本 */}
+                    {m.role === 'ai' ? <MD text={m.text} /> : <div className="t">{m.text}</div>}
                     {m.preview && <div className="chip-ref">已生成本地修改预览</div>}
                     <div className="msg-time">{m.time}</div>
                   </div>
@@ -314,7 +353,16 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
                 <div className="msg ai">
                   <span className="avatar">✦</span>
                   <div className="bubble">
-                    {streaming ? <div className="t" style={{ whiteSpace: 'pre-wrap' }}>{streaming}</div> : <span className="thinking"><i /><i /><i /></span>}
+                    {streaming ? (
+                      // JSON 输出时不展示原文，显示友好进度；自然语言则实时渲染
+                      streaming.trim().startsWith('{') ? (
+                        <div className="t" style={{ color: 'var(--muted)' }}>⏳ AI 正在生成修改方案…</div>
+                      ) : (
+                        <MD text={streaming} />
+                      )
+                    ) : (
+                      <span className="thinking"><i /><i /><i /></span>
+                    )}
                   </div>
                 </div>
               )}
@@ -374,7 +422,7 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
   )
 }
 
-function Block({ b, index, open, preview, editing, draft, setDraft, onToggle, onEdit, onCommitEdit, onCancelEdit, onRelate, onRemove, onApply, onCancelPreview }) {
+function Block({ b, index, open, preview, editing, draft, setDraft, onToggle, onEdit, onCommitEdit, onCancelEdit, onRelate, onRemove, onApply, onCancelPreview, onAiBody, aiBusy }) {
   return (
     <article className={`decomp-block ${open ? 'open' : ''}`}>
       <button className="block-head" onClick={onToggle} aria-expanded={open}>
@@ -391,8 +439,23 @@ function Block({ b, index, open, preview, editing, draft, setDraft, onToggle, on
             {editing ? (
               <>
                 <input className="bk-input" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder="拆解块标题" />
-                <textarea className="bk-textarea" value={draft.quote} onChange={(e) => setDraft({ ...draft, quote: e.target.value })} placeholder="核心说明" />
-                <textarea className="bk-textarea" value={draft.stepsText} onChange={(e) => setDraft({ ...draft, stepsText: e.target.value })} placeholder="每行一个步骤：步骤名：说明" />
+                <textarea className="bk-textarea" value={draft.quote} onChange={(e) => setDraft({ ...draft, quote: e.target.value })} placeholder="核心说明（一句话概括这块要做什么）" rows={2} />
+                <div className="bk-label">思路正文 · 支持 Markdown（自由书写）</div>
+                <textarea
+                  className="bk-textarea bk-md"
+                  value={draft.body}
+                  onChange={(e) => setDraft({ ...draft, body: e.target.value })}
+                  placeholder={'用 Markdown 自由表达思路，例如：\n**目标**：最小化总成本\n\n- 步骤一：读取数据\n- 步骤二：构造特征\n\n> 引用题干："车辆更新须满足…"'}
+                  rows={6}
+                />
+                <div className="bk-md-hint">✨ 支持 Markdown：`**加粗**` · `- 列表` · `> 引用` · `# 标题` · `` `代码` `` · `![图](url)`</div>
+                <div className="bk-ai-row">
+                  <button className="btn btn-ghost btn-sm" onClick={onAiBody} disabled={aiBusy} title="让 AI 根据标题与核心说明生成思路正文，填入下方输入框">
+                    {aiBusy ? '✨ AI 生成中…' : '✨ AI 帮我写思路'}
+                  </button>
+                </div>
+                <div className="bk-label">步骤链（可选，用结构化步骤图展示）</div>
+                <textarea className="bk-textarea" value={draft.stepsText} onChange={(e) => setDraft({ ...draft, stepsText: e.target.value })} placeholder="每行一个步骤：步骤名：说明（留空则不显示链状图）" rows={3} />
                 <div className="bk-edit-actions">
                   <button className="btn btn-ghost btn-sm" onClick={onCancelEdit}>取消</button>
                   <button className="btn btn-primary btn-sm" onClick={onCommitEdit}>保存</button>
@@ -400,7 +463,8 @@ function Block({ b, index, open, preview, editing, draft, setDraft, onToggle, on
               </>
             ) : (
               <>
-                <div className="block-quote">{b.quote}</div>
+                {b.quote && <div className="block-quote"><MD text={b.quote} /></div>}
+                {b.body && <div className="block-body-md"><MD text={b.body} /></div>}
                 {b.steps.length > 0 && (
                   <div className="flow">
                     {b.steps.map((s, si) => (
@@ -428,7 +492,8 @@ function Block({ b, index, open, preview, editing, draft, setDraft, onToggle, on
                 <div className="mp-head"><span className="pulse" />修改预览 · 待确认</div>
                 <div className="mp-body">
                   <b>{preview.title || b.title}</b>{'\n'}{preview.quote || b.quote}
-                  {preview.steps?.length > 0 && `\n步骤：\n` + preview.steps.map((s) => `• ${s.label}：${s.desc}`).join('\n')}
+                  {preview.body ? `\n\n【思路正文】\n` + preview.body : ''}
+                  {preview.steps?.length > 0 && `\n\n【步骤】\n` + preview.steps.map((s) => `• ${s.label}：${s.desc}`).join('\n')}
                 </div>
                 <div className="mp-ops">
                   <button className="btn btn-ghost btn-sm" onClick={onCancelPreview}>取消</button>

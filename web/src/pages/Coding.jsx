@@ -81,6 +81,7 @@ export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
   const [log, setLog] = useState([])
   const [img, setImg] = useState(null)
   const [chartTitle, setChartTitle] = useState('')
+  const [runOutput, setRunOutput] = useState('') // 最近一次运行的输出（右侧结果区展示）
   const [running, setRunning] = useState(false)
   const [error, setError] = useState('')
   const [genOpen, setGenOpen] = useState(false)
@@ -93,6 +94,7 @@ export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
   const runTimer = useRef(null)
   const codeTimer = useRef(null)
   const editRef = useRef(null)
+  const logRef = useRef(null) // 输出日志容器（运行后自动滚到底）
   const codeRef = useRef(code)
   codeRef.current = code
   // 调参面板最新值引用：setParam 的 500ms 重算必须用最新参数（避免闭包旧值差 1 tick）
@@ -124,6 +126,26 @@ export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
       e.preventDefault()
       document.execCommand('insertText', false, '    ')
     }
+  }
+
+  /** 粘贴拦截：以纯文本插入并保留换行。
+   *  contenteditable 默认粘贴/插入可能折叠 \n（多行代码变一行 → SyntaxError），
+   *  这里手动插入含换行的 Text 节点（pre 的 white-space:pre 会正确显示换行）。 */
+  function onPasteCode(e) {
+    e.preventDefault()
+    const text = e.clipboardData?.getData('text/plain')
+    if (!text) return
+    const sel = window.getSelection()
+    if (!sel.rangeCount) return
+    sel.deleteFromDocument()
+    const textNode = document.createTextNode(text)
+    const range = sel.getRangeAt(0)
+    range.insertNode(textNode)
+    range.setStartAfter(textNode)
+    range.collapse(true)
+    sel.removeAllRanges()
+    sel.addRange(range)
+    onEditInput({ currentTarget: e.currentTarget })
   }
 
   const wsIdNow = ws?.id
@@ -164,6 +186,7 @@ export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
       const py = await getPyodide()
       py.runPython(`N = ${P.N}\nNOISE = ${P.NOISE}\nDEGREE = ${P.DEGREE}`)
       const r = await runPython(code)
+      setRunOutput((r.output || '').trim())
       if (r.error) pushLog('err', r.error)
       const out = (r.output || '').trim()
       if (out) {
@@ -178,10 +201,13 @@ export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
       }
       pushLog('ok', '运行完成 ' + new Date().toTimeString().slice(0, 8))
     } catch (e) {
+      setRunOutput('')
       setError(e.message)
       pushLog('err', '运行失败：' + e.message)
     } finally {
       setRunning(false)
+      // 日志自动滚到底，让用户看到最新输出
+      requestAnimationFrame(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight })
     }
   }
 
@@ -308,6 +334,7 @@ export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
                 onInput={onEditInput}
                 onBlur={onBlurCode}
                 onKeyDown={onKeyDownCode}
+                onPaste={onPasteCode}
                 dangerouslySetInnerHTML={{ __html: hl }}
               />
             </div>
@@ -319,7 +346,7 @@ export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
           </div>
         </div>
 
-        <div className="code-log">
+        <div className="code-log" ref={logRef}>
           {log.length === 0 && <span style={{ color: 'var(--muted)' }}>输出日志：点击「运行」执行代码。</span>}
           {log.map((l, i) => (
             <div key={i} style={{ marginBottom: 3 }}>
@@ -340,8 +367,18 @@ export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
 
       {/* 右 50%：可视化 */}
       <section className="out-pane">
-        <div className="panel-tag" style={{ fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '.12em', color: 'var(--primary)', textTransform: 'uppercase' }}>产出区 · 可视化</div>
+        <div className="panel-tag" style={{ fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '.12em', color: 'var(--primary)', textTransform: 'uppercase' }}>产出区 · 运行结果</div>
         {error && <div className="alert error">{error}</div>}
+
+        {/* 运行输出（print 结果，醒目展示） */}
+        <div className="result-card">
+          <div className="result-head">⚙️ 运行输出</div>
+          {runOutput ? (
+            <pre className="result-box">{runOutput}</pre>
+          ) : (
+            <div className="result-empty">点击「▶ 运行」后，这里显示代码的输出结果（print 的内容）。</div>
+          )}
+        </div>
 
         {attachments.length > 0 && (
           <div className="att-strip">
