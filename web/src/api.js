@@ -193,7 +193,7 @@ export async function retrieveKnowledge(query, settings, topK = 3) {
 }
 
 /** 把检索到的知识片段格式化为注入 system prompt 的上下文块 */
-export function formatKnowledgeContext(hits, maxChars = 2200) {
+export function formatKnowledgeContext(hits, maxChars = 1500) {
   if (!hits || hits.length === 0) return ''
   let out = '\n\n【参考：本地获奖论文知识库（检索命中，可在回答中引用，注明论文来源）】\n'
   let used = 0

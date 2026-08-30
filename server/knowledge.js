@@ -250,7 +250,8 @@ export async function searchKnowledge(query, provider, topK = 4) {
     file: c.file.replace(/\.md$/, ''),
     type: c.type,
     section: c.section,
-    text: c.text.slice(0, 1200),
+    // method/card 保留完整（本就精简结构化）；paper 原文只取 600 字符（论文细节对新手增益有限）
+    text: c.text.slice(0, c.type === 'paper' ? 600 : 900),
     score: Number(c.score.toFixed(4)),
   }))
 }

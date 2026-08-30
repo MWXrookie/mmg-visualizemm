@@ -153,8 +153,8 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
     const summary = attachSummary(attachments)
     try {
       let content = ''
-      // RAG：检索与用户指令相关的获奖论文知识，注入 system prompt
-      const hits = await retrieveKnowledge(`${text}\n${blocksDesc}`, settings, 3)
+      // RAG：只用用户指令检索（拼全部拆解块会让查询过长、拖慢检索且引入噪音）
+      const hits = await retrieveKnowledge(text, settings, 3)
       const kbContext = formatKnowledgeContext(hits)
       await streamChat(settings, [
         { role: 'system', content: MODIFY_SYSTEM + kbContext },
@@ -179,7 +179,14 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
           }])
         }
       } else {
-        setMsgs((prev) => [...prev, { role: 'ai', time: now(), text: content || '（AI 无输出）' }])
+        // 非 JSON（意图 A 的苏格拉底反问 / 异常空输出）
+        const trimmed = (content || '').trim()
+        setMsgs((prev) => [...prev, {
+          role: 'ai', time: now(),
+          text: trimmed
+            ? trimmed
+            : '（AI 本次没有返回内容，可能是上游模型超时或网络波动。请重试；若反复出现，可在「模型设置」换个模型或检查网络。）',
+        }])
       }
     } catch (e) {
       setError(e.message)
