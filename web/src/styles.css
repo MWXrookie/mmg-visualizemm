@@ -635,3 +635,15 @@ h1, h2, h3, h4 { font-weight: 600; letter-spacing: .01em; }
 /* 拆解块标题过长省略，操作按钮固定右侧 */
 .mdl .block-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mdl .block-ops { flex: none; display: flex; align-items: center; gap: 4px; }
+
+/* ============ 步骤：有序折叠列表（步骤标题 + 展开思路） ============ */
+.step-list { list-style: none; margin: 6px 0 0; padding: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.step-item + .step-item { border-top: 1px solid var(--border); }
+.step-head { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 14px; border: none; background: none; cursor: pointer; color: var(--fg); text-align: left; font-size: 13px; transition: background .15s; }
+.step-head:hover { background: var(--surface-2); }
+.step-no { width: 22px; height: 22px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-size: 11.5px; font-weight: 700; display: grid; place-items: center; font-family: var(--mono); flex: none; }
+.step-title { flex: 1; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.step-chev { display: inline-flex; color: var(--muted); transition: transform .2s; flex: none; }
+.step-chev.open { transform: rotate(180deg); }
+.step-body { padding: 2px 14px 12px 46px; font-size: 13px; color: var(--fg); }
+.step-body .markdown-body { font-size: 13px; line-height: 1.7; }

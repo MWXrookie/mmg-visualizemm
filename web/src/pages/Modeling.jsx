@@ -5,7 +5,7 @@ import { KnowledgeCard } from './Cards.jsx'
 import MD, { sanitize } from '../components/MD.jsx'
 import AttachmentList from '../components/AttachmentList.jsx'
 import ResizeHandle from '../components/ResizeHandle.jsx'
-import { IconMenu, IconDownload, IconArrowLeft, IconFile, IconTable, IconSparkles, IconLayers, IconSearch, IconEdit, IconChevronRight, IconLink, IconClose, IconSend, IconClock } from '../components/Icons.jsx'
+import { IconMenu, IconDownload, IconArrowLeft, IconFile, IconTable, IconSparkles, IconLayers, IconSearch, IconEdit, IconChevronRight, IconChevronDown, IconLink, IconClose, IconSend, IconClock } from '../components/Icons.jsx'
 
 const MODIFY_SYSTEM =
   '你是数学建模思路梳理助手。用户在「建模思路梳理台」上工作，页面有一组拆解块，每块含：编号、标题、核心说明(quote)、Markdown 思路正文(body)、思路步骤 steps[{label,desc}]。\n' +
@@ -424,6 +424,22 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
 }
 
 function Block({ b, index, open, preview, editing, draft, setDraft, onToggle, onEdit, onCommitEdit, onCancelEdit, onRelate, onRemove, onApply, onCancelPreview, onAiBody, aiBusy }) {
+  // 步骤展开状态：默认全部展开（步骤+思路相结合），点击可收起；新增步骤自动展开
+  const [openSteps, setOpenSteps] = useState(() => new Set(b.steps.map((_, i) => i)))
+  useEffect(() => {
+    setOpenSteps((prev) => {
+      const next = new Set(prev)
+      b.steps.forEach((_, i) => { if (!next.has(i)) next.add(i) })
+      return next
+    })
+  }, [b.steps.length]) // eslint-disable-line react-hooks/exhaustive-deps
+  function toggleStep(i) {
+    setOpenSteps((prev) => {
+      const next = new Set(prev)
+      next.has(i) ? next.delete(i) : next.add(i)
+      return next
+    })
+  }
   return (
     <article className={`decomp-block ${open ? 'open' : ''}`}>
       <button className="block-head" onClick={onToggle} aria-expanded={open}>
@@ -455,8 +471,8 @@ function Block({ b, index, open, preview, editing, draft, setDraft, onToggle, on
                     {aiBusy ? <><IconSparkles size={13} /> AI 生成中…</> : <><IconSparkles size={13} /> AI 帮我写思路</>}
                   </button>
                 </div>
-                <div className="bk-label">步骤链（可选，用结构化步骤图展示）</div>
-                <textarea className="bk-textarea" value={draft.stepsText} onChange={(e) => setDraft({ ...draft, stepsText: e.target.value })} placeholder="每行一个步骤：步骤名：说明（留空则不显示链状图）" rows={3} />
+                <div className="bk-label">步骤（有序列表，每步展开显示思路说明）</div>
+                <textarea className="bk-textarea" value={draft.stepsText} onChange={(e) => setDraft({ ...draft, stepsText: e.target.value })} placeholder="每行一个步骤：步骤名：说明（留空则不显示步骤列表）" rows={3} />
                 <div className="bk-edit-actions">
                   <button className="btn btn-ghost btn-sm" onClick={onCancelEdit}>取消</button>
                   <button className="btn btn-primary btn-sm" onClick={onCommitEdit}>保存</button>
@@ -479,14 +495,25 @@ function Block({ b, index, open, preview, editing, draft, setDraft, onToggle, on
                 {b.steps.length > 0 && (
                   <div className="block-steps">
                     <span className="bk-tag">步骤</span>
-                    <div className="flow">
-                      {b.steps.map((s, si) => (
-                        <div className="flow-step" key={si}>
-                          <div className="fs-label">{s.label}</div>
-                          {s.desc && <div className="fs-desc">{s.desc}</div>}
-                        </div>
-                      ))}
-                    </div>
+                    <ol className="step-list">
+                      {b.steps.map((s, si) => {
+                        const sOpen = openSteps.has(si)
+                        return (
+                          <li key={si} className={`step-item ${sOpen ? 'open' : ''}`}>
+                            <button className="step-head" onClick={() => toggleStep(si)} aria-expanded={sOpen}>
+                              <span className="step-no">{si + 1}</span>
+                              <span className="step-title">{s.label}</span>
+                              <span className={`step-chev ${sOpen ? 'open' : ''}`}><IconChevronDown size={14} /></span>
+                            </button>
+                            {sOpen && (
+                              <div className="step-body">
+                                {s.desc ? <MD text={s.desc} /> : <span className="hint">（此步骤暂无思路说明）</span>}
+                              </div>
+                            )}
+                          </li>
+                        )
+                      })}
+                    </ol>
                   </div>
                 )}
                 {b.refs?.length > 0 && (
