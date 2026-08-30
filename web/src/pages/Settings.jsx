@@ -101,7 +101,7 @@ export default function Settings({ settings, setSettings }) {
           <label className="toggle-row">
             <span>
               <b>引导模式（防代做）</b>
-              <span className="hint">开启后 AI 只给思路与反问，不直接给出完整成品答案</span>
+              <span className="hint">开启后 AI 以建模专家口吻引导：点名难点陷阱、给方法雷达与专业倾向、苏格拉底式反问，不直接给完整成品答案</span>
             </span>
             <span
               className={`switch ${guideMode ? 'on' : ''}`}

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { getPyodide, runPython, onPyodideState } from '../lib/pyodide.js'
 import { streamChat, attachSummary } from '../api.js'
 import { IconMenu, IconDownload, IconArrowLeft, IconSparkles, IconPlay, IconGear, IconChart, IconTable, IconFile, IconLightbulb, IconZoomIn, IconBookmark, IconClip, IconInfo, IconClock } from '../components/Icons.jsx'
+import { SANITY_CHECK, EXPERT_CORE } from '../lib/modelingExpert.js'
 
 const DEFAULT_CODE = `# 数学建模编程工作台 · Python (Pyodide)
 # N / NOISE / DEGREE 由右侧调参面板自动注入
@@ -34,11 +35,15 @@ const GEN_SYSTEM =
   '1. 只用上述已预装的库；不得使用需联网/编译的库。\n' +
   '2. matplotlib 必须 matplotlib.use(\'Agg\')，图表用 plt.savefig(\'/plot.png\') 保存，画布 figsize=(7,4)。\n' +
   '3. 关键结果用 print 输出（系数、R² 等）。\n' +
-  '4. 只输出代码，放在一个 ```python 代码块中，不要任何解释文字。'
+  '4. 只输出代码，放在一个 ```python 代码块中，不要任何解释文字。\n' +
+  '5. 代码内自带最小 Sanity：对结果做合理性检查（量纲/数量级/NaN/边界），异常时 print 警告而不是静默输出。\n' +
+  EXPERT_CORE + '\n' + SANITY_CHECK
 
 const IMPROVE_SYSTEM =
   '你是 Python 代码优化助手。用户会给出一段数学建模 Python 代码，请改进它（修复错误、提高可读性与数值稳定性），并保留输出与 plt.savefig(\'/plot.png\')。\n' +
-  '只输出改进后的完整代码，放在一个 ```python 代码块中，不要任何解释文字。'
+  '改进时重点检查：数值稳定性（除零/溢出/NaN）、量纲与单位、边界情形、结果数量级合理性——发现可疑结果在代码注释中标注"⚠ 检查"。\n' +
+  '只输出改进后的完整代码，放在一个 ```python 代码块中，不要任何解释文字。\n' +
+  SANITY_CHECK
 
 /** 从 AI 输出中提取代码：兼容 ```python / ```Python / ```py / ```python3 等常见代码块标记（大小写不敏感），
  *  避免提取残留导致运行 SyntaxError */

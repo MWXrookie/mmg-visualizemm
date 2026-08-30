@@ -6,20 +6,23 @@ import MD, { sanitize } from '../components/MD.jsx'
 import AttachmentList from '../components/AttachmentList.jsx'
 import ResizeHandle from '../components/ResizeHandle.jsx'
 import { IconSparkles, IconFile, IconTable, IconBookmark, IconBook, IconClock, IconMenu, IconPlus, IconLightbulb } from '../components/Icons.jsx'
+import { EXPERT_CORE, OVERVIEW_EXPERT, ROLE_GUIDE_EXPERT } from '../lib/modelingExpert.js'
 
 const OVERVIEW_SYSTEM =
   '你是数学建模辅导助手。用户会给你一道数学建模题目（可能含数据说明），请做「整体解读」，输出四部分：\n' +
   '1) 题目在问什么（一句话+要点）\n' +
   '2) 已知条件与数据（列出题目给出的数据/表格及其含义）\n' +
   '3) 目标（要求优化或回答的目标是什么）\n' +
-  '4) 输出要求（论文/方案要求）\n用简洁中文回答，控制在 400 字内。'
+  '4) 输出要求（论文/方案要求）\n用简洁中文回答，控制在 400 字内。\n' +
+  OVERVIEW_EXPERT + '\n' + EXPERT_CORE
 
 const ROLE_SYSTEM =
   '你是数学建模辅导助手，采用**苏格拉底式引导**：判定角色后要引导新手自己理解这段的意义，而不是只给结论。用户选中了题目中的一段文字，请判定它的「角色」并解释。\n' +
   '角色只从这几种里选：【约束条件】【目标】【已知条件】【假设】【背景信息】\n' +
   '只输出一个 JSON 对象（不要任何其他文字），格式：\n' +
   '{"role":"约束条件","confidence":92,"info":"这段提供的信息，一两句话","impact":"对建模的影响，一两句话","quote":"从题目原文中引用的完整原句","guide":"引导思考：给用户一个 1-2 句的引导问题，让他自己想到这段在建模中的作用（例如"想想这个约束会怎样限制你的决策变量？"）"}\n' +
-  '要求：confidence 是 0-100 整数；quote 必须逐字复制原文；guide 必须是以提问形式引导用户思考（不要直接讲答案）。若无法判断，role 填"背景信息"。'
+  '要求：confidence 是 0-100 整数；quote 必须逐字复制原文；guide 必须是以提问形式引导用户思考（不要直接讲答案）。若无法判断，role 填"背景信息"。\n' +
+  ROLE_GUIDE_EXPERT + '\n' + EXPERT_CORE
 
 function extractJson(text) {
   if (!text) return null
