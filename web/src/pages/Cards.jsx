@@ -1046,6 +1046,372 @@ function SimulatedAnnealingDemo() {
   )
 }
 
+/* ============ 假设检验演示（卡方检验列联表） ============ */
+
+function HypothesisTestDemo() {
+  // 2×2 列联表：风化 vs 玻璃类型（可编辑）
+  const [a, setA] = useState(38), [b, setB] = useState(11)
+  const [c, setC] = useState(9), [d, setD] = useState(9)
+  const n = a + b + c + d
+  // 卡方统计量：Σ(O-E)²/E
+  const expected = (r, col) => ((r === 0 ? a + b : c + d) * (col === 0 ? a + c : b + d)) / n
+  const chi = [[a, b], [c, d]].reduce((s, row, i) => s + row.reduce((s2, o, j) => {
+    const e = expected(i, j)
+    return s2 + (e > 0 ? (o - e) ** 2 / e : 0)
+  }, 0), 0)
+  // 卡方分布 1 自由度近似 p 值（正态近似：p ≈ P(χ²>chi)）
+  function chiPval(x) {
+    // Wilson-Hilferty 近似：χ²_k 的 (x/k)^(1/3) ≈ N(1-2/(9k), 2/(9k))
+    const k = 1
+    const z = (Math.pow(x / k, 1 / 3) - (1 - 2 / (9 * k))) / Math.sqrt(2 / (9 * k))
+    // 标准正态尾概率
+    return 0.5 * (1 - erf(z / Math.SQRT2))
+  }
+  function erf(x) {
+    const t = 1 / (1 + 0.3275911 * x)
+    const y = 1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x)
+    return x >= 0 ? y : -y
+  }
+  const p = chiPval(Math.max(0, chi))
+  const sig = p < 0.05
+  const cell = (v, setV, i, j) => (
+    <input
+      type="number" min="0" value={v}
+      onChange={(e) => setV(Math.max(0, +e.target.value || 0))}
+      style={{ width: 60, textAlign: 'center', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--surface)', color: 'var(--fg)', padding: '4px 6px', fontSize: 13 }}
+    />
+  )
+  return (
+    <div className="demo">
+      <table className="kc-table">
+        <thead><tr><th> </th><th>有风化</th><th>无风化</th><th>行合计</th></tr></thead>
+        <tbody>
+          <tr><td>铅钡玻璃</td><td>{cell(a, setA)}</td><td>{cell(b, setB)}</td><td className="hl">{a + b}</td></tr>
+          <tr><td>高钾玻璃</td><td>{cell(c, setC)}</td><td>{cell(d, setD)}</td><td className="hl">{c + d}</td></tr>
+          <tr><td>列合计</td><td>{a + c}</td><td>{b + d}</td><td className="hl">{n}</td></tr>
+        </tbody>
+      </table>
+      <div className="demo-note">
+        χ² = {chi.toFixed(2)}，p 值 = {p.toFixed(4)}
+        {' '}{sig
+          ? <span className="kc-tag">p &lt; 0.05 ✓ 风化与玻璃类型显著相关</span>
+          : <span className="kc-tag warn">p ≥ 0.05 ✗ 无显著相关</span>}
+        <br />改格子里的数，观察 p 值如何变化——<b>p&lt;0.05 才说"显著"</b>（2022 年 C 题用卡方检验判断风化与类型/纹饰/颜色是否相关，仅玻璃类型 p&lt;0.05）。
+      </div>
+    </div>
+  )
+}
+
+/* ============ 多指标评价体系演示（指标构建与属性） ============ */
+
+function IndicatorSystemDemo() {
+  const [step, setStep] = useState(0)
+  const [sel, setSel] = useState(0)
+  const indicators = [
+    { name: '供货次数', type: '效益型', why: '次数越多 → 依赖度越高 → 能力越强', dir: '↑', val: 'x / max' },
+    { name: '平均供货量', type: '效益型', why: '量大说明规模与能力', dir: '↑', val: 'x / max' },
+    { name: '供货稳定性', type: '效益型', why: '波动小（均方误差小）越稳定', dir: '↑', val: 'x / max' },
+    { name: '供货量方差', type: '成本型', why: '方差越大 → 波动越大 → 风险越高', dir: '↓', val: 'min / x' },
+  ]
+  const data = [
+    { name: 'S₁', v: [72, 88, 90, 12] },
+    { name: 'S₂', v: [60, 75, 78, 30] },
+    { name: 'S₃', v: [88, 92, 85, 8] },
+  ]
+  const max = indicators.map((_, j) => Math.max(...data.map((r) => r.v[j])))
+  const min = indicators.map((_, j) => Math.min(...data.map((r) => r.v[j])))
+  return (
+    <div className="demo">
+      <div className="demo-controls">
+        <button className="btn btn-primary btn-sm" onClick={() => setStep(Math.min(3, step + 1))} disabled={step >= 3}>下一步</button>
+        {step > 0 && <button className="btn btn-ghost btn-sm" onClick={() => setStep(0)}>重置</button>}
+        <span className="hint">第 {step + 1} 步 / 共 4 步</span>
+      </div>
+      {step >= 1 && (
+        <table className="kc-table">
+          <thead><tr><th>指标</th><th>类型</th><th>为什么选它</th><th>方向</th><th>标准化</th></tr></thead>
+          <tbody>
+            {indicators.map((ind, i) => (
+              <tr key={ind.name} onClick={() => setSel(i)} style={{ cursor: 'pointer', background: sel === i ? 'rgba(37,99,235,.08)' : undefined }}>
+                <td className={sel === i ? 'hl' : ''}>{ind.name}</td>
+                <td>{ind.type}</td>
+                <td style={{ textAlign: 'left', fontSize: 11.5 }}>{ind.why}</td>
+                <td>{ind.dir}</td>
+                <td>{ind.val}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {step >= 2 && (
+        <table className="kc-table">
+          <thead><tr><th>方案</th>{indicators.map((ind) => <th key={ind.name}>{ind.name}</th>)}</tr></thead>
+          <tbody>
+            {data.map((r) => (
+              <tr key={r.name}>
+                <td>{r.name}</td>
+                {r.v.map((v, j) => (
+                  <td key={j} className={j === sel ? 'hl' : ''}>
+                    {step >= 3 ? (indicators[j].dir === '↑' ? (v / max[j]).toFixed(2) : (min[j] / v).toFixed(2)) : v}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <div className="demo-note">
+        {step === 0 && '评价第一步不是算分，而是"选哪些指标"。点击下一步，看 2021 年 C 题一等奖论文如何从原始数据构建 6 个指标（系统性/科学性/可比性/可测性/独立性）。'}
+        {step === 1 && `点选指标行查看说明。关键区分：${indicators[sel].name} 是 ${indicators[sel].type}——${indicators[sel].why}。`}
+        {step === 2 && '每个指标都有明确方向：效益型越大越好（用 x/max 标准化），成本型越小越好（用 min/x 反向标准化）。'}
+        {step === 3 && '标准化后量纲统一（0~1），才能进入熵权法/TOPSIS 计算权重与得分。'}
+      </div>
+    </div>
+  )
+}
+
+/* ============ 动态规划演示（库存逐周决策） ============ */
+
+function DynamicProgrammingDemo() {
+  const [week, setWeek] = useState(0)
+  const [orders, setOrders] = useState(() => [24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24])
+  const W = 560, H = 300, pad = 34
+  const demand = 24, safety = 48 // 两周需求警戒
+  const consume = 24
+  let inv = 48
+  const points = []
+  for (let w = 0; w <= week; w++) {
+    inv = inv - consume + orders[w]
+    points.push({ w, inv })
+  }
+  const sx = (x) => pad + (x / 23) * (W - pad * 2)
+  const sy = (y) => H - pad - (y / 90) * (H - pad * 2)
+  const maxW = 23
+  return (
+    <div className="demo">
+      <div className="demo-controls">
+        <label>本周订货量 = <b>{orders[week]}</b>
+          <input type="range" min="10" max="40" value={orders[week]} onChange={(e) => setOrders((o) => o.map((v, i) => (i === week ? +e.target.value : v)))} />
+        </label>
+        <button className="btn btn-primary btn-sm" onClick={() => setWeek(Math.min(maxW, week + 1))} disabled={week >= maxW}>过一周</button>
+        <button className="btn btn-ghost btn-sm" onClick={() => { setWeek(0); setOrders(Array(24).fill(24)) }}>重置</button>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
+        {[0, 24, 48, 72].map((g) => <line key={g} x1={pad} y1={sy(g)} x2={W - pad} y2={sy(g)} stroke="#f1f5f9" />)}
+        <line x1={pad} y1={sy(safety)} x2={W - pad} y2={sy(safety)} stroke="#ea580c" strokeWidth="1.5" strokeDasharray="6 4" />
+        <text x={W - pad - 52} y={sy(safety) - 6} fontSize="11" fill="#ea580c">两周库存警戒线</text>
+        <polyline points={points.map((p) => `${sx(p.w)},${sy(p.inv)}`).join(' ')} fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinejoin="round" />
+        {points.map((p, i) => <circle key={i} cx={sx(p.w)} cy={sy(p.inv)} r="4" fill={p.inv < safety ? '#ea580c' : '#2563eb'} />)}
+        <line x1={pad} y1={sy(0)} x2={W - pad} y2={sy(0)} stroke="#cbd5e1" strokeWidth="1" />
+      </svg>
+      <div className="demo-note">
+        本周库存 = 上周库存 − 消耗 24 + 订货 {orders[week]}（当前第 {week + 1} 周，库存 {points[points.length - 1]?.inv ?? 48}）。库存跌破橙色警戒线时下周要加大订货——<b>本周决策依赖上周状态，这就是逐阶段递推</b>（2021 年 C 题逐周求解订购方案、2014 年 C 题逐次决定卖猪类型）。
+      </div>
+    </div>
+  )
+}
+
+/* ============ 存贮模型演示（EOQ 经济订货量） ============ */
+
+function InventoryDemo() {
+  const [D, setD] = useState(100) // 年需求
+  const [K, setK] = useState(50) // 单次订货成本
+  const [h, setH] = useState(2) // 单位库存持有成本/年
+  const Q = Math.sqrt((2 * D * K) / h) // EOQ
+  const TC = Math.sqrt(2 * D * K * h) // 最小总成本
+  const W = 560, H = 300, pad = 34
+  const sx = (x) => pad + (x / 220) * (W - pad * 2)
+  const sy = (y) => H - pad - (y / 260) * (H - pad * 2)
+  // 订货成本 = K*D/Q，持有 = h*Q/2，总 = 两者之和
+  const curve = []
+  for (let q = 10; q <= 220; q += 2) curve.push({ q, order: (K * D) / q, hold: (h * q) / 2, total: (K * D) / q + (h * q) / 2 })
+  const minY = 0, maxY = 260
+  return (
+    <div className="demo">
+      <div className="demo-controls">
+        <label>年需求 D=<b>{D}</b><input type="range" min="40" max="200" value={D} onChange={(e) => setD(+e.target.value)} /></label>
+        <label>订货成本 K=<b>{K}</b><input type="range" min="10" max="120" value={K} onChange={(e) => setK(+e.target.value)} /></label>
+        <label>持有成本 h=<b>{h}</b><input type="range" min="0.5" max="5" step="0.5" value={h} onChange={(e) => setH(+e.target.value)} /></label>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
+        <polyline points={curve.map((p) => `${sx(p.q)},${sy(p.order)}`).join(' ')} fill="none" stroke="#94a3b8" strokeWidth="1.5" />
+        <polyline points={curve.map((p) => `${sx(p.q)},${sy(p.hold)}`).join(' ')} fill="none" stroke="#16a34a" strokeWidth="1.5" />
+        <polyline points={curve.map((p) => `${sx(p.q)},${sy(p.total)}`).join(' ')} fill="none" stroke="#ea580c" strokeWidth="2.5" />
+        <line x1={sx(Q)} y1={pad} x2={sx(Q)} y2={H - pad} stroke="#ea580c" strokeWidth="1.5" strokeDasharray="5 3" />
+        <text x={sx(Q) - 6} y={H - pad - 6} fontSize="11.5" fill="#ea580c" fontWeight="600">Q*={Q.toFixed(0)}</text>
+        <line x1={pad} y1={sy(0)} x2={W - pad} y2={sy(0)} stroke="#cbd5e1" strokeWidth="1" />
+      </svg>
+      <div className="demo-note">
+        灰=订货成本（随批量 Q 下降），绿=持有成本（随 Q 上升），橙=总成本。总成本最低点的订货量就是经济订货量 <b>Q* = √(2DK/h)</b>，本参数下 Q*={Q.toFixed(0)}、最小总成本 {TC.toFixed(0)}——<b>存贮模型的"警戒点+最优批量"思想</b>（2021 年 C 题两篇一等奖论文均建模"至少两周库存"约束）。
+      </div>
+    </div>
+  )
+}
+
+/* ============ 贝叶斯模型演示（先验 → 后验） ============ */
+
+function BayesianDemo() {
+  const [prior, setPrior] = useState(0.5) // 先验均值（均匀先验的"信念"强度由下方 slider 控制）
+  const [strength, setStrength] = useState(3) // 先验强度（等效样本数）
+  const [data, setData] = useState(() => Array.from({ length: 10 }, (_, i) => 0.5 + 0.3 * Math.sin(i / 2) + (Math.random() - 0.5) * 0.4))
+  const n = data.length
+  const mData = data.reduce((s, v) => s + v, 0) / n
+  // 共轭先验：均值未知的高斯，方差已知 → 后验均值 = 加权平均
+  const postMean = (strength * prior + n * mData) / (strength + n)
+  const postStrength = strength + n
+  // 先验/后验密度（高斯近似，方差固定 0.3）
+  const dens = (x, mu, s) => Math.exp(-((x - mu) ** 2) / (2 * s * s)) / (s * Math.sqrt(2 * Math.PI))
+  const W = 560, H = 280, pad = 34
+  const sx = (x) => pad + (x / 1.4) * (W - pad * 2)
+  const sy = (y) => H - pad - (y / 2.2) * (H - pad * 2)
+  const priorPts = Array.from({ length: 70 }, (_, i) => { const x = i / 69 * 1.4; return { x, y: dens(x, prior, 0.35) } })
+  const postPts = Array.from({ length: 70 }, (_, i) => { const x = i / 69 * 1.4; return { x, y: dens(x, postMean, 0.35 / Math.sqrt(postStrength / strength)) } })
+  return (
+    <div className="demo">
+      <div className="demo-controls">
+        <label>先验均值 = <b>{prior.toFixed(2)}</b><input type="range" min="0.1" max="1.1" step="0.05" value={prior} onChange={(e) => setPrior(+e.target.value)} /></label>
+        <label>先验强度 = <b>{strength}</b><input type="range" min="1" max="30" value={strength} onChange={(e) => setStrength(+e.target.value)} /></label>
+        <button className="btn btn-ghost btn-sm" onClick={() => setData(Array.from({ length: 10 }, () => 0.5 + 0.3 * Math.sin(Math.random() * 6) + (Math.random() - 0.5) * 0.4))}>换数据</button>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
+        {data.map((v, i) => <circle key={i} cx={sx(v)} cy={H - pad - 8} r="3.5" fill="#2563eb" opacity="0.6" />)}
+        <text x={pad} y={H - 12} fontSize="10.5" fill="#94a3b8">蓝点 = 观测数据</text>
+        <polyline points={priorPts.map((p) => `${sx(p.x)},${sy(p.y)}`).join(' ')} fill="none" stroke="#94a3b8" strokeWidth="2" />
+        <text x={W - pad - 80} y={sy(dens(prior, prior, 0.35)) - 8} fontSize="11" fill="#94a3b8">先验</text>
+        <polyline points={postPts.map((p) => `${sx(p.x)},${sy(p.y)}`).join(' ')} fill="none" stroke="#ea580c" strokeWidth="2.5" />
+        <text x={W - pad - 80} y={sy(dens(postMean, postMean, 0.35 / Math.sqrt(postStrength / strength))) + 14} fontSize="11" fill="#ea580c" fontWeight="600">后验</text>
+        <line x1={sx(prior)} y1={pad} x2={sx(prior)} y2={H - pad} stroke="#94a3b8" strokeWidth="1" strokeDasharray="4 3" />
+        <line x1={sx(postMean)} y1={pad} x2={sx(postMean)} y2={H - pad} stroke="#ea580c" strokeWidth="1" strokeDasharray="4 3" />
+        <line x1={pad} y1={sy(0)} x2={W - pad} y2={sy(0)} stroke="#cbd5e1" strokeWidth="1" />
+      </svg>
+      <div className="demo-note">
+        后验均值 = (先验强度×先验均值 + 数据量×数据均值) / (先验强度+数据量) = <b>{postMean.toFixed(3)}</b>（数据均值 {mData.toFixed(2)}）。
+        先验强度越大后验越靠先验；数据越多后验越靠数据、峰越尖。<b>贝叶斯 = 先验 + 证据 → 后验</b>（2023 年 C 题用 WinBUGS+MCMC 做销量/补货量建模）。
+      </div>
+    </div>
+  )
+}
+
+/* ============ 微分方程演示（牛顿冷却/热传导） ============ */
+
+function DifferentialEquationDemo() {
+  const [k, setK] = useState(0.08) // 冷却系数
+  const [T0, setT0] = useState(200) // 初始温度
+  const Ta = 25 // 环境温度
+  const W = 560, H = 280, pad = 34
+  // 解析解：T(t) = Ta + (T0-Ta)*e^(-kt)
+  const T = (t) => Ta + (T0 - Ta) * Math.exp(-k * t)
+  const sx = (x) => pad + (x / 60) * (W - pad * 2)
+  const sy = (y) => H - pad - (y / 220) * (H - pad * 2)
+  const curve = Array.from({ length: 120 }, (_, i) => ({ x: (i / 119) * 60, y: T((i / 119) * 60) }))
+  return (
+    <div className="demo">
+      <div className="demo-controls">
+        <label>冷却系数 k=<b>{k.toFixed(2)}</b><input type="range" min="0.02" max="0.2" step="0.01" value={k} onChange={(e) => setK(+e.target.value)} /></label>
+        <label>初始温度 T₀=<b>{T0}</b><input type="range" min="80" max="300" step="5" value={T0} onChange={(e) => setT0(+e.target.value)} /></label>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
+        {[25, 100, 200].map((g) => <line key={g} x1={pad} y1={sy(g)} x2={W - pad} y2={sy(g)} stroke="#f1f5f9" />)}
+        <polyline points={curve.map((p) => `${sx(p.x)},${sy(p.y)}`).join(' ')} fill="none" stroke="#ea580c" strokeWidth="2.5" />
+        <line x1={pad} y1={sy(Ta)} x2={W - pad} y2={sy(Ta)} stroke="#2563eb" strokeWidth="1.5" strokeDasharray="6 4" />
+        <text x={W - pad - 60} y={sy(Ta) - 6} fontSize="11" fill="#2563eb">环境温度 25℃</text>
+        <text x={sx(30)} y={sy(T(30)) - 8} fontSize="11" fill="#ea580c">T(t) = 25 + {(T0 - Ta).toFixed(0)}·e^(−{k.toFixed(2)}t)</text>
+        <line x1={pad} y1={sy(0)} x2={W - pad} y2={sy(0)} stroke="#cbd5e1" strokeWidth="1" />
+      </svg>
+      <div className="demo-note">
+        温度变化率 ∝ 温差：dT/dt = −k(T−Ta)，解析解 T(t) = Ta + (T0−Ta)e^(−kt)。k 越大降温越快。<b>机理题先列微分方程、再求解析解或数值解</b>（2020 年 A 题用热传导方程+牛顿冷却建模炉温 R²=0.9813；2022 年 A 题用牛顿第二定律+Runge-Kutta）。
+      </div>
+    </div>
+  )
+}
+
+/* ============ 蒙特卡洛演示（随机撒点估 π） ============ */
+
+function MonteCarloDemo() {
+  const [n, setN] = useState(500)
+  const W = 560, H = 300, pad = 40
+  const pts = useMemo(() => {
+    const arr = []
+    const rnd = seededRandom(99)
+    for (let i = 0; i < n; i++) arr.push({ x: rnd(), y: rnd() })
+    return arr
+  }, [n])
+  const inside = pts.filter((p) => p.x * p.x + p.y * p.y <= 1).length
+  const pi = (4 * inside) / n
+  const sx = (x) => pad + x * (W - pad * 2)
+  const sy = (y) => H - pad - y * (H - pad * 2)
+  return (
+    <div className="demo">
+      <div className="demo-controls">
+        <label>撒点数 = <b>{n}</b><input type="range" min="50" max="4000" step="50" value={n} onChange={(e) => setN(+e.target.value)} /></label>
+        <span className="kc-tag">π ≈ {pi.toFixed(4)}</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
+        <path d={`M ${sx(0)} ${sy(0)} A ${W - pad * 2} ${W - pad * 2} 0 0 1 ${sx(1)} ${sy(0)} L ${sx(1)} ${sy(0)} Z`} fill="none" stroke="#16a34a" strokeWidth="1.5" />
+        {pts.map((p, i) => <circle key={i} cx={sx(p.x)} cy={sy(p.y)} r="2" fill={p.x * p.x + p.y * p.y <= 1 ? '#16a34a' : '#cbd5e1'} />)}
+        <line x1={pad} y1={sy(0)} x2={W - pad} y2={sy(0)} stroke="#cbd5e1" strokeWidth="1" />
+        <line x1={sx(0)} y1={pad} x2={sx(0)} y2={H - pad} stroke="#cbd5e1" strokeWidth="1" />
+      </svg>
+      <div className="demo-note">
+        圆内点 {inside}/{n}，π ≈ 4 × 圆内/总数 = {pi.toFixed(4)}。撒点越多越接近 π（3.14159）——<b>用随机采样近似积分/概率</b>（2021 年 A 题用蒙特卡洛积分算 FAST 接收比；2021 年 C 题用正态随机量模拟偏差率损耗率）。
+      </div>
+    </div>
+  )
+}
+
+/* ============ 灰色预测 GM(1,1) 演示（小样本预测） ============ */
+
+function GreyPredictionDemo() {
+  const [n, setN] = useState(6)
+  const base = useMemo(() => [102, 108, 117, 128, 141, 156, 172, 190, 210, 232], [])
+  const data = base.slice(0, n)
+  // GM(1,1)：累加生成 → 一阶微分方程拟合 → 累减还原
+  const ago = data.map((_, i) => data.slice(0, i + 1).reduce((s, v) => s + v, 0))
+  const B = [], Y = []
+  for (let i = 0; i < n - 1; i++) { B.push([-(ago[i] + ago[i + 1]) / 2, 1]); Y.push(data[i + 1]) }
+  // 最小二乘解 [a, b] = (BᵀB)⁻¹BᵀY
+  let b11 = 0, b12 = 0, b22 = 0, y1 = 0, y2 = 0
+  for (let i = 0; i < n - 1; i++) {
+    b11 += B[i][0] * B[i][0]; b12 += B[i][0] * B[i][1]; b22 += B[i][1] * B[i][1]
+    y1 += B[i][0] * Y[i]; y2 += B[i][1] * Y[i]
+  }
+  const det = b11 * b22 - b12 * b12
+  const a = (b22 * y1 - b12 * y2) / det
+  const b = (b11 * y2 - b12 * y1) / det
+  // 预测：x̂(k+1) = (x0 - b/a)e^(-ak) 累减
+  const pred = []
+  for (let k = 1; k <= 5; k++) {
+    const agoK = (data[0] - b / a) * Math.exp(-a * k) + b / a
+    const agoK1 = (data[0] - b / a) * Math.exp(-a * (k - 1)) + b / a
+    pred.push(agoK - agoK1)
+  }
+  const W = 560, H = 280, pad = 34
+  const allX = [...data, ...pred]
+  const maxV = Math.max(...allX) * 1.05
+  const sx = (x) => pad + (x / (n + 4)) * (W - pad * 2)
+  const sy = (y) => H - pad - (y / maxV) * (H - pad * 2)
+  return (
+    <div className="demo">
+      <div className="demo-controls">
+        <label>历史数据点数 = <b>{n}</b><input type="range" min="4" max="10" value={n} onChange={(e) => setN(+e.target.value)} /></label>
+        <span className="hint">a={a.toFixed(3)}（&lt;0 说明增长趋势）</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
+        {data.map((v, i) => <circle key={i} cx={sx(i)} cy={sy(v)} r="4.5" fill="#2563eb" />)}
+        <polyline points={data.map((v, i) => `${sx(i)},${sy(v)}`).join(' ')} fill="none" stroke="#2563eb" strokeWidth="2" />
+        {pred.map((v, i) => <circle key={`p${i}`} cx={sx(n + i)} cy={sy(v)} r="4.5" fill="#ea580c" />)}
+        <polyline points={[data[data.length - 1], ...pred].map((v, i) => `${sx(n - 1 + i)},${sy(v)}`).join(' ')} fill="none" stroke="#ea580c" strokeWidth="2" strokeDasharray="5 3" />
+        <line x1={sx(n - 0.5)} y1={pad} x2={sx(n - 0.5)} y2={H - pad} stroke="#ea580c" strokeWidth="1" strokeDasharray="4 3" />
+        <text x={sx(n - 0.5) + 4} y={pad + 10} fontSize="10.5" fill="#ea580c">预测区</text>
+        <line x1={pad} y1={sy(0)} x2={W - pad} y2={sy(0)} stroke="#cbd5e1" strokeWidth="1" />
+      </svg>
+      <div className="demo-note">
+        未来 5 期预测：{pred.map((v, i) => `${i + 1}:${v.toFixed(0)}`).join(' ')}。GM(1,1) 流程：累加生成(AGO) → 最小二乘拟合微分方程 → 累减还原。<b>只有 4~10 个点也能预测</b>（小样本预测高频方法；数据少时比回归更稳）。
+      </div>
+    </div>
+  )
+}
+
 /* ============ 卡片注册表 ============ */
 
 const CARDS = [
@@ -1229,6 +1595,102 @@ const CARDS = [
     freqLevel: 'mid',
     src: '2013 国赛 B 题（碎纸复原 §4.1.6，Metropolis + 冷却进度表）；2015 国赛 A 题（§4.2，初温 8000、退温 0.9）',
   },
+  {
+    id: 'hypothesis-test',
+    title: '假设检验（卡方检验）',
+    tag: '统计 / 显著性',
+    concept: '差异是"真的"还是"随机波动"？给结论一个概率背书：p<0.05 才说"显著"。卡方检验查分类变量关联、Wilcoxon 查配对差异、K-S 查分布拟合。中频率标准工具：2022 年 C 题用卡方+Wilcoxon，2021 年 C 题用 K-S 选分布，2023 年 C 题用 Shapiro-Wilk 查正态性。',
+    demo: HypothesisTestDemo,
+    try: '把"铅钡有风化"一格的数字改大，观察 p 值如何骤降——为什么格子差异越大越显著？',
+    related: ['相关性分析', 'p值'],
+    freq: '● 中频率',
+    freqLevel: 'mid',
+    src: '2022 国赛 C 题一等奖论文 C229 §6.1.1（卡方检验风化与类型/纹饰/颜色）+ §6.4.2（配对 Wilcoxon）；2021 国赛 C 题 C066 §6.3（K-S 拟合优度）；2023 国赛 C 题（Shapiro-Wilk 正态性）',
+  },
+  {
+    id: 'indicator-system',
+    title: '多指标评价体系',
+    tag: '评价 / 指标构建',
+    concept: '评价的第一步不是算分，而是"选哪些指标"——指标要系统、科学、可比、可测、独立，且区分效益型（越大越好）与成本型（越小越好）。评价类高频率第一步：2021 年 C 题两篇一等奖论文分别构建 6/9 个指标，2018 年 C 题构建 FMS 指标。',
+    demo: IndicatorSystemDemo,
+    try: '为什么"供货量方差"是成本型指标（要反向标准化）？如果两个指标高度相关，保留它们合理吗？',
+    related: ['熵权法', 'TOPSIS'],
+    freq: '★ 高频率',
+    freqLevel: 'high',
+    src: '2021 国赛 C 题一等奖论文 C066 §5.1（6 指标：供货次数/平均供货量/单次最大供货量/稳定性/连续性/合理比例）；C283 §5.1.2（9 指标）',
+  },
+  {
+    id: 'dynamic-programming',
+    title: '动态规划（逐阶段决策）',
+    tag: '优化 / 递推',
+    concept: '把多阶段决策拆成"每阶段只依赖上一阶段状态"的递推——本周库存=上周库存+收货−消耗。中频率：带时间先后依赖的多阶段决策（2021 年 C 题逐周订购、2014 年 C 题逐次售猪）用逐周/逐阶段递推。',
+    demo: DynamicProgrammingDemo,
+    try: '连续两周把订货量调到 10（低于消耗 24），观察库存跌破警戒线后系统如何被迫补货——为什么"上周状态"决定了"本周选择"？',
+    related: ['存贮模型', '多目标规划'],
+    freq: '● 中频率',
+    freqLevel: 'mid',
+    src: '2021 国赛 C 题一等奖论文 C066 §6.4（逐周求解订购方案，本周依赖前周库存）；2014 国赛 C 题一等奖论文（逐次决定卖肉猪/猪苗）',
+  },
+  {
+    id: 'inventory-model',
+    title: '存贮模型（EOQ）',
+    tag: '优化 / 库存',
+    concept: '库存管理的核心问题——订多少、何时订。用"警戒点"（最低安全库存）触发补货，用经济订货量平衡订货成本与持有成本。中频率：带库存约束的供应链/生产问题标配（2021 年 C 题两篇一等奖论文都建模"至少两周库存"约束）。',
+    demo: InventoryDemo,
+    try: '把订货成本 K 调大，Q* 怎么变？把持有成本 h 调大呢？——为什么"一次多订 vs 频繁小订"要权衡？',
+    related: ['动态规划', '线性规划'],
+    freq: '● 中频率',
+    freqLevel: 'mid',
+    src: '2021 国赛 C 题一等奖论文 C283 §6.1.1（经济进货存贮模型，库存警戒点=两周产能 5.64 万）；C066 §6.2（库存维持约束）',
+  },
+  {
+    id: 'bayesian',
+    title: '贝叶斯模型 + MCMC',
+    tag: '预测 / 概率',
+    concept: '先验 + 数据 → 后验：把"经验"和"证据"结合，用 MCMC 采样近似后验分布。中频率（近年获奖论文新趋势）：2023 年 C 题优秀论文用贝叶斯模型（WinBUGS+MCMC）做销量/补货量建模。',
+    demo: BayesianDemo,
+    try: '把先验强度调到 30，后验还信数据吗？把先验均值拖到 1.1（远离数据），观察后验如何被"拉回"——为什么先验和证据要折中？',
+    related: ['回归', '蒙特卡洛'],
+    freq: '● 中频率',
+    freqLevel: 'mid',
+    src: '2023 国赛 C 题优秀论文 C126（Bayesian 销量/补货量模型，WinBUGS MCMC，30000 迭代 + 收敛四重诊断）',
+  },
+  {
+    id: 'differential-equation',
+    title: '微分方程建模',
+    tag: '机理 / 方程',
+    concept: '用方程描述物理量的变化规律：热传导 ∂u/∂t=a∂²u/∂x² + 边界换热（牛顿冷却），或 F=ma 列运动方程。机理题先推方程再求数值解（Runge-Kutta/差分）。中频率机理题标配：2020 年 A 题用热传导方程建模炉温（R²=0.9813），2022 年 A 题用牛顿第二定律+Runge-Kutta 求解波浪能装置。',
+    demo: DifferentialEquationDemo,
+    try: '把冷却系数 k 调大，曲线变陡还是变缓？k 在物理上代表什么？（散热能力）——为什么机理题要先写方程再算数？',
+    related: ['有限差分', '蒙特卡洛'],
+    freq: '● 中频率',
+    freqLevel: 'mid',
+    src: '2020 国赛 A 题优秀论文 A147 §5.1（一维热传导方程+牛顿冷却定律，有限差分求解，R²=0.9813）；2022 国赛 A 题优秀论文 A171 §5.1-5.2（牛顿第二定律+拉普拉斯变换/Runge-Kutta）',
+  },
+  {
+    id: 'monte-carlo',
+    title: '蒙特卡洛方法',
+    tag: '仿真 / 随机',
+    concept: '用大量随机采样近似复杂积分/期望——高维积分、随机模拟、风险估计都靠它。中频率：高维积分（2021 年 A 题接收比计算）与随机模拟（2021 年 C 题偏差率损耗率正态随机化）都使用。',
+    demo: MonteCarloDemo,
+    try: '把撒点数从 50 拖到 4000，π 的估计如何收敛？——为什么"随机"反而能算"精确"的东西？',
+    related: ['贝叶斯', '模拟退火'],
+    freq: '● 中频率',
+    freqLevel: 'mid',
+    src: '2021 国赛 A 题优秀论文 A217 §7.2（蒙特卡洛积分：圆形口径分解为三角形投影域+边界修正，接收比 0.811%→1.103%）；2021 国赛 C 题 C283 §6.1（偏差率/损耗率正态随机模拟）',
+  },
+  {
+    id: 'grey-prediction',
+    title: '灰色预测 GM(1,1)',
+    tag: '预测 / 小样本',
+    concept: '数据少（4-10 个点）也能预测——对原始序列做累加生成（AGO），发现指数规律，用一阶微分方程拟合后累减还原。小样本预测高频率方法（数据点少时首选，国赛预测类常见）。',
+    demo: GreyPredictionDemo,
+    try: '把点数从 10 减到 4，预测还稳吗？把数据改成先降后升（无趋势），GM(1,1) 还适用吗——它适合什么样的序列？',
+    related: ['线性回归', '时间序列'],
+    freq: '★ 高频率',
+    freqLevel: 'high',
+    src: '国赛预测类公认高频（README 方法地图）；2022 国赛 C 题一等奖论文 C229 §8.3 展望提及灰色关联分析作为改进方向',
+  },
 ]
 
 /** 全部卡片 id（知识卡片面板遍历用） */
@@ -1359,6 +1821,52 @@ export const CONCEPT_KEYWORDS = [
   { keyword: '退火', cardId: 'simulated-annealing' },
   { keyword: 'metropolis', cardId: 'simulated-annealing' },
   { keyword: '冷却进度', cardId: 'simulated-annealing' },
+  { keyword: '假设检验', cardId: 'hypothesis-test' },
+  { keyword: '卡方检验', cardId: 'hypothesis-test' },
+  { keyword: '卡方', cardId: 'hypothesis-test' },
+  { keyword: 'p值', cardId: 'hypothesis-test' },
+  { keyword: '显著性检验', cardId: 'hypothesis-test' },
+  { keyword: 'wilcoxon', cardId: 'hypothesis-test' },
+  { keyword: 'k-s检验', cardId: 'hypothesis-test' },
+  { keyword: 'ks检验', cardId: 'hypothesis-test' },
+  { keyword: 'shapiro-wilk', cardId: 'hypothesis-test' },
+  { keyword: '正态性检验', cardId: 'hypothesis-test' },
+  { keyword: '指标体系', cardId: 'indicator-system' },
+  { keyword: '评价指标', cardId: 'indicator-system' },
+  { keyword: '效益型指标', cardId: 'indicator-system' },
+  { keyword: '成本型指标', cardId: 'indicator-system' },
+  { keyword: '极大型指标', cardId: 'indicator-system' },
+  { keyword: '极小型指标', cardId: 'indicator-system' },
+  { keyword: '动态规划', cardId: 'dynamic-programming' },
+  { keyword: '逐周', cardId: 'dynamic-programming' },
+  { keyword: '状态转移', cardId: 'dynamic-programming' },
+  { keyword: '递推', cardId: 'dynamic-programming' },
+  { keyword: '存贮模型', cardId: 'inventory-model' },
+  { keyword: '经济订货', cardId: 'inventory-model' },
+  { keyword: 'eoq', cardId: 'inventory-model' },
+  { keyword: '库存警戒', cardId: 'inventory-model' },
+  { keyword: '贝叶斯', cardId: 'bayesian' },
+  { keyword: 'bayesian', cardId: 'bayesian' },
+  { keyword: '先验', cardId: 'bayesian' },
+  { keyword: '后验', cardId: 'bayesian' },
+  { keyword: 'mcmc', cardId: 'bayesian' },
+  { keyword: 'winbugs', cardId: 'bayesian' },
+  { keyword: '微分方程', cardId: 'differential-equation' },
+  { keyword: '热传导', cardId: 'differential-equation' },
+  { keyword: '牛顿冷却', cardId: 'differential-equation' },
+  { keyword: '偏微分方程', cardId: 'differential-equation' },
+  { keyword: 'runge-kutta', cardId: 'differential-equation' },
+  { keyword: '蒙特卡洛', cardId: 'monte-carlo' },
+  { keyword: '蒙塔卡洛', cardId: 'monte-carlo' },
+  { keyword: 'monte carlo', cardId: 'monte-carlo' },
+  { keyword: '随机模拟', cardId: 'monte-carlo' },
+  { keyword: '随机采样', cardId: 'monte-carlo' },
+  { keyword: '灰色预测', cardId: 'grey-prediction' },
+  { keyword: 'gm(1,1)', cardId: 'grey-prediction' },
+  { keyword: 'gm11', cardId: 'grey-prediction' },
+  { keyword: '累加生成', cardId: 'grey-prediction' },
+  { keyword: 'ago', cardId: 'grey-prediction' },
+  { keyword: '灰色关联', cardId: 'grey-prediction' },
 ]
 
 /** 在文本中检测命中的所有概念（按词表顺序去重，返回 cardId 数组） */
