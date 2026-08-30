@@ -170,6 +170,9 @@ export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
   const [pyState, setPyState] = useState('idle') // Pyodide 加载状态（首次下载提示）
   useEffect(() => onPyodideState(setPyState), [])
   const [params, setParams] = useState({ N: 40, NOISE: 0.2, DEGREE: 3 })
+  const [outW, setOutW] = useState(() => { try { const v = localStorage.getItem('mmg_out_w_v1'); if (v && /^\d+px$/.test(v)) return v } catch { /* ignore */ } return '45%' }) // 右侧栏宽度（可拖拽）
+  const [outOpen, setOutOpen] = useState(false) // 运行输出展开
+  const [genInfo, setGenInfo] = useState(null) // AI 生成/改进详情 {action, source, lines, time}
   const runTimer = useRef(null)
   const codeTimer = useRef(null)
   const editRef = useRef(null)
@@ -298,6 +301,23 @@ export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
     runTimer.current = setTimeout(() => doRun(next), 500)
   }
 
+  /** 右侧栏拖拽调宽（代码区 / 产出区左右分栏） */
+  function onSplitDrag(e) {
+    e.preventDefault()
+    const move = (ev) => {
+      const w = Math.round(Math.min(Math.max(window.innerWidth - ev.clientX - 60, 300), window.innerWidth * 0.68))
+      const v = w + 'px'
+      setOutW(v)
+      try { localStorage.setItem('mmg_out_w_v1', v) } catch { /* ignore */ }
+    }
+    const up = () => {
+      removeEventListener('pointermove', move)
+      removeEventListener('pointerup', up)
+    }
+    addEventListener('pointermove', move)
+    addEventListener('pointerup', up)
+  }
+
   async function generateCode() {
     if (!settings.apiKey) return setError('请先在「模型设置」配置 API Key')
     if (selected.size === 0) return setError('请至少选择一个拆解块')
@@ -317,6 +337,7 @@ export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
       const c = extractCode(content)
       if (c) {
         applyCode(c)
+        setGenInfo({ action: '生成', source: chosen.map((b) => b.title).join('、') || '未选拆解块', lines: c.split('\n').length, time: now() })
         setSelected(new Set()); setGenText('')
         setLog((prev) => [...prev, { time: now(), cls: 'ok', text: '✓ 代码已生成，点击「运行」执行' }])
       } else {
@@ -344,6 +365,7 @@ export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
       const c = extractCode(content)
       if (c) {
         applyCode(c)
+        setGenInfo({ action: '改进', source: '当前编辑器代码', lines: c.split('\n').length, time: now() })
         setLog((prev) => [...prev, { time: now(), cls: 'ok', text: '✓ 代码已优化' }])
       } else {
         setLog((prev) => [...prev, { time: now(), cls: 'err', text: 'AI 未返回有效代码' }])
@@ -377,7 +399,7 @@ export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
   const lineCount = lines.length
 
   return (
-    <div className="code-split">
+    <div className="code-split" style={{ '--out-w': outW }}>
       {/* 左图标窄栏 */}
       <aside className="rail">
         <button className="rail-btn" onClick={onExpandSidebar} title="展开侧栏">≡</button>
@@ -444,16 +466,35 @@ export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
         )}
       </section>
 
+      {/* 左右分栏拖拽手柄 */}
+      <div className="split-handle" onPointerDown={onSplitDrag} title="拖动调整产出区宽度" />
+
       {/* 右 50%：可视化 */}
       <section className="out-pane">
         <div className="panel-tag" style={{ fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '.12em', color: 'var(--primary)', textTransform: 'uppercase' }}>产出区 · 运行结果</div>
         {error && <div className="alert error">{error}</div>}
 
-        {/* 运行输出（print 结果，醒目展示） */}
+        {/* AI 生成/改进详情 */}
+        {genInfo && (
+          <div className="gen-info-card">
+            <div className="gen-info-head">🤖 AI {genInfo.action}完成</div>
+            <div className="gen-info-grid">
+              <div className="gen-info-item"><span className="gi-label">操作</span><b>{genInfo.action}</b></div>
+              <div className="gen-info-item"><span className="gi-label">代码</span><b>{genInfo.lines} 行</b></div>
+              <div className="gen-info-item"><span className="gi-label">时间</span><b>{genInfo.time}</b></div>
+            </div>
+            {genInfo.source && <div className="gen-info-source">📌 来源：{genInfo.source}</div>}
+          </div>
+        )}
+
+        {/* 运行输出（print 结果，醒目展示，可展开） */}
         <div className="result-card">
-          <div className="result-head">⚙️ 运行输出</div>
+          <div className="result-head">
+            <span>⚙️ 运行输出</span>
+            <button className="result-toggle" onClick={() => setOutOpen(!outOpen)}>{outOpen ? '收起 ▲' : '展开 ▼'}</button>
+          </div>
           {runOutput ? (
-            <pre className="result-box">{runOutput}</pre>
+            <pre className={`result-box ${outOpen ? 'expanded' : ''}`}>{runOutput}</pre>
           ) : (
             <div className="result-empty">点击「▶ 运行」后，这里显示代码的输出结果（print 的内容）。</div>
           )}

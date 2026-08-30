@@ -218,7 +218,11 @@ body.resizing * { cursor: col-resize !important; }
 .concept-body .kc-concept { margin: 10px 0; font-size: 14px; color: var(--muted); }
 
 /* ============ 编程台 ============ */
-.code-split { display: grid; grid-template-columns: 52px 1fr 1fr; grid-template-rows: minmax(0, 1fr); height: 100%; width: 100%; }
+.code-split { display: grid; grid-template-columns: 52px 1fr 8px var(--out-w, 45%); grid-template-rows: minmax(0, 1fr); height: 100%; width: 100%; }
+/* 左右分栏拖拽手柄 */
+.split-handle { cursor: col-resize; background: var(--border); transition: background .15s; position: relative; }
+.split-handle:hover, .split-handle:active { background: var(--primary); }
+.split-handle::after { content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 2px; height: 40px; border-radius: 2px; background: color-mix(in srgb, var(--muted) 45%, transparent); }
 .code-pane { display: flex; flex-direction: column; min-width: 0; background: var(--surface); border-right: 1px solid var(--border); }
 .code-pane .code-head { padding: 10px 14px; }
 .viz-note { margin-top: 4px; }
@@ -433,7 +437,7 @@ pre.code { white-space: pre; font-size: 13.5px; line-height: 1.7; font-family: v
 @media (max-width: 1280px) {
   .app-shell:not(.rail-only) { grid-template-columns: 200px 1fr; }
   .ws { grid-template-columns: 48px 1fr 36px minmax(300px, 40%); }
-  .code-split { grid-template-columns: 48px 1fr 1fr; }
+  .code-split { grid-template-columns: 48px 1fr 8px var(--out-w, 40%); }
 }
 
 /* ≤1024：三台改两行——AI 面板/结果区移到下方全宽，书签栏保留 */
@@ -441,6 +445,7 @@ pre.code { white-space: pre; font-size: 13.5px; line-height: 1.7; font-family: v
   .ws { grid-template-columns: 48px 1fr 36px; grid-template-rows: minmax(0, 1fr) auto; }
   .ws .ai-panel { grid-column: 1 / -1; grid-row: 2; max-height: 42vh; }
   .code-split { grid-template-columns: 48px 1fr; grid-template-rows: minmax(0, 1fr) auto; }
+  .code-split .split-handle { display: none; }
   /* out-pane 需限制高度，否则内容会把上方代码区（1fr 行）挤成 0 高度无法滚动 */
   .code-split .out-pane { grid-column: 1 / -1; grid-row: 2; max-height: 42vh; }
 }
@@ -461,7 +466,7 @@ pre.code { white-space: pre; font-size: 13.5px; line-height: 1.7; font-family: v
   .ws .ws-main { grid-column: 1; grid-row: 1; }
   .ws .ai-panel { grid-column: 1; grid-row: 2; max-height: 45vh; }
   .code-split { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; }
-  .code-split .rail { display: none; }
+  .code-split .rail, .code-split .split-handle { display: none; }
   .code-split .code-pane { grid-column: 1; grid-row: 1; }
   .code-split .out-pane { grid-column: 1; grid-row: 2; }
   .empty-grid { flex-direction: column; align-items: stretch; }
@@ -530,9 +535,21 @@ pre.code { white-space: pre; font-size: 13.5px; line-height: 1.7; font-family: v
 
 /* 运行输出结果卡片 */
 .result-card { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface); }
-.result-head { padding: 8px 14px; font-size: 12px; font-weight: 600; color: var(--primary); border-bottom: 1px solid var(--border); background: var(--surface-2); }
+.result-head { padding: 8px 14px; font-size: 12px; font-weight: 600; color: var(--primary); border-bottom: 1px solid var(--border); background: var(--surface-2); display: flex; align-items: center; justify-content: space-between; }
+.result-toggle { border: none; background: none; color: var(--primary); cursor: pointer; font-size: 11.5px; padding: 2px 6px; border-radius: 5px; }
+.result-toggle:hover { background: color-mix(in srgb, var(--primary) 12%, transparent); }
 .result-box { margin: 0; padding: 12px 14px; font-family: var(--mono); font-size: 13px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; background: var(--code); color: var(--code-fg); max-height: 220px; overflow: auto; }
+.result-box.expanded { max-height: 62vh; }
 .result-empty { padding: 14px; font-size: 12.5px; color: var(--muted); }
+
+/* AI 生成/改进详情卡片 */
+.gen-info-card { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.gen-info-head { padding: 8px 14px; font-size: 12px; font-weight: 600; color: var(--ok); border-bottom: 1px solid var(--border); background: var(--surface-2); }
+.gen-info-grid { display: flex; gap: 18px; padding: 10px 14px; flex-wrap: wrap; }
+.gen-info-item { display: flex; flex-direction: column; gap: 2px; }
+.gen-info-item .gi-label { font-size: 11px; color: var(--muted); }
+.gen-info-item b { font-size: 13.5px; }
+.gen-info-source { padding: 0 14px 10px; font-size: 12px; color: var(--muted); }
 
 /* ============ VS Code Dark+ 风格语法高亮（代码区恒深色） ============ */
 .code-body .k, .gen-preview-body .k { color: #569CD6; }   /* 关键字：蓝 */
