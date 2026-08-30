@@ -1412,6 +1412,186 @@ function GreyPredictionDemo() {
   )
 }
 
+/* ============ 粒子群算法演示（粒子聚拢寻优） ============ */
+
+function PsoDemo() {
+  const [gen, setGen] = useState(0)
+  const W = 560, H = 300, pad = 34
+  // 目标函数：双峰（全局峰 + 局部峰）
+  const f = (x, y) => Math.exp(-8 * ((x - 0.75) ** 2 + (y - 0.25) ** 2)) + 0.6 * Math.exp(-12 * ((x - 0.25) ** 2 + (y - 0.75) ** 2))
+  // PSO 状态（粒子位置/速度/pbest/gbest）
+  const state = useMemo(() => {
+    const rnd = seededRandom(77)
+    const n = 22
+    const p = Array.from({ length: n }, () => ({ x: rnd(), y: rnd(), vx: (rnd() - 0.5) * 0.1, vy: (rnd() - 0.5) * 0.1, bx: 0, by: 0, bf: -1 }))
+    let gx = 0.5, gy = 0.5, gf = -1
+    const trail = []
+    for (let it = 0; it < gen; it++) {
+      // 更新 pbest 和 gbest
+      for (const q of p) {
+        const v = f(q.x, q.y)
+        if (v > q.bf) { q.bf = v; q.bx = q.x; q.by = q.y }
+        if (v > gf) { gf = v; gx = q.x; gy = q.y }
+      }
+      // 更新速度和位置（w=0.7, c1=c2=1.5）
+      for (const q of p) {
+        q.vx = 0.7 * q.vx + 1.5 * rnd() * (q.bx - q.x) + 1.5 * rnd() * (gx - q.x)
+        q.vy = 0.7 * q.vy + 1.5 * rnd() * (q.by - q.y) + 1.5 * rnd() * (gy - q.y)
+        q.x = Math.min(1, Math.max(0, q.x + q.vx))
+        q.y = Math.min(1, Math.max(0, q.y + q.vy))
+      }
+      if (it === gen - 1 || it % 5 === 0) trail.push({ x: gx, y: gy, f: gf })
+    }
+    return { particles: p, gx, gy, gf, trail }
+  }, [gen])
+  const sx = (x) => pad + x * (W - pad * 2)
+  const sy = (y) => H - pad - y * (H - pad * 2)
+  return (
+    <div className="demo">
+      <div className="demo-controls">
+        <button className="btn btn-primary btn-sm" onClick={() => setGen(gen + 1)}>迭代一代</button>
+        {gen > 0 && <button className="btn btn-ghost btn-sm" onClick={() => setGen(0)}>重置</button>}
+        <span className="hint">第 {gen} 代 · 全局最优 f={state.gf.toFixed(3)}</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
+        {/* 目标函数热力（等高线简化） */}
+        {Array.from({ length: 16 }, (_, i) => Array.from({ length: 26 }, (_, j) => {
+          const x = (j + 0.5) / 26, y = (i + 0.5) / 16
+          const v = f(x, y)
+          return <rect key={`${i}-${j}`} x={sx(x - 1 / 26)} y={sy(y + 1 / 16)} width={sx(x) - sx(x - 1 / 26)} height={sy(y) - sy(y + 1 / 16)} fill={v > 0.85 ? '#16a34a' : v > 0.5 ? '#84cc16' : v > 0.25 ? '#e2e8f0' : '#f1f5f9'} opacity="0.6" />
+        }))}
+        {/* 全局最优标记 */}
+        <circle cx={sx(0.75)} cy={sy(0.25)} r="7" fill="none" stroke="#ea580c" strokeWidth="2.5" />
+        <text x={sx(0.75) + 10} y={sy(0.25) + 4} fontSize="10.5" fill="#ea580c">全局峰</text>
+        {/* 粒子 */}
+        {state.particles.map((q, i) => <circle key={i} cx={sx(q.x)} cy={sy(q.y)} r="3.5" fill="#2563eb" opacity="0.8" />)}
+        {/* 当前 gbest */}
+        <circle cx={sx(state.gx)} cy={sy(state.gy)} r="6" fill="#ea580c" />
+        <line x1={pad} y1={sy(0)} x2={W - pad} y2={sy(0)} stroke="#cbd5e1" strokeWidth="1" />
+        <line x1={sx(0)} y1={pad} x2={sx(0)} y2={H - pad} stroke="#cbd5e1" strokeWidth="1" />
+      </svg>
+      <div className="demo-note">
+        每个粒子记住自己的历史最优（pbest）和群体最优（gbest），速度朝这两个方向加权更新——<b>PSO 粒子群算法</b>。绿色越深目标越高。
+        连点"迭代一代"看粒子向全局峰（橙圈）聚拢；注意它和遗传算法的区别：GA 靠选择交叉变异，PSO 靠"向最优飞"（2023 年 B 题用 PSO 求最小二乘坡面拟合参数，种群 100/迭代 1000）。
+      </div>
+    </div>
+  )
+}
+
+/* ============ 飞蛾火焰算法演示（螺旋聚拢寻优） ============ */
+
+function MfoDemo() {
+  const [gen, setGen] = useState(0)
+  const W = 560, H = 300, pad = 34
+  const f = (x, y) => Math.exp(-8 * ((x - 0.7) ** 2 + (y - 0.7) ** 2)) + 0.5 * Math.exp(-10 * ((x - 0.3) ** 2 + (y - 0.3) ** 2))
+  const state = useMemo(() => {
+    const rnd = seededRandom(88)
+    const n = 18
+    const moths = Array.from({ length: n }, () => ({ x: rnd(), y: rnd() }))
+    let flames = [...moths].map((m) => ({ ...m }))
+    for (let it = 0; it < gen; it++) {
+      // 火焰 = 按适应度排序的蛾
+      flames = [...moths].sort((a, b) => f(b.x, b.y) - f(a.x, a.y))
+      // 蛾绕最近的火焰螺旋更新：S(M,F) = D·e^(bt)·cos(2πt)+F
+      moths.forEach((m, i) => {
+        const fi = i % flames.length
+        const fl = flames[fi]
+        const D = { x: Math.abs(fl.x - m.x), y: Math.abs(fl.y - m.y) }
+        const t = rnd() * 2 - 1
+        const b = 1
+        const k = Math.exp(b * t)
+        m.x = Math.min(1, Math.max(0, D.x * k * Math.cos(2 * Math.PI * t) + fl.x))
+        m.y = Math.min(1, Math.max(0, D.y * k * Math.sin(2 * Math.PI * t) + fl.y))
+      })
+    }
+    const best = [...moths].sort((a, b) => f(b.x, b.y) - f(a.x, a.y))[0]
+    return { moths, best, bf: f(best.x, best.y), flames: [...moths].sort((a, b) => f(b.x, b.y) - f(a.x, a.y)) }
+  }, [gen])
+  const sx = (x) => pad + x * (W - pad * 2)
+  const sy = (y) => H - pad - y * (H - pad * 2)
+  return (
+    <div className="demo">
+      <div className="demo-controls">
+        <button className="btn btn-primary btn-sm" onClick={() => setGen(gen + 1)}>迭代一代</button>
+        {gen > 0 && <button className="btn btn-ghost btn-sm" onClick={() => setGen(0)}>重置</button>}
+        <span className="hint">第 {gen} 代 · 最优 f={state.bf.toFixed(3)}</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
+        {Array.from({ length: 16 }, (_, i) => Array.from({ length: 26 }, (_, j) => {
+          const x = (j + 0.5) / 26, y = (i + 0.5) / 16
+          const v = f(x, y)
+          return <rect key={`${i}-${j}`} x={sx(x - 1 / 26)} y={sy(y + 1 / 16)} width={sx(x) - sx(x - 1 / 26)} height={sy(y) - sy(y + 1 / 16)} fill={v > 0.75 ? '#16a34a' : v > 0.45 ? '#84cc16' : v > 0.2 ? '#e2e8f0' : '#f1f5f9'} opacity="0.6" />
+        }))}
+        <circle cx={sx(0.7)} cy={sy(0.7)} r="7" fill="none" stroke="#ea580c" strokeWidth="2.5" />
+        <text x={sx(0.7) + 10} y={sy(0.7) + 4} fontSize="10.5" fill="#ea580c">全局峰</text>
+        {/* 蛾（蓝点） */}
+        {state.moths.map((m, i) => <circle key={i} cx={sx(m.x)} cy={sy(m.y)} r="3.5" fill="#2563eb" opacity="0.8" />)}
+        {/* 火焰（橙点，按适应度排序的前几个） */}
+        {state.flames.slice(0, 4).map((fl, i) => <circle key={`f${i}`} cx={sx(fl.x)} cy={sy(fl.y)} r="5" fill="none" stroke="#d97706" strokeWidth="2" />)}
+        {/* 最优蛾 */}
+        <circle cx={sx(state.best.x)} cy={sy(state.best.y)} r="6" fill="#ea580c" />
+        <line x1={pad} y1={sy(0)} x2={W - pad} y2={sy(0)} stroke="#cbd5e1" strokeWidth="1" />
+        <line x1={sx(0)} y1={pad} x2={sx(0)} y2={H - pad} stroke="#cbd5e1" strokeWidth="1" />
+      </svg>
+      <div className="demo-note">
+        <b>飞蛾火焰算法（MFO）</b>：飞蛾（蓝点）绕火焰（橙圈）做<b>对数螺旋</b>飞行并逐渐逼近——每只蛾绕它最近的火焰螺旋更新位置，火焰随迭代重排。橙点是当前最优蛾。
+        与 PSO/GA 同属群体智能，但用"螺旋趋光"机制（2023 年 B 题对它做自适应改进：火源随梯度自调+适应度重定义，求解真实海底地形测线布设）。
+      </div>
+    </div>
+  )
+}
+
+/* ============ 调度下界模型演示（传输轮次下界） ============ */
+
+function SchedulingBoundDemo() {
+  const [n, setN] = useState(9)
+  const W = 560, H = 300, pad = 40
+  // 信息共享下界：N 站两两共享需 N×(N−1) 条信息；每轮每站最多传 1.5 条（报文分半段）
+  // K ≥ ⌈(N−2)/1.5⌉ + 1
+  const K = Math.ceil((n - 2) / 1.5) + 1
+  const totalInfo = n * (n - 1)
+  const cx = W / 2, cy = H / 2
+  const r = 95
+  const sx = (x) => cx + r * Math.cos(x)
+  const sy = (y) => cy - r * Math.sin(y)
+  // 简化：画 N 个站在圆周上，用线条表示"每轮对称发送"（相邻→间隔一→间隔二）
+  const angle = (i) => (i / n) * Math.PI * 2
+  return (
+    <div className="demo">
+      <div className="demo-controls">
+        <label>站点数 N = <b>{n}</b><input type="range" min="5" max="15" value={n} onChange={(e) => setN(+e.target.value)} /></label>
+        <span className="kc-tag">最少轮次 K = {K}</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
+        {/* 对称发送连线（简化展示相邻轮转） */}
+        {Array.from({ length: n }, (_, i) => {
+          const a1 = angle(i), a2 = angle((i + 1) % n)
+          return <line key={i} x1={sx(a1)} y1={sy(a1)} x2={sx(a2)} y2={sy(a2)} stroke="#94a3b8" strokeWidth="1" opacity="0.5" />
+        })}
+        {Array.from({ length: n }, (_, i) => {
+          const a1 = angle(i), a2 = angle((i + 2) % n)
+          return <line key={`b${i}`} x1={sx(a1)} y1={sy(a1)} x2={sx(a2)} y2={sy(a2)} stroke="#2563eb" strokeWidth="1" opacity="0.6" strokeDasharray="4 3" />
+        })}
+        {/* 站点 */}
+        {Array.from({ length: n }, (_, i) => {
+          const a = angle(i)
+          return (
+            <g key={i}>
+              <circle cx={sx(a)} cy={sy(a)} r="16" fill="#fff" stroke="#2563eb" strokeWidth="2" />
+              <text x={sx(a)} y={sy(a) + 4} textAnchor="middle" fontSize="10.5" fill="#2563eb" fontWeight="700">站{i + 1}</text>
+            </g>
+          )
+        })}
+        <text x={W / 2} y={H - 14} textAnchor="middle" fontSize="11" fill="#94a3b8">对称轮转：相邻 → 间隔一站 → 间隔两站</text>
+      </svg>
+      <div className="demo-note">
+        N 个站两两共享共需 {totalInfo} 条信息，但每轮每站最多传 1.5 条（报文可分上下半段）——所以最少轮次 <b>K ≥ ⌈(N−2)/1.5⌉ + 1 = {K}</b>。
+        关键不是算出 K，而是<b>构造出恰好 K 轮的对称传输方案证明下界可达</b>（2022 年 D 题用"信息总量下界 + 构造性证明"证明最优，N=9 时 K=6）。
+      </div>
+    </div>
+  )
+}
+
 /* ============ 贪心算法演示（逐个选最优） ============ */
 
 function GreedyDemo() {
@@ -2299,13 +2479,13 @@ const CARDS = [
     id: 'multi-objective',
     title: '多目标规划',
     tag: '优化 / 多目标',
-    concept: '多个目标同时最优很难，常用"加权求和"把多目标变单目标；权重代表目标的重要程度。优化类高频率框架：2021 年 C 题两篇一等奖论文与 2020 年 A 题优秀论文都用多目标规划 + 加权单目标化。',
+    concept: '多个目标同时最优很难，常用两种办法转单目标：①加权求和（权重代表重要程度）；②序贯解法/分层序列法（按优先级依次求解，前一目标的最优值作为后一目标的约束）。优化类高频率框架：2021 年 C 题两篇一等奖论文与 2020 年 A 题用加权单目标化，2021 年 D 题用序贯解法。',
     demo: MultiObjectiveDemo,
-    try: '把权重拉到极端（0.95/0.05），最优解跑到哪里？这说明了什么？',
+    try: '把权重拉到极端（0.95/0.05），最优解跑到哪里？如果想"先保最重要的目标、再优化次要目标"，该用哪种转法？',
     related: ['线性规划', 'Pareto'],
     freq: '★ 高频率',
     freqLevel: 'high',
-    src: '2021 国赛 C 题一等奖论文 C066 §6.1、C283 §6.1（双目标）；2020 国赛 A 题 A147 §5.4（min-max 无量纲化 + 1:1 权重线性加权）',
+    src: '2021 国赛 C 题一等奖论文 C066 §6.1、C283 §6.1（双目标加权）；2020 国赛 A 题 A147 §5.4（min-max 无量纲化 + 线性加权）；2021 国赛 D 题 D026（序贯解法/分层序列法）',
   },
   {
     id: 'genetic-algorithm',
@@ -2450,6 +2630,42 @@ const CARDS = [
     freq: '★ 高频率',
     freqLevel: 'high',
     src: '国赛预测类公认高频（README 方法地图）；2022 国赛 C 题一等奖论文 C229 §8.3 展望提及灰色关联分析作为改进方向',
+  },
+  {
+    id: 'pso',
+    title: '粒子群算法（PSO）',
+    tag: '优化 / 群体智能',
+    concept: '一群粒子在解空间里飞，每个粒子记住自己的历史最优（pbest）和群体最优（gbest），速度朝这两个方向加权更新——"向最好的学习"。中频率：连续/参数优化场景的群体智能解法（2023 年 B 题用 PSO 求最小二乘坡面拟合参数，种群 100/迭代 1000）。',
+    demo: PsoDemo,
+    try: '连点"迭代一代"看粒子向全局峰聚拢——PSO 和遗传算法的机制有什么不同？（GA 靠选择交叉变异，PSO 靠向最优飞）',
+    related: ['遗传算法', '模拟退火'],
+    freq: '● 中频率',
+    freqLevel: 'mid',
+    src: '2023 国赛 B 题优秀论文 B226 §5.4.3（粒子群算法求解最小二乘坡面参数）',
+  },
+  {
+    id: 'mfo',
+    title: '飞蛾火焰算法（MFO）',
+    tag: '优化 / 群体智能',
+    concept: '飞蛾（解）绕火焰（当前最优）做对数螺旋飞行并逐渐逼近——每只蛾绕最近的火焰螺旋更新位置，火焰随迭代重排。群体智能新成员，比 PSO/GA 更新颖（2023 年 B 题对它做自适应改进求解真实海底地形测线布设）。',
+    demo: MfoDemo,
+    try: '对比 PSO 和 MFO 的聚拢方式——"螺旋趋光"和"向最优飞"有什么不同？什么场景适合 MFO？',
+    related: ['粒子群', '遗传算法'],
+    freq: '○ 低频率',
+    freqLevel: 'low',
+    src: '2023 国赛 B 题优秀论文 B477 §5.4.3（改进飞蛾火焰算法：自适应火源+适应度重定义+地图微分化）',
+  },
+  {
+    id: 'scheduling-bound',
+    title: '调度下界模型',
+    tag: '优化 / 组合调度',
+    concept: '求"最少需要多少轮/步"时，先由信息总量÷单轮上限推出理论下界，再构造出恰好达到下界的方案证明它可达——下界+构造性证明闭环。中频率：通信/传输/调度类题目的最优性论证骨架（2022 年 D 题气象报文传输：K≥⌈(N−2)/1.5⌉+1，N=9 时 K=6）。',
+    demo: SchedulingBoundDemo,
+    try: '把 N 从 5 拖到 15，K 怎么变？为什么"只给下界"不够，还必须构造方案证明可达？',
+    related: ['多目标规划', '贪心算法'],
+    freq: '● 中频率',
+    freqLevel: 'mid',
+    src: '2022 国赛 D 题优秀论文 D999 §5.1（信息传输率最大化原则+对称性调度+构造性证明）',
   },
   {
     id: 'greedy',
@@ -2856,6 +3072,20 @@ export const CONCEPT_KEYWORDS = [
   { keyword: '稳态建模', cardId: 'balance-equations' },
   { keyword: '总量平衡', cardId: 'balance-equations' },
   { keyword: '守恒', cardId: 'balance-equations' },
+  { keyword: '粒子群', cardId: 'pso' },
+  { keyword: 'pso', cardId: 'pso' },
+  { keyword: '粒子群算法', cardId: 'pso' },
+  { keyword: '飞蛾火焰', cardId: 'mfo' },
+  { keyword: 'mfo', cardId: 'mfo' },
+  { keyword: '飞蛾', cardId: 'mfo' },
+  { keyword: '序贯解法', cardId: 'multi-objective' },
+  { keyword: '分层序列法', cardId: 'multi-objective' },
+  { keyword: '优先级法', cardId: 'multi-objective' },
+  { keyword: '调度', cardId: 'scheduling-bound' },
+  { keyword: '传输轮次', cardId: 'scheduling-bound' },
+  { keyword: '下界', cardId: 'scheduling-bound' },
+  { keyword: '构造性证明', cardId: 'scheduling-bound' },
+  { keyword: '可达性证明', cardId: 'scheduling-bound' },
 ]
 
 /** 在文本中检测命中的所有概念（按词表顺序去重，返回 cardId 数组） */
