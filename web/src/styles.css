@@ -614,3 +614,10 @@ h1, h2, h3, h4 { font-weight: 600; letter-spacing: .01em; }
 .btn svg, .rail-btn svg, .link-btn svg, .ico-btn svg, .nav-item svg, .bookmark-item svg, .empty-btn svg, .att-del svg, .send-btn svg, .chart-zoom svg, .mini-btn svg, .ref-chip svg, .att-chip svg, .concept-badge svg, .section-label svg, .result-head svg, .gen-info-source svg, .ai-brand svg, .avatar svg, .sel-clear-row svg { vertical-align: -2px; flex: none; }
 .ic { display: inline-flex; align-items: center; justify-content: center; }
 .empty-btn .ic svg { color: var(--primary); }
+
+/* 产出区头部（最大化按钮） */
+.out-pane-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.out-max-btn { border: 1px solid var(--border); background: var(--surface); color: var(--primary); border-radius: 7px; padding: 3px 10px; font-size: 11.5px; cursor: pointer; flex: none; }
+.out-max-btn:hover { background: var(--surface-2); }
+/* 拖拽手柄加宽更明显 */
+.split-handle { width: 100%; }

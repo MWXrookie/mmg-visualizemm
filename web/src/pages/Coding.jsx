@@ -172,7 +172,8 @@ export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
   const [pyState, setPyState] = useState('idle') // Pyodide 加载状态（首次下载提示）
   useEffect(() => onPyodideState(setPyState), [])
   const [params, setParams] = useState({ N: 40, NOISE: 0.2, DEGREE: 3 })
-  const [outW, setOutW] = useState(() => { try { const v = localStorage.getItem('mmg_out_w_v1'); if (v && /^\d+px$/.test(v)) return v } catch { /* ignore */ } return '50%' }) // 右侧栏宽度（可拖拽，默认 50%）
+  const [outW, setOutW] = useState(() => { try { const v = localStorage.getItem('mmg_out_w_v1'); if (v && /^\d+px$/.test(v)) return v } catch { /* ignore */ } return '55%' }) // 右侧栏宽度（可拖拽，默认 55%）
+  const [outMax, setOutMax] = useState(false) // 产出区最大化
   const [outOpen, setOutOpen] = useState(false) // 运行输出展开
   const [imgModal, setImgModal] = useState(false) // 图表放大查看
   const [genInfo, setGenInfo] = useState(null) // AI 生成/改进详情 {action, source, lines, time}
@@ -303,6 +304,17 @@ export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
     setParams(next)
     clearTimeout(runTimer.current)
     runTimer.current = setTimeout(() => doRun(next), 500)
+  }
+
+  /** 产出区最大化/还原（一键切换宽度，优先看结果时用） */
+  function toggleOutMax() {
+    setOutMax((m) => {
+      const v = !m
+      const w = v ? '72%' : '55%'
+      setOutW(w)
+      try { localStorage.setItem('mmg_out_w_v1', w) } catch { /* ignore */ }
+      return v
+    })
   }
 
   /** 右侧栏拖拽调宽（代码区 / 产出区左右分栏） */
@@ -475,7 +487,12 @@ export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
 
       {/* 右 50%：可视化 */}
       <section className="out-pane">
-        <div className="panel-tag" style={{ fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '.12em', color: 'var(--primary)', textTransform: 'uppercase' }}>产出区 · 运行结果</div>
+        <div className="out-pane-head">
+          <span className="panel-tag" style={{ fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '.12em', color: 'var(--primary)', textTransform: 'uppercase' }}>产出区 · 运行结果</span>
+          <button className="out-max-btn" onClick={toggleOutMax} title={outMax ? '还原分栏宽度' : '最大化产出区（看结果更方便）'}>
+            {outMax ? '⇥ 还原' : '⇤ 最大化'}
+          </button>
+        </div>
         {error && <div className="alert error">{error}</div>}
 
         {/* AI 生成/改进详情 */}
