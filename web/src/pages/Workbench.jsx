@@ -94,7 +94,13 @@ export default function Workbench({ settings, ws, patchWs, onExpandSidebar, onNe
     const files = Array.from(fileList || [])
     if (!files.length) return
     setError('')
+    // 上传前先校验体积：base64 放大 ~33%，后端 100mb JSON 上限 ≈ 70MB 原始文件，提前拦截避免白传
+    const MAX_FILE = 70 * 1024 * 1024
     for (const file of files) {
+      if (file.size > MAX_FILE) {
+        setError(`「${file.name}」过大（${(file.size / 1024 / 1024).toFixed(1)}MB）：单次上传请控制在 70MB 以内，可将大表拆分为多个附件`)
+        continue
+      }
       const id = attId(file.name)
       patchWs((prev) => ({ attachments: [...(prev?.attachments || []), { id, name: file.name, status: 'parsing' }] }))
       try {

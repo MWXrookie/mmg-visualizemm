@@ -86,16 +86,26 @@ export async function parseFile(file) {
     reader.onerror = reject
     reader.readAsDataURL(file)
   })
-  const res = await fetch('/api/parse', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: file.name, data: b64 }),
-  })
-  const json = await res.json().catch(() => ({}))
-  if (!res.ok || json.ok === false) {
-    throw new Error(json.message || `解析失败（HTTP ${res.status}）`)
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 120000) // 大表（数十 MB）解析较慢，120s 兜底超时
+  try {
+    const res = await fetch('/api/parse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: file.name, data: b64 }),
+      signal: ctrl.signal,
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok || json.ok === false) {
+      throw new Error(json.message || `解析失败（HTTP ${res.status}）`)
+    }
+    return json
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error('解析超时：文件过大或服务器繁忙，请稍后重试')
+    throw e
+  } finally {
+    clearTimeout(timer)
   }
-  return json
 }
 
 /** 生成附件摘要（供 AI 读题联动解读，支持多 sheet） */

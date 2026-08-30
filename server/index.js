@@ -8,6 +8,7 @@ import express from 'express'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import fs from 'fs'
+import { Readable } from 'stream'
 import { createRequire } from 'module'
 import ExcelJS from 'exceljs'
 
@@ -15,6 +16,13 @@ import ExcelJS from 'exceljs'
 const require = createRequire(import.meta.url)
 const pdfParseMod = require('pdf-parse')
 const { PDFParse } = pdfParseMod
+
+// xlsx 流式解析依赖（exceljs 内部模块，绕开 WorkbookReader 的多 sheet 缺陷）
+const unzipper = require('unzipper')
+const iterateStream = require('exceljs/lib/utils/iterate-stream.js')
+const parseSax = require('exceljs/lib/utils/parse-sax.js')
+const WorkbookXform = require('exceljs/lib/xlsx/xform/book/workbook-xform.js')
+const WorksheetReader = require('exceljs/lib/stream/xlsx/worksheet-reader.js')
 
 /** 解析 PDF 提取文本（pdf-parse 2.x API；解析完销毁实例，避免连续上传累积 pdfjs 文档对象） */
 async function parsePdfText(buffer) {
@@ -33,7 +41,7 @@ const app = express()
 const PORT = process.env.PORT || 3088
 
 app.disable('x-powered-by') // 隐藏 Express 版本号
-app.use(express.json({ limit: '30mb' })) // base64 上传放大 ~33%，30mb ≈ 20MB 文件
+app.use(express.json({ limit: '100mb' })) // base64 上传放大 ~33%，100mb ≈ 75MB 文件
 
 /* ---------- AI 中继 ---------- */
 
@@ -240,30 +248,91 @@ function normalizeCell(v) {
   return String(v)
 }
 
+/**
+ * 解析 xlsx（两遍流式，只读取每个 sheet 前 MAX_ROWS 行做预览）。
+ *
+ * 为什么不用 exceljs 的 wb.xlsx.load() 或 WorkbookReader：
+ * - load() 会把整个工作表（含上万行）全量解析进内存，大文件极慢（10 万行 ≈ 9s）甚至超时；
+ * - WorkbookReader 要求 zip 中 workbook.xml 出现在 worksheets 之前，但很多文件（含 exceljs
+ *   自己生成的多 sheet 文件）顺序相反，会在解析 worksheet 时崩溃（model 未就绪）。
+ *
+ * 方案：用 unzipper 直接流式解压 xlsx（zip）：
+ * 第一遍：读 xl/workbook.xml 拿 sheet 名/rId；读 xl/sharedStrings.xml 拿共享字符串表；
+ * 第二遍：对每个 sheet 的 XML 流，用 exceljs 的 WorksheetReader 按行解析，取前若干行即止。
+ * 只解压需要读取的行，内存占用恒定；10 万行大表全程 ≈ 1.5s。
+ * 注：流式提前 break 拿不到准确 totalRows，且前端并未使用该字段，故不再返回。
+ */
 async function parseXlsx(buffer) {
-  const wb = new ExcelJS.Workbook()
-  await wb.xlsx.load(buffer)
-  const sheets = []
-  for (const ws of wb.worksheets) {
-    if (!ws.actualRowCount) continue
-    const raw = []
-    ws.eachRow({ includeEmpty: true }, (row) => {
-      if (raw.length >= MAX_ROWS + 5) return
-      raw.push(row.values.slice(1).map(normalizeCell))
-    })
-    if (raw.length === 0) continue
-    // 第一行是表头（含文本）则作为 headers，否则自动列名
-    let headers, rows
-    if (looksLikeHeader(raw[0])) {
-      headers = raw[0].map((h, i) => (String(h).trim() === '' ? `列${i + 1}` : String(h).trim()))
-      rows = raw.slice(1).slice(0, MAX_ROWS)
-    } else {
-      headers = raw[0].map((_, i) => `列${i + 1}`)
-      rows = raw.slice(0, MAX_ROWS)
+  const sheets = [] // [{ name, headers, rows }]
+
+  /* 第一遍：sheet 元信息 + 共享字符串表 */
+  let sheetMeta = [] // [{ id, name }]
+  let sharedStrings = null
+  {
+    const zip = unzipper.Parse({ forceStream: true })
+    Readable.from(buffer).pipe(zip)
+    for await (const entry of iterateStream(zip)) {
+      if (entry.path === 'xl/workbook.xml') {
+        const xform = new WorkbookXform()
+        await xform.parseStream(iterateStream(entry))
+        sheetMeta = (xform.model.sheets || []).map((s) => ({ id: s.id, name: s.name })).sort((a, b) => a.id - b.id)
+      } else if (entry.path === 'xl/sharedStrings.xml') {
+        sharedStrings = []
+        for await (const events of parseSax(iterateStream(entry))) {
+          for (const { eventType, value } of events) {
+            if (eventType === 'opentag' && value.name === 'si') sharedStrings.push(null)
+            else if (eventType === 'text') {
+              const idx = sharedStrings.length - 1
+              const cur = sharedStrings[idx]
+              sharedStrings[idx] = cur === null ? value : cur + value
+            }
+          }
+        }
+      } else entry.autodrain()
     }
-    rows = rows.filter((r) => r.some((c) => c.trim() !== ''))
-    sheets.push({ name: ws.name, headers, rows, totalRows: ws.actualRowCount })
   }
+
+  /* 第二遍：解析每个 sheet 前 MAX_ROWS 行 */
+  {
+    const zip = unzipper.Parse({ forceStream: true })
+    Readable.from(buffer).pipe(zip)
+    for await (const entry of iterateStream(zip)) {
+      const m = entry.path.match(/xl\/worksheets\/sheet(\d+)[.]xml/)
+      if (m) {
+        const id = Number(m[1])
+        const wsr = new WorksheetReader({
+          workbook: {
+            sharedStrings,
+            styles: { getStyleModel: () => null },
+            properties: { model: {} },
+          },
+          id,
+          iterator: iterateStream(entry),
+          options: { worksheets: 'emit', hyperlinks: 'ignore', styles: 'ignore' },
+        })
+        const raw = []
+        for await (const row of wsr) {
+          if (raw.length >= MAX_ROWS + 5) break // 只取前若干行做预览，其余行丢弃
+          raw.push(row.values.slice(1).map(normalizeCell))
+        }
+        entry.autodrain() // 提前 break 后必须排干 entry，否则 zip 流卡住
+        if (raw.length === 0) continue
+        // 第一行是表头（含文本）则作为 headers，否则自动列名
+        let headers, rows
+        if (looksLikeHeader(raw[0])) {
+          headers = raw[0].map((h, i) => (String(h).trim() === '' ? `列${i + 1}` : String(h).trim()))
+          rows = raw.slice(1).slice(0, MAX_ROWS)
+        } else {
+          headers = raw[0].map((_, i) => `列${i + 1}`)
+          rows = raw.slice(0, MAX_ROWS)
+        }
+        rows = rows.filter((r) => r.some((c) => c.trim() !== ''))
+        const meta = sheetMeta.find((s) => s.id === id)
+        sheets.push({ name: meta ? meta.name : `Sheet${id}`, headers, rows })
+      } else entry.autodrain()
+    }
+  }
+
   if (sheets.length === 0) return { ok: false, error: '表格为空' }
   // 兼容单表：展开第一个 sheet 字段；多表通过 sheets 提供
   return {
@@ -273,7 +342,6 @@ async function parseXlsx(buffer) {
     name: sheets[0].name,
     headers: sheets[0].headers,
     rows: sheets[0].rows,
-    totalRows: sheets[0].totalRows,
   }
 }
 
@@ -557,7 +625,7 @@ if (fs.existsSync(distDir)) {
 /* ---------- 错误处理（413 超大请求体返回 JSON 而非默认 HTML） ---------- */
 app.use((err, _req, res, next) => {
   if (err && (err.type === 'entity.too.large' || err.status === 413)) {
-    return res.status(413).json({ ok: false, code: 'TOO_LARGE', message: '文件过大：单次上传请控制在 20MB 以内（可将大表拆分为多个附件）' })
+    return res.status(413).json({ ok: false, code: 'TOO_LARGE', message: '文件过大：单次上传请控制在 70MB 以内（可将大表拆分为多个附件）' })
   }
   next(err)
 })
