@@ -156,6 +156,8 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
 
     const blocksDesc = blocks.map((b, i) => `【拆解块${i + 1}】标题：${b.title}\n核心说明：${b.quote}\n思路正文：${b.body || '（无）'}\n步骤：${b.steps.map((s) => `${s.label}：${s.desc}`).join('；') || '（无）'}`).join('\n\n')
     const summary = attachSummary(attachments)
+    // 题目全文注入：让 AI 能读到完整题干（不只附件摘要），避免"无法复述题干"
+    const problemCtx = problemText.trim() ? `【完整题目】\n${problemText}\n\n` : ''
     try {
       let content = ''
       // RAG：只用用户指令检索（拼全部拆解块会让查询过长、拖慢检索且引入噪音）
@@ -163,7 +165,7 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
       const kbContext = formatKnowledgeContext(hits)
       await streamChat(settings, [
         { role: 'system', content: MODIFY_SYSTEM + kbContext },
-        { role: 'user', content: `当前拆解块：\n${blocksDesc || '（暂无拆解块）'}\n\n${summary ? `数据附件摘要：\n${summary}\n\n` : ''}用户指令：「${text}」` },
+        { role: 'user', content: `${problemCtx}当前拆解块：\n${blocksDesc || '（暂无拆解块）'}\n\n${summary ? `数据附件摘要：\n${summary}\n\n` : ''}用户指令：「${text}」` },
       ], { onDelta: (t) => { content = t; setStreaming(t) } })
       const parsed = extractJson(content)
       if (parsed && typeof parsed.blockId === 'number' && parsed.patch) {
@@ -220,7 +222,7 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
       let content = ''
       await streamChat(settings, [
         { role: 'system', content: settings.guideMode !== false ? BODY_GEN_GUIDE : BODY_GEN_DIRECT },
-        { role: 'user', content: `拆解块标题：${block.title}\n核心说明：${block.quote}\n题目背景：${(ws?.problemText || '').slice(0, 500) || '（无）'}` },
+        { role: 'user', content: `拆解块标题：${block.title}\n核心说明：${block.quote}\n题目背景：${problemText.trim() || '（无）'}` },
       ], { onDelta: (t) => { content = t; setStreaming(t); setDraftFn((d) => (d ? { ...d, body: t } : d)) } })
       let body = content.trim()
       const fence = body.match(/```(?:markdown|md)?\s*([\s\S]*?)```/i)

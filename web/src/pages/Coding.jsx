@@ -346,7 +346,9 @@ export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
     const chosen = breakdown.filter((_, i) => selected.has(i))
     const blocksDesc = chosen.map((b, i) => `【拆解块】${b.title}\n${b.quote}\n${(b.steps || []).map((s) => `${s.label}：${s.desc}`).join('；')}`).join('\n\n')
     const summary = attachSummary(attachments)
-    const user = `建模环节：\n${blocksDesc}\n\n${summary ? `数据附件摘要：\n${summary}\n\n` : ''}补充描述：${genText || '（无）'}`
+    // 题目全文注入：让 AI 生成代码时能读到完整题干（不只拆解块+附件摘要）
+    const problemCtx = (ws?.problemText || '').trim() ? `【完整题目】\n${ws.problemText}\n\n` : ''
+    const user = `${problemCtx}建模环节：\n${blocksDesc}\n\n${summary ? `数据附件摘要：\n${summary}\n\n` : ''}补充描述：${genText || '（无）'}`
     setLog((prev) => [...prev, { time: now(), cls: 'core', text: '✨ AI 生成代码中…' }])
     setGenPreview({ title: '✨ AI 生成代码中…（实时输出）', content: '' })
     try {
