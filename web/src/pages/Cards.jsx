@@ -1592,6 +1592,66 @@ function SchedulingBoundDemo() {
   )
 }
 
+/* ============ 联合优化演示（多决策变量耦合） ============ */
+
+function JointOptimizationDemo() {
+  const [mode, setMode] = useState('joint') // joint | separate
+  const [q, setQ] = useState(50) // 订货量（决策1）
+  const W = 560, H = 300, pad = 40
+  // 两个耦合决策：订货量 Q（决策1）与运输批次 T（决策2），成本互相影响
+  // 总成本 C(Q,T) = 采购(2Q) + 运输(10T + 0.5Q/T) + 仓储(0.3Q/T)
+  //  - 运得越勤：运输单价越高，但库存低仓储省 → Q 与 T 耦合
+  const cost = (q, t) => 2 * q + 10 * t + 0.5 * (q / t) + 0.3 * (q / t)
+  // 联合最优：全局搜索 Q∈[10,90], T∈[1,10]
+  let bestQ = 10, bestT = 1, bestC = Infinity
+  for (let qq = 10; qq <= 90; qq += 2) {
+    for (let tt = 1; tt <= 10; tt++) {
+      const c = cost(qq, tt)
+      if (c < bestC) { bestC = c; bestQ = qq; bestT = tt }
+    }
+  }
+  // 分开优化：对当前 Q 只看局部选最优 T
+  let bestTForQ = 1, bestCSep = Infinity
+  for (let tt = 1; tt <= 10; tt++) {
+    const c = cost(q, tt)
+    if (c < bestCSep) { bestCSep = c; bestTForQ = tt }
+  }
+  const showT = mode === 'joint' ? bestT : bestTForQ
+  const showC = mode === 'joint' ? cost(q, bestT) : cost(q, bestTForQ)
+  const sx = (x) => pad + (x / 100) * (W - pad * 2)
+  const sy = (y) => H - pad - (y / 180) * (H - pad * 2)
+  // 成本曲线（固定当前 Q，T 从 1 到 10）
+  const curve = Array.from({ length: 10 }, (_, i) => ({ t: i + 1, c: cost(q, i + 1) }))
+  return (
+    <div className="demo">
+      <div className="demo-controls">
+        <label>订货量 Q = <b>{q}</b><input type="range" min="10" max="90" step="2" value={q} onChange={(e) => setQ(+e.target.value)} /></label>
+        {['joint', 'separate'].map((m) => (
+          <button key={m} className={`btn ${mode === m ? 'btn-primary' : 'btn-ghost'} btn-sm`} onClick={() => setMode(m)}>
+            {m === 'joint' ? '联合优化' : '分开优化'}
+          </button>
+        ))}
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
+        {[0, 50, 100, 150].map((g) => <line key={g} x1={pad} y1={sy(g)} x2={W - pad} y2={sy(g)} stroke="#f1f5f9" />)}
+        <polyline points={curve.map((p) => `${sx((p.t / 10) * 100)},${sy(p.c)}`).join(' ')} fill="none" stroke="#94a3b8" strokeWidth="2" />
+        {curve.map((p) => <circle key={p.t} cx={sx((p.t / 10) * 100)} cy={sy(p.c)} r="4" fill={p.t === showT ? '#ea580c' : '#cbd5e1'} />)}
+        <line x1={sx((showT / 10) * 100)} y1={pad} x2={sx((showT / 10) * 100)} y2={H - pad} stroke="#ea580c" strokeWidth="1.5" strokeDasharray="5 3" />
+        <text x={sx((showT / 10) * 100) + 6} y={pad + 12} fontSize="11" fill="#ea580c" fontWeight="600">当前 T={showT}</text>
+        <line x1={sx((bestT / 10) * 100)} y1={pad} x2={sx((bestT / 10) * 100)} y2={H - pad} stroke="#16a34a" strokeWidth="1.5" strokeDasharray="5 3" />
+        <text x={sx((bestT / 10) * 100) + 6} y={H - pad - 8} fontSize="11" fill="#16a34a" fontWeight="600">联合最优 T={bestT}</text>
+        <text x={W / 2} y={H - 10} textAnchor="middle" fontSize="11" fill="#334155">运输批次 T（决策2）· 曲线 = 当前 Q 下的总成本</text>
+      </svg>
+      <div className="demo-note">
+        {mode === 'joint'
+          ? <><b>联合优化</b>：同时看 Q 与 T 的耦合——当前 Q={q} 时全局最优 T={bestT}（成本 {cost(q, bestT).toFixed(0)}）；全局最优是 (Q={bestQ}, T={bestT})，成本 {bestC.toFixed(0)}。</>
+          : <><b>分开优化</b>：只看当前 Q 选局部最优 T={bestTForQ}（成本 {bestCSep.toFixed(0)}）——但看不到全局，可能错过联合最优 (Q={bestQ}, T={bestT})。</>}
+        <br />Q 和 T 互相影响（运得勤则仓储低但运输高），<b>分开定会得到次优解</b>——这就是"联合优化"：多个耦合决策一起优化（2021 年 C 题把订购方案+转运方案联合建模，而非分开定）。
+      </div>
+    </div>
+  )
+}
+
 /* ============ 贪心算法演示（逐个选最优） ============ */
 
 function GreedyDemo() {
@@ -2488,6 +2548,18 @@ const CARDS = [
     src: '2021 国赛 C 题一等奖论文 C066 §6.1、C283 §6.1（双目标加权）；2020 国赛 A 题 A147 §5.4（min-max 无量纲化 + 线性加权）；2021 国赛 D 题 D026（序贯解法/分层序列法）',
   },
   {
+    id: 'joint-optimization',
+    title: '联合优化',
+    tag: '优化 / 多决策耦合',
+    concept: '多个**相互耦合的决策变量**一起优化——比如"订多少货"和"怎么运"互相影响，分开定会得到次优解，必须放在同一个模型里同时求解。与"多目标规划"不同：它强调**决策变量耦合**而非**多个目标**。中频率：耦合决策场景（2021 年 C 题把订购方案+转运方案联合建模，2021 年 D 题切割+调度联合决策）。',
+    demo: JointOptimizationDemo,
+    try: '切到"分开优化"再拖 Q——为什么局部最优 T 和联合最优 T 不一样？现实里哪些决策是耦合的、不能分开定？',
+    related: ['多目标规划', '动态规划'],
+    freq: '● 中频率',
+    freqLevel: 'mid',
+    src: '2021 国赛 C 题一等奖论文 C066（订购方案+转运方案联合优化）；2021 国赛 D 题（连铸切割+调度联合决策）',
+  },
+  {
     id: 'genetic-algorithm',
     title: '遗传算法（GA）',
     tag: '优化 / 智能算法',
@@ -3086,17 +3158,68 @@ export const CONCEPT_KEYWORDS = [
   { keyword: '下界', cardId: 'scheduling-bound' },
   { keyword: '构造性证明', cardId: 'scheduling-bound' },
   { keyword: '可达性证明', cardId: 'scheduling-bound' },
+  { keyword: '联合优化', cardId: 'joint-optimization' },
+  { keyword: '联合决策', cardId: 'joint-optimization' },
+  { keyword: 'joint optimization', cardId: 'joint-optimization' },
+  { keyword: '耦合决策', cardId: 'joint-optimization' },
+  { keyword: '同时优化', cardId: 'joint-optimization' },
+  { keyword: '协同优化', cardId: 'joint-optimization' },
 ]
 
-/** 在文本中检测命中的所有概念（按词表顺序去重，返回 cardId 数组） */
-export function findConcepts(text) {
+/**
+ * 相关性阈值：卡片分数低于该值不展示。
+ * 分数 = Σ(关键词出现次数 × 特异性权重)。
+ * 默认 2 ≈ "明确点名一次专有名词"（权重 2）或"反复提及同一概念"（1 次×2 或 2 次×1）。
+ * 目的：回答里顺带一提的宽泛词（如"回归""聚类"）不再触发卡片，减少卡片噪音。
+ */
+export const CONCEPT_SCORE_THRESHOLD = 2
+
+/** 关键词特异性：中文≥3 字或拉丁字符≥4 个视为"专有名词"（强触发），否则为宽泛词（弱触发） */
+function keywordStrength(kw) {
+  const cn = (kw.match(/[\u4e00-\u9fa5]/g) || []).length
+  const lat = (kw.match(/[a-z0-9]/gi) || []).length
+  return cn >= 3 || lat >= 4 ? 2 : 1
+}
+
+/** 统计某关键词在文本中出现的次数（拉丁关键词按词边界匹配，避免 var 误匹配 variable 等） */
+function countOccurrences(lower, kw) {
+  if (/^[a-z0-9\s\-]+$/i.test(kw)) {
+    // 纯拉丁词（字母/数字/空格/连字符）：词边界匹配
+    const esc = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const re = new RegExp(`\\b${esc}\\b`, 'g')
+    return (lower.match(re) || []).length
+  }
+  // 中文或含特殊字符（如 a*、gm(1,1)）：直接子串计数
+  let n = 0
+  let idx = lower.indexOf(kw)
+  while (idx !== -1) {
+    n++
+    idx = lower.indexOf(kw, idx + kw.length)
+  }
+  return n
+}
+
+/**
+ * 在文本中检测命中的所有概念，按相关度打分并过滤：
+ * - score = Σ(关键词出现次数 × 特异性权重)，score < CONCEPT_SCORE_THRESHOLD 的概念不返回；
+ * - 返回按分数降序的 cardId 数组（最相关的排最前）。
+ */
+export function findConcepts(text, threshold = CONCEPT_SCORE_THRESHOLD) {
   if (!text) return []
   const lower = text.toLowerCase()
-  const found = []
+  const scores = new Map() // cardId -> score
   for (const c of CONCEPT_KEYWORDS) {
-    if (lower.includes(c.keyword.toLowerCase()) && !found.includes(c.cardId)) found.push(c.cardId)
+    const kw = c.keyword.toLowerCase()
+    if (!kw) continue
+    const n = countOccurrences(lower, kw)
+    if (n > 0) {
+      scores.set(c.cardId, (scores.get(c.cardId) || 0) + n * keywordStrength(kw))
+    }
   }
-  return found
+  return [...scores.entries()]
+    .filter(([, s]) => s >= threshold)
+    .sort((a, b) => b[1] - a[1])
+    .map(([id]) => id)
 }
 
 /** 兼容旧用法：返回第一个命中卡片 id */
