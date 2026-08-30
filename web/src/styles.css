@@ -235,7 +235,7 @@ body.resizing * { cursor: col-resize !important; }
 .ed-tab .ed-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
 .editor { flex: 1; min-height: 0; overflow: auto; display: grid; grid-template-columns: auto 1fr; background: var(--code); }
 .gutter { user-select: none; padding: 16px 0 40px 14px; text-align: right; white-space: pre; color: color-mix(in srgb, var(--code-fg) 34%, transparent); font-size: 13px; line-height: 1.7; font-family: var(--mono); }
-.code-body { padding: 16px 18px 40px 18px; overflow: auto; background: var(--code); color: var(--code-fg); }
+.code-body { padding: 16px 18px 40px 18px; background: var(--code); color: var(--code-fg); }
 pre.code { white-space: pre; font-size: 13.5px; line-height: 1.7; font-family: var(--mono); tab-size: 4; }
 .ed-status { display: flex; align-items: center; gap: 14px; padding: 5px 12px; background: color-mix(in srgb, var(--code) 85%, var(--surface)); color: color-mix(in srgb, var(--code-fg) 55%, transparent); font-family: var(--mono); font-size: 11px; border-top: 1px solid var(--border); }
 .ed-status .ok { color: var(--accent); }
