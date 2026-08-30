@@ -5,7 +5,7 @@ import { KnowledgeCard, findConcept } from './Cards.jsx'
 import MD, { sanitize } from '../components/MD.jsx'
 import AttachmentList from '../components/AttachmentList.jsx'
 import ResizeHandle from '../components/ResizeHandle.jsx'
-import { IconSparkles, IconFile, IconTable, IconBookmark, IconBook, IconClock, IconMenu, IconPlus } from '../components/Icons.jsx'
+import { IconSparkles, IconFile, IconTable, IconBookmark, IconBook, IconClock, IconMenu, IconPlus, IconLightbulb } from '../components/Icons.jsx'
 
 const OVERVIEW_SYSTEM =
   '你是数学建模辅导助手。用户会给你一道数学建模题目（可能含数据说明），请做「整体解读」，输出四部分：\n' +
@@ -15,11 +15,11 @@ const OVERVIEW_SYSTEM =
   '4) 输出要求（论文/方案要求）\n用简洁中文回答，控制在 400 字内。'
 
 const ROLE_SYSTEM =
-  '你是数学建模辅导助手。用户选中了题目中的一段文字。请判定这段文字在题目中的「角色」并解释。\n' +
+  '你是数学建模辅导助手，采用**苏格拉底式引导**：判定角色后要引导新手自己理解这段的意义，而不是只给结论。用户选中了题目中的一段文字，请判定它的「角色」并解释。\n' +
   '角色只从这几种里选：【约束条件】【目标】【已知条件】【假设】【背景信息】\n' +
   '只输出一个 JSON 对象（不要任何其他文字），格式：\n' +
-  '{"role":"约束条件","confidence":92,"info":"这段提供的信息，一两句话","impact":"对建模的影响，一两句话","quote":"从题目原文中引用的完整原句"}\n' +
-  '要求：confidence 是 0-100 整数；quote 必须逐字复制原文。若无法判断，role 填"背景信息"。'
+  '{"role":"约束条件","confidence":92,"info":"这段提供的信息，一两句话","impact":"对建模的影响，一两句话","quote":"从题目原文中引用的完整原句","guide":"引导思考：给用户一个 1-2 句的引导问题，让他自己想到这段在建模中的作用（例如"想想这个约束会怎样限制你的决策变量？"）"}\n' +
+  '要求：confidence 是 0-100 整数；quote 必须逐字复制原文；guide 必须是以提问形式引导用户思考（不要直接讲答案）。若无法判断，role 填"背景信息"。'
 
 function extractJson(text) {
   if (!text) return null
@@ -328,6 +328,9 @@ export default function Workbench({ settings, ws, patchWs, onExpandSidebar, onNe
                     </div>
                     <div style={{ fontSize: 14, marginBottom: 6 }}><b>这段给出：</b>{selResult.info || '—'}</div>
                     <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}><b>对建模的影响：</b>{selResult.impact || '—'}</div>
+                    {selResult.guide && (
+                      <div className="role-guide"><IconLightbulb size={13} /> 引导思考：{selResult.guide}</div>
+                    )}
                     {selResult.quote && <div className="hint">引用原文：「{selResult.quote}」</div>}
                   </div>
                 ),

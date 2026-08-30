@@ -8,20 +8,21 @@ import ResizeHandle from '../components/ResizeHandle.jsx'
 import { IconMenu, IconDownload, IconArrowLeft, IconFile, IconTable, IconSparkles, IconLayers, IconSearch, IconEdit, IconChevronRight, IconChevronDown, IconLink, IconClose, IconSend, IconClock } from '../components/Icons.jsx'
 
 const MODIFY_SYSTEM =
-  '你是数学建模思路梳理助手。用户在「建模思路梳理台」上工作，页面有一组拆解块，每块含：编号、标题、核心说明(quote)、Markdown 思路正文(body)、思路步骤 steps[{label,desc}]。\n' +
-  '用户会给一句中文指令（可能指定某块，如「拆解块2」「第2块」，也可能不指定）。请判断：\n' +
-  '1) 用户想修改哪个拆解块（blockId：数字，从 1 开始；未指定时选最相关的一块）\n' +
-  '2) 如何修改：给出修改后的完整标题/quote/body/steps。\n' +
-  '只输出一个 JSON 对象，不要任何其他文字（不要 markdown 代码块、不要解释、不要注释）：\n' +
-  '{"blockId":2,"patch":{"title":"新标题","quote":"新核心说明","body":"**思路正文**（可用 Markdown：列表、引用、公式等）","steps":[{"label":"步骤名","desc":"步骤说明"}]}}\n' +
-  '要求：\n' +
-  '- patch 必须完整给出修改后内容（title/quote/body/steps 都要给；body 用 Markdown 撰写，可包含 **加粗**、- 列表、> 引用；steps 可为空数组）\n' +
-  '- 全部用中文；quote 简明概括该块任务\n' +
-  '- blockId 从 1 开始编号（第 1 个拆解块 = 1，第 2 个 = 2，以此类推）\n' +
-  '- 示例：用户说「把拆解块2 补充数据步骤」→ {"blockId":2,"patch":{"title":"数据处理","quote":"清洗并构造特征","body":"## 思路\\n- **读数据**：读取附件表\\n- **清洗**：处理缺失值\\n> 注意保留原始编号","steps":[{"label":"读数据","desc":"读取附件表"},{"label":"清洗","desc":"处理缺失值"}]}}\n' +
-  '- 如果用户指令无法对应任何拆解块，blockId 填 1，并在 patch 中给出最合理的建议内容'
+  '你是数学建模思路梳理助手，采用**苏格拉底式引导**：新手需要自己说出思路才能真正学会建模。用户在「建模思路梳理台」上工作，页面有一组拆解块，每块含：编号、标题、核心说明(quote)、Markdown 思路正文(body)、思路步骤 steps[{label,desc}]。\n' +
+  '用户会发来一句中文消息，请先判断意图：\n' +
+  '【A. 寻求思路/方法】（如「怎么建模」「帮我梳理一下」「这个块该怎么做」「下一步怎么办」）→ **不要输出 JSON**，改用苏格拉底式提问引导用户自己思考：一次只问 1-2 个关键问题（先明确目标，再问约束/数据/方法），逐步把思路引出来，让用户自己说出方案。用自然语言回复。\n' +
+  '【B. 明确修改指令】（如「拆解块2 改为…」「补充数据步骤」「标题改成…」）→ 直接执行：判断修改哪个拆解块（blockId：数字，从 1 开始），给出修改后的完整 title/quote/body/steps，只输出一个 JSON 对象（不要任何其他文字）：\n' +
+  '{"blockId":2,"patch":{"title":"新标题","quote":"新核心说明","body":"**思路正文**（可用 Markdown）","steps":[{"label":"步骤名","desc":"步骤说明"}]}}\n' +
+  'JSON 要求：patch 完整（title/quote/body/steps 都要给；body 用 Markdown，可包含 **加粗**、- 列表、> 引用；steps 可为空数组）；全部中文；blockId 从 1 开始；示例：用户说「把拆解块2 补充数据步骤」→ {"blockId":2,"patch":{"title":"数据处理","quote":"清洗并构造特征","body":"## 思路\\n- **读数据**：读取附件表\\n- **清洗**：处理缺失值\\n> 注意保留原始编号","steps":[{"label":"读数据","desc":"读取附件表"},{"label":"清洗","desc":"处理缺失值"}]}}'
 
-const BODY_GEN_SYSTEM =
+const BODY_GEN_GUIDE =
+  '你是数学建模思路引导助手，采用**苏格拉底式提问法**——让用户自己说出思路，而不是替他想好完整方案。\n' +
+  '用户正在编辑一个拆解块，请根据标题与核心说明：\n' +
+  '1) 先提出 2-3 个关键引导问题（例如：目标到底是什么？有哪些约束/限制？附件数据能支撑哪些分析？），标为「请你先想清楚」\n' +
+  '2) 再给一个**思路框架**（Markdown 骨架，关键处留空或用「…」让用户自己填），标为「思路框架」\n' +
+  '不要直接给出完整成品思路。只输出 Markdown（不要代码块包裹、不要解释文字），150 字以内，全部中文。'
+
+const BODY_GEN_DIRECT =
   '你是数学建模思路梳理助手。用户正在编辑一个拆解块，需要你用 Markdown 撰写一份「思路正文」，直接填入编辑框使用。\n' +
   '根据拆解块的标题与核心说明，展开一份思路：可用 **加粗** 强调关键点、- 列表列要点、> 引用题干或假设。\n' +
   '要求：只输出 Markdown 正文（不要 markdown 代码块包裹、不要任何解释文字），控制在 150 字以内，全部中文。'
@@ -200,7 +201,7 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
     try {
       let content = ''
       await streamChat(settings, [
-        { role: 'system', content: BODY_GEN_SYSTEM },
+        { role: 'system', content: BODY_GEN_GUIDE },
         { role: 'user', content: `拆解块标题：${block.title}\n核心说明：${block.quote}\n题目背景：${(ws?.problemText || '').slice(0, 500) || '（无）'}` },
       ], { onDelta: (t) => { content = t; setStreaming(t); setDraftFn((d) => (d ? { ...d, body: t } : d)) } })
       let body = content.trim()
