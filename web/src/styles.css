@@ -621,3 +621,17 @@ h1, h2, h3, h4 { font-weight: 600; letter-spacing: .01em; }
 .out-max-btn:hover { background: var(--surface-2); }
 /* 拖拽手柄加宽更明显 */
 .split-handle { width: 100%; }
+
+/* ============ 梳理台主体排版精修 ============ */
+/* 内容区标签（核心/思路/步骤） */
+.bk-tag { display: inline-flex; align-items: center; font-size: 10.5px; font-weight: 600; padding: 1.5px 9px; border-radius: 999px; margin-bottom: 7px; letter-spacing: .04em; line-height: 1.5; }
+.tag-accent { color: var(--accent); background: var(--accent-soft); }
+.tag-primary { color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, transparent); }
+.bk-tag:not(.tag-accent):not(.tag-primary) { color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); }
+/* 核心说明/思路 区块：标签下与正文间距、区块间距统一 */
+.block-quote, .block-body-md { display: flex; flex-direction: column; }
+.block-steps { margin-top: 14px; }
+.block-steps .flow { margin-top: 2px; }
+/* 拆解块标题过长省略，操作按钮固定右侧 */
+.mdl .block-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mdl .block-ops { flex: none; display: flex; align-items: center; gap: 4px; }

@@ -289,7 +289,7 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
 
           {error && <div className="alert error">{error}</div>}
 
-          <div className="eyebrow">Problem Breakdown</div>
+          <div className="eyebrow">思路拆解 · Problem Breakdown</div>
           <h1 className="doc-title">建模思路梳理台</h1>
           <p className="sub-title">按目标拆解问题，AI 逐块补齐思路与数据依据。确认后才会写入拆解内容。</p>
 
@@ -464,16 +464,29 @@ function Block({ b, index, open, preview, editing, draft, setDraft, onToggle, on
               </>
             ) : (
               <>
-                {b.quote && <div className="block-quote"><MD text={b.quote} /></div>}
-                {b.body && <div className="block-body-md"><MD text={b.body} /></div>}
+                {b.quote && (
+                  <div className="block-quote">
+                    <span className="bk-tag tag-accent">核心</span>
+                    <MD text={b.quote} />
+                  </div>
+                )}
+                {b.body && (
+                  <div className="block-body-md">
+                    <span className="bk-tag tag-primary">思路</span>
+                    <MD text={b.body} />
+                  </div>
+                )}
                 {b.steps.length > 0 && (
-                  <div className="flow">
-                    {b.steps.map((s, si) => (
-                      <div className="flow-step" key={si}>
-                        <div className="fs-label">{s.label}</div>
-                        {s.desc && <div className="fs-desc">{s.desc}</div>}
-                      </div>
-                    ))}
+                  <div className="block-steps">
+                    <span className="bk-tag">步骤</span>
+                    <div className="flow">
+                      {b.steps.map((s, si) => (
+                        <div className="flow-step" key={si}>
+                          <div className="fs-label">{s.label}</div>
+                          {s.desc && <div className="fs-desc">{s.desc}</div>}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
                 {b.refs?.length > 0 && (
