@@ -1672,8 +1672,9 @@ function GreedyDemo() {
   }
   const shown = Math.min(step, chosen.length)
   const got = chosen.slice(0, shown).reduce((s, i) => s + candidates[i].qty, 0)
-  const sx = (x) => pad + (x / 6) * (W - pad * 2)
   const maxH = 55
+  const sx = (x) => pad + (x / 6) * (W - pad * 2)
+  const sy = (y) => H - pad - (y / maxH) * (H - pad * 2)
   return (
     <div className="demo">
       <div className="demo-controls">
@@ -1682,7 +1683,7 @@ function GreedyDemo() {
         <span className="hint">目标：凑够 {need} 单位 · 已选 {got}/{need}</span>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
-        {[0, 20, 40, 60].map((g) => <line key={g} x1={pad} y1={sy(0)} x2={pad} y2={sy(0)} stroke="#f1f5f9" />)}
+        {[0, 20, 40].map((g) => <line key={g} x1={pad} y1={sy(g)} x2={W - pad} y2={sy(g)} stroke="#f1f5f9" />)}
         {candidates.map((c, i) => {
           const selected = i < shown
           const x = sx(i + 0.5)

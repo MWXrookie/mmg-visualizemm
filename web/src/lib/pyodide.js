@@ -62,12 +62,18 @@ function bytesToBase64(bytes) {
   return btoa(bin)
 }
 
-/** 常用包预加载（Pyodide 需显式 loadPackage 才能 import） */
-const PRELOAD_PACKAGES = ['numpy', 'pandas', 'matplotlib', 'scipy', 'sklearn']
+/** 常用包预加载（Pyodide 需显式 loadPackage 才能 import；scikit-learn 的导入名是 sklearn） */
+const IMPORT_PACKAGES = {
+  numpy: 'numpy',
+  pandas: 'pandas',
+  matplotlib: 'matplotlib',
+  scipy: 'scipy',
+  sklearn: 'scikit-learn',
+}
 
 async function ensurePackages(py, code) {
   const imports = [...code.matchAll(/^\s*(?:import|from)\s+([a-zA-Z_]\w*)/gm)].map((m) => m[1])
-  const need = [...new Set(imports)].filter((m) => PRELOAD_PACKAGES.includes(m))
+  const need = [...new Set(imports)].map((m) => IMPORT_PACKAGES[m]).filter(Boolean)
   const loaded = new Set()
   for (const m of need) {
     try {
@@ -84,6 +90,14 @@ function cleanPythonOutput(s) {
   return String(s || '')
     .replace(/<string>:\d+:\s*DeprecationWarning:\s*Pyarrow will become[\s\S]*?github\.com\/pandas-dev\/pandas\/issues\/54466\s*/g, '')
     .replace(/<string>:\d+:\s*UserWarning:\s*Glyph \d+[\s\S]*?missing from current font\.\s*/g, '')
+    .replace(/^No artists with labels found to put in legend\.[^\n]*\n?/gm, '')
+}
+
+function extractPythonRuntimeError(output) {
+  const text = String(output || '')
+  if (!text.includes('=== 运行错误 ===')) return null
+  const lines = text.split('\n').map((line) => line.trim()).filter(Boolean)
+  return [...lines].reverse().find((line) => /^\w*(?:Error|Exception):/.test(line)) || 'Python 代码运行失败'
 }
 
 /**
@@ -93,6 +107,7 @@ function cleanPythonOutput(s) {
 export async function runPython(code) {
   const py = await getPyodide()
   await ensurePackages(py, code)
+  try { py.FS.unlink('/plot.png') } catch { /* no previous plot */ }
   const out = []
   const pushBatch = (s) => out.push(String(s).endsWith('\n') ? String(s) : `${s}\n`)
   py.setStdout({ batched: pushBatch })
@@ -115,6 +130,8 @@ except Exception as e:
   } catch (e) {
     error = String(e.message || e)
   }
+  const output = cleanPythonOutput(out.join(''))
+  error = error || extractPythonRuntimeError(output)
 
   // 尝试回传 /plot.png（代码中 plt.savefig('/plot.png') 后）
   let img = null
@@ -127,5 +144,5 @@ except Exception as e:
     }
   } catch { /* no plot */ }
 
-  return { output: cleanPythonOutput(out.join('')), img, error }
+  return { output, img, error }
 }

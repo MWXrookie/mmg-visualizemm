@@ -1,4 +1,4 @@
-// 知识卡片渲染冒烟：59 卡齐全、无 demo 卡展开不崩溃、有 demo 卡正常、无控制台错误
+// 知识卡片渲染冒烟：65 卡齐全、无 demo 卡展开不崩溃、有 demo 卡正常、无控制台错误
 const CDP = 'http://127.0.0.1:9333'
 const APP = 'http://127.0.0.1:3088/#/workbench'
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -94,6 +94,7 @@ async function main() {
   const em = await expandAndCheck('力电比拟法')
   const gt = await expandAndCheck('博弈论')
   const sq = await expandAndCheck('序贯解法')
+  const greedy = await expandAndCheck('贪心算法')
   const mc = await expandAndCheck('蒙特卡洛') // 有 demo 的对照
 
   console.log('卡片总数:', total)
@@ -101,19 +102,21 @@ async function main() {
   console.log('无demo卡-力电比拟:', JSON.stringify(em))
   console.log('无demo卡-博弈论:', JSON.stringify(gt))
   console.log('无demo卡-序贯解法:', JSON.stringify(sq))
+  console.log('有demo卡-贪心算法:', JSON.stringify(greedy))
   console.log('有demo卡-蒙特卡洛:', JSON.stringify(mc))
   const last3 = titles.slice(-4)
   console.log('末尾4张标题:', JSON.stringify(last3))
   console.log('控制台错误:', consoleErrors.length ? consoleErrors : '无')
 
-  const pass = total === 59 &&
+  const pass = total === 65 &&
     noteCheck.hasNote && noteCheck.noteText.length > 10 &&
     em.found && !em.hasDemo && !em.hasTry && em.hasConcept && em.hasSrc &&
     gt.found && !gt.hasDemo && !gt.hasTry && gt.hasConcept && gt.hasSrc &&
     sq.found && !sq.hasDemo && !sq.hasTry && sq.hasConcept && sq.hasSrc &&
+    greedy.found && greedy.hasDemo && greedy.hasTry && greedy.hasConcept && greedy.hasSrc &&
     mc.found && mc.hasDemo && mc.hasTry &&
     consoleErrors.length === 0
-  console.log(pass ? '✅ PASS：59 卡齐全，无 demo 卡正常渲染，小白批注显示，无控制台错误' : '❌ FAIL')
+  console.log(pass ? '✅ PASS：65 卡齐全，无 demo 卡正常渲染，小白批注显示，无控制台错误' : '❌ FAIL')
 
   ws.close()
   process.exit(pass ? 0 : 1)
