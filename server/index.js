@@ -63,7 +63,7 @@ async function callChat({ baseUrl, apiKey, model, messages, maxTokens }) {
   const body = {
     model,
     messages,
-    max_tokens: maxTokens || 2048,
+    max_tokens: maxTokens || 16384,
     temperature: 0.4,
     stream: false,
   }
@@ -76,10 +76,27 @@ async function callChat({ baseUrl, apiKey, model, messages, maxTokens }) {
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(120000),
+      signal: AbortSignal.timeout(300000),
     })
   } catch (e) {
-    const err = new Error(`网络请求失败：${e.message}`)
+    const cause = e?.cause || {}
+    const code = cause.code || e.code || ''
+    let msg = '连不上模型服务'
+    if (e.name === 'AbortError' || /timeout/i.test(String(e.message || cause.message || ''))) {
+      msg = '请求超时'
+    } else if (code === 'ENOTFOUND') {
+      msg = '找不到模型服务地址'
+    } else if (code === 'ECONNREFUSED') {
+      msg = '模型服务拒绝连接'
+    } else if (code === 'ECONNRESET') {
+      msg = '连接被模型服务中断'
+    } else if (code === 'CERT_HAS_EXPIRED' || code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE') {
+      msg = '模型服务证书校验失败'
+    } else if (code === 'UND_ERR_CONNECT_TIMEOUT') {
+      msg = '连接模型服务超时'
+    }
+    const detail = code || e.message || cause.message || 'network error'
+    const err = new Error(`${msg}：${detail}。请检查 Base URL、网络或代理设置`)
     err.code = 'NETWORK'
     throw err
   }
@@ -98,8 +115,17 @@ async function callChat({ baseUrl, apiKey, model, messages, maxTokens }) {
     err.code = 'BAD_RESPONSE'
     throw err
   }
+  const msg = json.choices[0].message || {}
+  const content = msg.content ?? ''
+  const reasoning = msg.reasoning_content ?? ''
+  // 推理模型思考耗尽：content 空但思考有内容 → 明确报错而不是静默空返回
+  if (!content && reasoning) {
+    const err = new Error('模型思考时间过长、未生成正式内容（max_tokens 被思考过程耗尽）。请重试，或在「模型设置」中换用非推理模型。')
+    err.code = 'EMPTY_REASONING'
+    throw err
+  }
   return {
-    content: json.choices[0].message?.content ?? '',
+    content,
     model: json.model,
     usage: json.usage || null,
   }
@@ -174,8 +200,8 @@ app.post('/api/chat/stream', async (req, res) => {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({ model, messages, max_tokens: 2048, temperature: 0.4, stream: true }),
-      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(120000)]),
+      body: JSON.stringify({ model, messages, max_tokens: 16384, temperature: 0.4, stream: true }),
+      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(300000)]),
     })
     if (!upstream.ok || !upstream.body) {
       const text = await upstream.text().catch(() => '')
@@ -193,6 +219,8 @@ app.post('/api/chat/stream', async (req, res) => {
     })
     const decoder = new TextDecoder()
     let buffer = ''
+    let sseLen = 0 // 诊断：统计本次流式转发的总字符数
+    let reasoningLen = 0 // 推理模型：统计 reasoning_content 字符数（思考过程，不转发给前端）
     for await (const chunk of upstream.body) {
       buffer += decoder.decode(chunk, { stream: true })
       let idx
@@ -204,10 +232,28 @@ app.post('/api/chat/stream', async (req, res) => {
         if (!data || data === '[DONE]') continue
         try {
           const obj = JSON.parse(data)
-          const delta = obj.choices?.[0]?.delta?.content ?? ''
-          if (delta) res.write(`data: ${JSON.stringify({ delta })}\n\n`)
+          // 诊断：首次打印 chunk 结构，确认 delta 字段（content / reasoning_content / delta 等）
+          if (process.env.DBG_SSE && !process.env.DBG_SSE_DONE) {
+            console.log('[sse] 首个 chunk:', JSON.stringify(obj).slice(0, 400))
+            process.env.DBG_SSE_DONE = '1'
+          }
+          const d = obj.choices?.[0]?.delta || {}
+          const delta = d.content ?? ''
+          const reasoning = d.reasoning_content ?? ''
+          if (reasoning) reasoningLen += reasoning.length
+          if (delta) {
+            sseLen += delta.length
+            res.write(`data: ${JSON.stringify({ delta })}\n\n`)
+          }
         } catch { /* 忽略无法解析的 chunk */ }
       }
+    }
+    console.log(`[stream] model=${model} 转发 ${sseLen} 字符，思考 ${reasoningLen} 字符`)
+    // 推理模型思考耗尽（content 为空但思考有内容）：明确告知前端，避免"空输出"困惑
+    if (sseLen === 0 && reasoningLen > 0) {
+      res.write(`data: ${JSON.stringify({ error: '模型思考时间过长、未生成正式内容（max_tokens 被思考过程耗尽）。请重试，或在「模型设置」中换用非推理模型。' })}\n\n`)
+      res.end()
+      return
     }
     res.write(`data: ${JSON.stringify({ done: true })}\n\n`)
     res.end()

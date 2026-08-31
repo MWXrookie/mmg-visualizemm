@@ -80,6 +80,12 @@ async function ensurePackages(py, code) {
   return loaded
 }
 
+function cleanPythonOutput(s) {
+  return String(s || '')
+    .replace(/<string>:\d+:\s*DeprecationWarning:\s*Pyarrow will become[\s\S]*?github\.com\/pandas-dev\/pandas\/issues\/54466\s*/g, '')
+    .replace(/<string>:\d+:\s*UserWarning:\s*Glyph \d+[\s\S]*?missing from current font\.\s*/g, '')
+}
+
 /**
  * 运行 Python 代码
  * @returns {Promise<{output:string, img:string|null, error:string|null}>}
@@ -88,11 +94,14 @@ export async function runPython(code) {
   const py = await getPyodide()
   await ensurePackages(py, code)
   const out = []
-  py.setStdout({ batched: (s) => out.push(s) })
-  py.setStderr({ batched: (s) => out.push(s) })
+  const pushBatch = (s) => out.push(String(s).endsWith('\n') ? String(s) : `${s}\n`)
+  py.setStdout({ batched: pushBatch })
+  py.setStderr({ batched: pushBatch })
 
   const wrapped = `
-import sys, traceback
+import sys, traceback, warnings
+warnings.filterwarnings("ignore", message=r"Pyarrow will become.*", category=DeprecationWarning)
+warnings.filterwarnings("ignore", message=r"Glyph .* missing from current font.*", category=UserWarning)
 try:
     exec(${JSON.stringify(code)})
     print("\\n[运行完成]")
@@ -118,5 +127,5 @@ except Exception as e:
     }
   } catch { /* no plot */ }
 
-  return { output: out.join(''), img, error }
+  return { output: cleanPythonOutput(out.join('')), img, error }
 }

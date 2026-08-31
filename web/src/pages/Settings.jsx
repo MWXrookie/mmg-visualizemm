@@ -13,11 +13,9 @@ export default function Settings({ settings, setSettings }) {
   const [result, setResult] = useState(null) // {ok, message}
   const [guideMode, setGuideMode] = useState(settings.guideMode !== false)
 
-  const isCustom = providerId === 'custom'
-
   function onProviderChange(id) {
     setProviderId(id)
-    if (!isCustom) {
+    if (id !== 'custom') {
       const p = applyProvider(id)
       setBaseUrl(p.baseUrl)
       setModel(p.model)
@@ -98,20 +96,22 @@ export default function Settings({ settings, setSettings }) {
         </div>
 
         <div className="field field-toggle">
-          <label className="toggle-row">
+          <div className="toggle-row">
             <span>
               <b>引导模式（防代做）</b>
               <span className="hint">开启后 AI 以建模专家口吻引导：点名难点陷阱、给方法雷达与专业倾向、苏格拉底式反问，不直接给完整成品答案</span>
             </span>
-            <span
+            <button
+              type="button"
               className={`switch ${guideMode ? 'on' : ''}`}
-              onClick={() => setGuideMode(!guideMode)}
+              onClick={() => setGuideMode((v) => !v)}
               role="switch"
               aria-checked={guideMode}
+              aria-label="切换引导模式"
             >
               <span className="knob" />
-            </span>
-          </label>
+            </button>
+          </div>
         </div>
 
         <div className="actions">

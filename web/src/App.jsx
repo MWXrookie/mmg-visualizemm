@@ -5,7 +5,7 @@ import Coding from './pages/Coding.jsx'
 import Settings from './pages/Settings.jsx'
 import { loadSettings, loadTheme, saveTheme, getCurrentWsId, setCurrentWsId } from './store.js'
 import { loadWorkspace, saveWorkspace, listWorkspaces, deleteWorkspace } from './api.js'
-import { IconBook, IconCompass, IconCode, IconGear, IconSun, IconMoon, IconClose } from './components/Icons.jsx'
+import { IconBook, IconCompass, IconCode, IconGear, IconSun, IconMoon, IconEdit, IconTrash } from './components/Icons.jsx'
 
 const VIEWS = [
   { id: 'workbench', label: '读题工作台', icon: <IconBook size={18} /> },
@@ -55,6 +55,7 @@ export default function App() {
   const [ws, setWs] = useState(null) // 三台共享的工作区数据（题目/附件/拆解/代码）
   const [wsList, setWsList] = useState([]) // 工作区列表（侧栏切换/删除用）
   const [toast, setToast] = useState('') // 全局轻提示
+  const [wsDialog, setWsDialog] = useState(null) // {mode:'rename'|'delete', id, title, value}
 
   // 全局通知入口（供各页面调用：window.__notify('...')）
   useEffect(() => {
@@ -190,15 +191,43 @@ export default function App() {
     })
   }
 
-  /** 重命名工作区（双击侧栏条目） */
-  function renameWs(id) {
-    const name = prompt('输入新的工作区名称：')
-    if (name === null || !name.trim()) return
-    saveWorkspace({ id, title: name.trim() }).then(() => {
-      if (id === wsIdRef.current) setWs((prev) => ({ ...(prev || {}), title: name.trim() }))
-      refreshWsList()
-      window.__notify?.('已重命名')
-    })
+  /** 重命名工作区 */
+  function openRenameWs(w) {
+    setWsDialog({ mode: 'rename', id: w.id, title: w.title || '未命名题目', value: w.title || '' })
+  }
+
+  function openDeleteWs(w) {
+    setWsDialog({ mode: 'delete', id: w.id, title: w.title || '未命名题目' })
+  }
+
+  async function submitWsDialog() {
+    if (!wsDialog) return
+    try {
+      if (wsDialog.mode === 'rename') {
+        const name = (wsDialog.value || '').trim()
+        if (!name) return
+        await saveWorkspace({ id: wsDialog.id, title: name })
+        if (wsDialog.id === wsIdRef.current) setWs((prev) => ({ ...(prev || {}), title: name }))
+        refreshWsList()
+        window.__notify?.('已重命名')
+        setWsDialog(null)
+        return
+      }
+      await deleteWorkspace(wsDialog.id).catch(() => {})
+      if (wsIdRef.current === wsDialog.id) {
+        wsIdRef.current = ''
+        setWsId('')
+        setCurrentWsId('')
+        setWs(null)
+        newWorkspace()
+      } else {
+        refreshWsList()
+      }
+      window.__notify?.('已删除工作区')
+      setWsDialog(null)
+    } catch (e) {
+      window.__notify?.(e.message || '操作失败')
+    }
   }
 
   // 工作区列表：挂载与当前工作区变化时刷新（新建/切换/删除后保持最新）
@@ -212,23 +241,6 @@ export default function App() {
     setWsId(id)
     setCurrentWsId(id)
     setWs(null) // 清空当前 → wsId effect 检测到 id 变化后从后端加载
-  }
-
-  /** 删除工作区（删当前则自动新建一个） */
-  async function removeWs(id) {
-    if (!confirm('删除该工作区？此操作不可恢复。')) return
-    try {
-      await deleteWorkspace(id)
-    } catch { /* 后端删除失败也继续本地清理 */ }
-    if (wsIdRef.current === id) {
-      wsIdRef.current = ''
-      setWsId('')
-      setCurrentWsId('')
-      setWs(null)
-      newWorkspace()
-    } else {
-      refreshWsList()
-    }
   }
 
   if (!settings) {
@@ -263,9 +275,14 @@ export default function App() {
           <div className="sb-ws-list">
             {wsList.length === 0 && <div className="sb-ws-empty">暂无工作区</div>}
             {wsList.map((w) => (
-              <div key={w.id} className={`sb-ws-item ${wsId === w.id ? 'active' : ''}`} onClick={() => switchWs(w.id)} onDoubleClick={() => renameWs(w.id)} title={w.title || '未命名题目' + '（双击重命名）'}>
-                <span className="sb-ws-title">{w.title || '未命名题目'}</span>
-                <button className="sb-ws-del" onClick={(e) => { e.stopPropagation(); removeWs(w.id) }} title="删除工作区"><IconClose size={13} /></button>
+              <div key={w.id} className={`sb-ws-item ${wsId === w.id ? 'active' : ''}`}>
+                <button className="sb-ws-main" onClick={() => switchWs(w.id)} title={w.title || '未命名题目'}>
+                  <span className="sb-ws-title">{w.title || '未命名题目'}</span>
+                </button>
+                <div className="sb-ws-actions">
+                  <button className="sb-ws-act" onClick={() => openRenameWs(w)} title="重命名工作区"><IconEdit size={13} /></button>
+                  <button className="sb-ws-act danger" onClick={() => openDeleteWs(w)} title="删除工作区"><IconTrash size={13} /></button>
+                </div>
               </div>
             ))}
             <button className="sb-ws-new" onClick={newWorkspace}>＋ 新建工作区</button>
@@ -294,6 +311,39 @@ export default function App() {
         {view === 'settings' && <Settings settings={settings} setSettings={setSettings} />}
       </main>
       {toast && <div className="toast" role="status">{toast}</div>}
+      {wsDialog && (
+        <div className="scrim" onClick={() => setWsDialog(null)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            {wsDialog.mode === 'rename' ? (
+              <>
+                <h2>重命名工作区</h2>
+                <p className="sub">给这个工作区换个更好认的名字。</p>
+                <input
+                  className="bk-input"
+                  value={wsDialog.value}
+                  onChange={(e) => setWsDialog((prev) => (prev ? { ...prev, value: e.target.value } : prev))}
+                  autoFocus
+                  onKeyDown={(e) => { if (e.key === 'Enter') submitWsDialog() }}
+                  placeholder="输入名称"
+                  style={{ width: '100%' }}
+                />
+              </>
+            ) : (
+              <>
+                <h2>删除工作区</h2>
+                <p className="sub">确定删除「{wsDialog.title}」吗？这个工作区会从列表中移除。</p>
+                <div className="hint">这一步无法撤销。</div>
+              </>
+            )}
+            <div className="sheet-actions">
+              <button className="btn btn-ghost" onClick={() => setWsDialog(null)}>取消</button>
+              <button className={`btn ${wsDialog.mode === 'delete' ? 'btn-accent' : 'btn-primary'}`} onClick={submitWsDialog}>
+                {wsDialog.mode === 'delete' ? '删除' : '保存'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

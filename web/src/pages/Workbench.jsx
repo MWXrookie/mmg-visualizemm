@@ -62,6 +62,7 @@ export default function Workbench({ settings, ws, patchWs, onExpandSidebar, onNe
   const [pasteText, setPasteText] = useState('') // 空态"粘贴题目文本"输入
   const [editOpen, setEditOpen] = useState(false) // 编辑题干弹窗
   const [editText, setEditText] = useState('') // 编辑题干草稿
+  const [clearOpen, setClearOpen] = useState(false) // 清空题干确认弹窗
   const [panelW, setPanelW] = useState(loadPanelW)
   const textRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -115,9 +116,9 @@ export default function Workbench({ settings, ws, patchWs, onExpandSidebar, onNe
 
   /** 清空题干（保留附件；overview 一并清，标题重置为"未命名题目"，避免与内容不符） */
   function clearProblem() {
-    if (!confirm('清空当前题干？附件与已生成内容将保留。')) return
     patchWs({ problemText: '', overview: '', title: '' })
     setSelResults([])
+    setClearOpen(false)
   }
 
   async function handleProblemFile(file) {
@@ -215,7 +216,7 @@ export default function Workbench({ settings, ws, patchWs, onExpandSidebar, onNe
                 {busy ? 'AI 解读中…' : <><IconSparkles size={14} /> AI 整体解读</>}
               </button>
               <button className="btn btn-ghost btn-sm" onClick={() => { setEditText(problemText); setEditOpen(true) }}>编辑题干</button>
-              <button className="btn btn-ghost btn-sm" onClick={clearProblem}>清空</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setClearOpen(true)}>清空</button>
               <button className="btn btn-ghost btn-sm" onClick={() => problemFileInputRef.current?.click()}>上传题干</button>
               <button className="btn btn-ghost btn-sm" onClick={() => fileInputRef.current?.click()}>上传附件</button>
             </div>
@@ -290,7 +291,7 @@ export default function Workbench({ settings, ws, patchWs, onExpandSidebar, onNe
 
       {/* 书签竖栏 */}
       <aside className="bookmarks">
-        <ResizeHandle onWidth={(px) => { const v = px + 'px'; setPanelW(v); localStorage.setItem('mmg_panel_w_v1', v) }} />
+        <ResizeHandle value={panelW} onWidth={(px) => { const v = px + 'px'; setPanelW(v); localStorage.setItem('mmg_panel_w_v1', v) }} />
         <button className={`bookmark-item ${bookmark === '精读' ? 'active' : ''}`} onClick={() => setBookmark('精读')}>选段精读</button>
         <button className={`bookmark-item ${bookmark === '卡片' ? 'active' : ''}`} onClick={() => setBookmark('卡片')}>知识卡片</button>
       </aside>
@@ -376,6 +377,18 @@ export default function Workbench({ settings, ws, patchWs, onExpandSidebar, onNe
             <div className="sheet-actions">
               <button className="btn btn-ghost" onClick={() => setEditOpen(false)}>取消</button>
               <button className="btn btn-primary" onClick={() => { patchWs({ problemText: editText.trim() }); setEditOpen(false) }}>保存</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {clearOpen && (
+        <div className="scrim" onClick={() => setClearOpen(false)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            <h2>清空题干</h2>
+            <p className="sub">会清掉当前题干和整体解读，但保留附件与其他内容。</p>
+            <div className="sheet-actions">
+              <button className="btn btn-ghost" onClick={() => setClearOpen(false)}>取消</button>
+              <button className="btn btn-accent" onClick={clearProblem}>清空</button>
             </div>
           </div>
         </div>

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { marked } from 'marked'
-import { streamChat, attachSummary, retrieveKnowledge, formatKnowledgeContext } from '../api.js'
+import { streamChat, chat, attachSummary, retrieveKnowledge, formatKnowledgeContext } from '../api.js'
 import { KnowledgeCard, findConcepts, ALL_CARD_IDS } from './Cards.jsx'
 import MD, { sanitize } from '../components/MD.jsx'
 import AttachmentList from '../components/AttachmentList.jsx'
@@ -17,9 +17,10 @@ const MODIFY_SYSTEM =
   '  第3步：再反问下一个关键问题，循环推进。\n' +
   '  【节奏铁律】① 不要一次性给出"基础版/提高版/冲优版"或一长串方法列表——用户没回答前只反问、不列方法。② 每个关键决策（选什么方法、怎么分组、怎么验证）都必须由用户说出或明确选择，你只提供信号、倾向与理由。③ 连续追问时一次只问 1-2 个问题。\n' +
   '  【沉淀为拆解块】当一轮引导后用户思路已明确（用户说出了方法/步骤），**主动询问**："要把这个思路整理成拆解块吗？"用户同意或直接说"写进拆解块"后，**切换为输出 JSON**（格式见意图 B，blockId 填用户指定的编号或新建块的编号），把用户确认的思路沉淀为 title/quote/body/steps。\n' +
-  '【B. 明确修改/新建拆解块】（如「拆解块2 改为…」「补充数据步骤」「标题改成…」「写进拆解块」「把思路整理成拆解块」）→ 直接执行：判断修改哪个拆解块（blockId：数字，从 1 开始），给出修改后的完整 title/quote/body/steps，只输出一个 JSON 对象（不要任何其他文字）：\n' +
+  '【B. 明确修改/新建拆解块】（如「拆解块2 改为…」「补充数据步骤」「标题改成…」「写进拆解块」「把思路整理成拆解块」）→ 直接执行：判断修改哪个拆解块（blockId：数字，从 1 开始），给出修改后的完整 title/quote/body/steps，然后输出 JSON：\n' +
   '{"blockId":2,"patch":{"title":"新标题","quote":"新核心说明","body":"**思路正文**（可用 Markdown）","steps":[{"label":"步骤名","desc":"步骤说明"}]}}\n' +
-  'JSON 要求：patch 完整（title/quote/body/steps 都要给；body 用 Markdown，可包含 **加粗**、- 列表、> 引用；steps 可为空数组）；全部中文；blockId 从 1 开始；用户要求"新建/新增/加一个拆解块"时，blockId 填当前拆解块总数+1；示例：用户说「把拆解块2 补充数据步骤」→ {"blockId":2,"patch":{"title":"数据处理","quote":"清洗并构造特征","body":"## 思路\\n- **读数据**：读取附件表\\n- **清洗**：处理缺失值\\n> 注意保留原始编号","steps":[{"label":"读数据","desc":"读取附件表"},{"label":"清洗","desc":"处理缺失值"}]}}\n' +
+  '输出要求：这是用户下达的**执行指令**（不是思路引导请求），直接执行即可，**不要反问、不要引导、不要解释思路**。先可以写一句话确认你理解了指令（如「好的，我来补充数据处理步骤」），紧接着输出上面的 JSON 对象（可以放在 ```json 代码块里，也可以裸输出）。严禁输出除此之外的其它内容，严禁用自然语言描述修改结果（那会占满输出、导致 JSON 被截断）。\n' +
+  'JSON 要求：patch 完整（title/quote/body/steps 都要给；body 用 Markdown，可包含 **加粗**、- 列表、> 引用；steps 可为空数组）；全部中文；blockId 从 1 开始；用户要求"新建/新增/加一个拆解块"时，blockId 填当前拆解块总数+1；示例：用户说「把拆解块2 补充数据步骤」→ 先写「好的，我来补充数据处理步骤」，然后输出 {"blockId":2,"patch":{"title":"数据处理","quote":"清洗并构造特征","body":"## 思路\\n- **读数据**：读取附件表\\n- **清洗**：处理缺失值\\n> 注意保留原始编号","steps":[{"label":"读数据","desc":"读取附件表"},{"label":"清洗","desc":"处理缺失值"}]}}\n' +
   EXPERT_CORE
 
 const BODY_GEN_GUIDE =
@@ -67,7 +68,7 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
   const problemText = ws?.problemText || ''
   const attachments = ws?.attachments || []
   const [blocks, setBlocks] = useState([])
-  const [openSet, setOpenSet] = useState(() => new Set([0]))
+  const [openSet, setOpenSet] = useState(() => new Set())
   const [panel, setPanel] = useState('chat') // chat | kc
   const [msgs, setMsgs] = useState([])
   const [input, setInput] = useState('')
@@ -91,7 +92,7 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
     const raw = ws?.breakdown
     const b = Array.isArray(raw) ? raw : []
     setBlocks(b)
-    setOpenSet(new Set(b.map((_, i) => i)))
+    setOpenSet(new Set(b.map((blk) => blk.id)))
     setPreview(null); setMsgs([]); setError(''); setStreaming('')
   }, [wsIdNow]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -107,21 +108,27 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight
   }, [msgs])
 
-  function toggleOpen(i) {
+  function toggleOpen(id) {
     setOpenSet((prev) => {
       const next = new Set(prev)
-      next.has(i) ? next.delete(i) : next.add(i)
+      next.has(id) ? next.delete(id) : next.add(id)
       return next
     })
   }
 
   function addBlock() {
-    setBlocks((prev) => [...prev, { id: nid(), title: `拆解块 ${prev.length + 1}（未命名）`, quote: '新建拆解块，点击「编辑」填写内容。', body: '', steps: [], refs: [] }])
-    setOpenSet((prev) => new Set([...prev, blocks.length]))
+    const id = nid()
+    setBlocks((prev) => [...prev, { id, title: `拆解块 ${prev.length + 1}（未命名）`, quote: '新建拆解块，点击「编辑」填写内容。', body: '', steps: [], refs: [] }])
+    setOpenSet((prev) => new Set([...prev, id]))
   }
 
   function removeBlock(id) {
     setBlocks((prev) => prev.filter((b) => b.id !== id))
+    setOpenSet((prev) => {
+      const next = new Set(prev)
+      next.delete(id)
+      return next
+    })
   }
 
   /** 更新某个步骤的思路说明（有序列表每步独立填写） */
@@ -158,19 +165,36 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
     const summary = attachSummary(attachments)
     // 题目全文注入：让 AI 能读到完整题干（不只附件摘要），避免"无法复述题干"
     const problemCtx = problemText.trim() ? `【完整题目】\n${problemText}\n\n` : ''
+    const userMsg = `${problemCtx}当前拆解块：\n${blocksDesc || '（暂无拆解块）'}\n\n${summary ? `数据附件摘要：\n${summary}\n\n` : ''}用户指令：「${text}」`
+
+    // 流式主尝试 + 降级：流式失败/空返回时，改用非流式简化请求重试一次（去掉 RAG 上下文，减小失败面）
+    let content = ''
+    let degraded = false
     try {
-      let content = ''
-      // RAG：只用用户指令检索（拼全部拆解块会让查询过长、拖慢检索且引入噪音）
       const hits = await retrieveKnowledge(text, settings, 3)
       const kbContext = formatKnowledgeContext(hits)
-      await streamChat(settings, [
-        { role: 'system', content: MODIFY_SYSTEM + kbContext },
-        { role: 'user', content: `${problemCtx}当前拆解块：\n${blocksDesc || '（暂无拆解块）'}\n\n${summary ? `数据附件摘要：\n${summary}\n\n` : ''}用户指令：「${text}」` },
-      ], { onDelta: (t) => { content = t; setStreaming(t) } })
+      try {
+        await streamChat(settings, [
+          { role: 'system', content: MODIFY_SYSTEM + kbContext },
+          { role: 'user', content: userMsg },
+        ], { onDelta: (t) => { content = t; setStreaming(t) } })
+      } catch (e) {
+        degraded = true
+      }
+      if (!content.trim()) {
+        // 流式返回空（模型未输出）：非流式重试
+        degraded = true
+        const r = await chat(settings, [
+          { role: 'system', content: MODIFY_SYSTEM },
+          { role: 'user', content: userMsg },
+        ])
+        content = r.content || ''
+      }
       const parsed = extractJson(content)
       if (parsed && typeof parsed.blockId === 'number' && parsed.patch) {
+        const isNew = parsed.blockId === blocks.length + 1 // AI 按约定：新建块 blockId = 总数 + 1
         const idx = blocks.findIndex((_, i) => i + 1 === parsed.blockId)
-        if (idx < 0) {
+        if (idx < 0 && !isNew) {
           // AI 指向不存在的块：明确提示而不是静默落到第 1 块（避免误改）
           setMsgs((prev) => [...prev, {
             role: 'ai', time: now(),
@@ -181,24 +205,36 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
           // 友好提示而非 JSON 原文：具体修改在拆解块的"修改预览"卡片里展示
           setMsgs((prev) => [...prev, {
             role: 'ai', time: now(),
-            text: `✅ 已生成拆解块 ${parsed.blockId} 的修改预览（标题：${parsed.patch.title || '（未命名）'}），请在左侧检查后点击「确认写入」。`,
+            text: `✅ 已生成${isNew ? '新拆解块' : `拆解块 ${parsed.blockId}`}的修改预览（标题：${parsed.patch.title || '（未命名）'}），请在左侧检查后点击「确认写入」。`,
             preview: true,
           }])
         }
       } else {
-        // 非 JSON（意图 A 的苏格拉底反问 / 异常空输出）
+        // 非 JSON：可能是意图 A 的苏格拉底反问、或模型没有按 JSON 格式输出
         const trimmed = (content || '').trim()
-        setMsgs((prev) => [...prev, {
-          role: 'ai', time: now(),
-          text: trimmed
-            ? trimmed
-            : '（AI 本次没有返回内容，可能是上游模型超时或网络波动。请重试；若反复出现，可在「模型设置」换个模型或检查网络。）',
-        }])
+        if (trimmed) {
+          // 展示 AI 原文（可能是反问，也可能是 JSON 格式跑偏——给用户可诊断的信息）
+          setMsgs((prev) => [...prev, { role: 'ai', time: now(), text: trimmed }])
+          // 若内容明显是 JSON 开头（截断/格式错误），追加提示，避免用户困惑
+          if (/^[\s]*\{/.test(trimmed)) {
+            setMsgs((prev) => [...prev, {
+              role: 'ai', time: now(),
+              text: '⚠️ AI 返回了 JSON 格式内容但未被正确解析（可能被截断或格式不完整）。已把原文展示在上方，你可以换个更简单的指令重试，或在「模型设置」中换一个模型。',
+            }])
+          }
+        } else {
+          setMsgs((prev) => [...prev, {
+            role: 'ai', time: now(),
+            text: '（模型没有返回内容。请重试；若反复出现，可在「模型设置」换一个模型或检查网络/额度。）',
+          }])
+        }
       }
     } catch (e) {
       setError(e.message)
       setMsgs((prev) => [...prev, { role: 'ai', time: now(), text: `出错了：${e.message}` }])
     }
+    // 降级成功时清除中途的警告；失败时错误横幅已在 catch 设置
+    if (degraded && !error) setError('')
     setStreaming('')
     setBusy(false)
   }
@@ -206,9 +242,26 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
   function applyPreview() {
     if (!preview) return
     const idx = preview.blockId - 1
-    setBlocks((prev) => prev.map((b, i) => (i === idx ? { ...b, title: preview.patch.title || b.title, quote: preview.patch.quote || b.quote, body: preview.patch.body ?? b.body, steps: preview.patch.steps || [] } : b)))
+    const isNew = idx === blocks.length // 新建块：blockId = 总数 + 1 → idx = 总数
+    const newId = isNew ? nid() : null
+    setBlocks((prev) => {
+      if (isNew) {
+        return [...prev, {
+          id: newId,
+          title: preview.patch.title || `拆解块 ${prev.length + 1}（未命名）`,
+          quote: preview.patch.quote || '',
+          body: preview.patch.body ?? '',
+          steps: preview.patch.steps || [],
+          refs: [],
+        }]
+      }
+      return prev.map((b, i) => (i === idx ? { ...b, title: preview.patch.title || b.title, quote: preview.patch.quote || b.quote, body: preview.patch.body ?? b.body, steps: preview.patch.steps || [] } : b))
+    })
+    if (newId) setOpenSet((prev) => new Set([...prev, newId]))
     // 若正在编辑该块，同步更新草稿，避免用户保存时用旧草稿覆盖 AI 写入的内容
-    if (editingId === preview.blockId) {
+    // 注意：editingId 是块 id（字符串），preview.blockId 是序号（数字），需先映射到块再比较
+    const editingIdx = blocks.findIndex((b) => b.id === editingId)
+    if (editingIdx === idx) {
       setDraft((d) => (d ? { ...d, title: preview.patch.title || d.title, quote: preview.patch.quote || d.quote, body: preview.patch.body ?? d.body, stepsText: (preview.patch.steps || []).map((s) => `${s.label}：${s.desc}`).join('\n') } : d))
     }
     setPreview(null)
@@ -218,16 +271,35 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
   async function aiWriteBody(block, setDraftFn) {
     if (!settings.apiKey) return setError('请先在「模型设置」配置 API Key')
     setBusy(true); setError(''); setStreaming('')
+    const sysContent = settings.guideMode !== false ? BODY_GEN_GUIDE : BODY_GEN_DIRECT
+    const userContent = `拆解块标题：${block.title}\n核心说明：${block.quote}\n题目背景：${problemText.trim() || '（无）'}`
+    const messages = [
+      { role: 'system', content: sysContent },
+      { role: 'user', content: userContent },
+    ]
     try {
       let content = ''
-      await streamChat(settings, [
-        { role: 'system', content: settings.guideMode !== false ? BODY_GEN_GUIDE : BODY_GEN_DIRECT },
-        { role: 'user', content: `拆解块标题：${block.title}\n核心说明：${block.quote}\n题目背景：${problemText.trim() || '（无）'}` },
-      ], { onDelta: (t) => { content = t; setStreaming(t); setDraftFn((d) => (d ? { ...d, body: t } : d)) } })
+      let degraded = false
+      try {
+        await streamChat(settings, messages, { onDelta: (t) => { content = t; setStreaming(t); setDraftFn((d) => (d ? { ...d, body: t } : d)) } })
+      } catch (e) {
+        degraded = true
+      }
+      if (!content.trim()) {
+        // 流式返回空：非流式重试
+        degraded = true
+        const r = await chat(settings, messages)
+        content = r.content || ''
+      }
       let body = content.trim()
       const fence = body.match(/```(?:markdown|md)?\s*([\s\S]*?)```/i)
       if (fence) body = fence[1].trim()
-      setDraftFn((d) => (d ? { ...d, body } : d))
+      if (body) {
+        setDraftFn((d) => (d ? { ...d, body } : d))
+        if (degraded) setError('') // 降级成功则清除中途警告
+      } else {
+        setError('模型没有返回内容，请重试或在「模型设置」换一个模型')
+      }
     } catch (e) {
       setError(e.message)
     }
@@ -321,16 +393,16 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
 
           <div className="decomp">
             {blocks.map((b, i) => (
-              <Block
+            <Block
                 key={b.id}
                 b={b}
                 index={i}
-                open={openSet.has(i)}
+                open={openSet.has(b.id)}
                 preview={preview && preview.blockId === i + 1 ? preview.patch : null}
                 editing={editingId === b.id}
                 draft={draft}
                 setDraft={setDraft}
-                onToggle={() => toggleOpen(i)}
+                onToggle={() => toggleOpen(b.id)}
                 onEdit={() => startEdit(b)}
                 onCommitEdit={commitEdit}
                 onCancelEdit={() => { setEditingId(null); setDraft(null) }}
@@ -343,6 +415,39 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
                 onUpdateStep={(si, desc) => updateStep(b.id, si, desc)}
               />
             ))}
+            {preview && preview.blockId === blocks.length + 1 && (
+              <div className="decomp-block open new-block-preview">
+                <div className="block-head">
+                  <span className="block-no">＋</span>
+                  <span className="block-title">新拆解块 · {preview.patch.title || '（未命名）'}</span>
+                </div>
+                <div className="block-body">
+                  <div className="body-inner">
+                    <div className="bd">
+                      <div className="modify-preview">
+                        <div className="mp-head"><span className="pulse" />新建预览 · 待确认</div>
+                        <div className="mp-body">
+                          {preview.patch.quote && <div className="block-quote"><span className="bk-tag tag-accent">核心</span>{preview.patch.quote}</div>}
+                          {preview.patch.body && <div className="block-body-md"><span className="bk-tag tag-primary">思路</span><MD text={preview.patch.body} /></div>}
+                          {preview.patch.steps?.length > 0 && (
+                            <div className="block-steps">
+                              <span className="bk-tag">步骤</span>
+                              <ol className="step-list">
+                                {preview.patch.steps.map((s, si) => <li key={si} className="step-item"><span className="step-no">{si + 1}</span><span className="step-title">{s.label}</span></li>)}
+                              </ol>
+                            </div>
+                          )}
+                        </div>
+                        <div className="mp-ops">
+                          <button className="btn btn-ghost btn-sm" onClick={() => setPreview(null)}>取消</button>
+                          <button className="btn btn-primary btn-sm" onClick={applyPreview}>确认新建</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
             <button className="new-block" onClick={addBlock}>＋ 新建拆解块</button>
           </div>
         </div>
@@ -350,7 +455,7 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
 
       {/* 书签竖栏 */}
       <aside className="bookmarks">
-        <ResizeHandle onWidth={(px) => { const v = px + 'px'; setPanelW(v); localStorage.setItem('mmg_panel_w_v1', v) }} />
+        <ResizeHandle value={panelW} onWidth={(px) => { const v = px + 'px'; setPanelW(v); localStorage.setItem('mmg_panel_w_v1', v) }} />
         <button className={`bookmark-item ${panel === 'chat' ? 'active' : ''}`} onClick={() => setPanel('chat')}>对话</button>
         <button className={`bookmark-item ${panel === 'kc' ? 'active' : ''}`} onClick={() => setPanel('kc')}>知识卡片</button>
       </aside>
@@ -436,10 +541,10 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
             <div className="sub">把附件挂到该拆解块上，生成代码时会一并注入数据。</div>
             {doneTables.length === 0 && <div className="hint">暂无已解析附件，请先在读题工作台上传。</div>}
             {doneTables.map((a) => (
-              <div key={a.id} className="check-opt" onClick={() => linkAttachment(relateId, a.name)}>
+              <button key={a.id} type="button" className="check-opt" onClick={() => linkAttachment(relateId, a.name)}>
                 <span className="box">✓</span>
                 <div><div className="opt-t" style={{ display: 'flex', alignItems: 'center', gap: 5 }}><IconTable size={14} /> {a.name}</div><div className="opt-d">{(a.sheets || []).map((s) => s.name).join(' · ') || '表格'}</div></div>
-              </div>
+              </button>
             ))}
             <div className="sheet-actions">
               <button className="btn btn-ghost" onClick={() => setRelateId(null)}>取消</button>
@@ -492,14 +597,16 @@ function Block({ b, index, open, preview, editing, draft, setDraft, onToggle, on
   }
   return (
     <article className={`decomp-block ${open ? 'open' : ''}`}>
-      <button className="block-head" onClick={onToggle} aria-expanded={open}>
-        <span className="block-no">{index + 1}</span>
-        <span className="block-title">{b.title}</span>
+      <div className="block-head">
+        <button className="block-title-btn" onClick={onToggle} aria-expanded={open}>
+          <span className="block-no">{index + 1}</span>
+          <span className="block-title">{b.title}</span>
+        </button>
         <span className="block-ops">
-          <button className="ico-btn" title="编辑" onClick={(e) => { e.stopPropagation(); onEdit() }}><IconEdit size={14} /></button>
-          <button className="ico-btn block-toggle" title={open ? '收起' : '展开'} onClick={(e) => { e.stopPropagation(); onToggle() }}><IconChevronRight size={14} /></button>
+          <button className="ico-btn" title="编辑" onClick={onEdit}><IconEdit size={14} /></button>
+          <button className="ico-btn block-toggle" title={open ? '收起' : '展开'} onClick={onToggle} aria-expanded={open}><IconChevronRight size={14} /></button>
         </span>
-      </button>
+      </div>
       <div className="block-body">
         <div className="body-inner">
           <div className="bd">
@@ -515,7 +622,7 @@ function Block({ b, index, open, preview, editing, draft, setDraft, onToggle, on
                   placeholder={'用 Markdown 自由表达思路，例如：\n**目标**：最小化总成本\n\n- 步骤一：读取数据\n- 步骤二：构造特征\n\n> 引用题干："车辆更新须满足…"'}
                   rows={6}
                 />
-                <div className="bk-md-hint"><IconSparkles size={12} /> 支持 Markdown：`**加粗**` · `- 列表` · `> 引用` · `# 标题` · `` `代码` `` · `![图](url)`</div>
+                  <div className="bk-md-hint"><IconSparkles size={12} /> 支持 Markdown：`**加粗**` · `- 列表` · `&gt; 引用` · `# 标题` · `` `代码` `` · `![图](url)`</div>
                 <div className="bk-ai-row">
                   <button className="btn btn-ghost btn-sm" onClick={onAiBody} disabled={aiBusy} title="让 AI 根据标题与核心说明生成思路正文，填入下方输入框">
                     {aiBusy ? <><IconSparkles size={13} /> AI 生成中…</> : <><IconSparkles size={13} /> AI 帮我写思路</>}

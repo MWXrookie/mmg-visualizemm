@@ -35,47 +35,66 @@ export function chat(settings, messages) {
  * 失败时抛出 Error（含 provider 的错误信息），调用方可降级为非流式重试。
  */
 export async function streamChat(settings, messages, { onDelta } = {}) {
-  const res = await fetch('/api/chat/stream', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      baseUrl: settings.baseUrl,
-      apiKey: settings.apiKey,
-      model: settings.model,
-      messages,
-    }),
-  })
+  // 兜底超时：推理模型思考+生成可能较久；服务端 300s，前端多留余量
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 330000)
+  let res
+  try {
+    res = await fetch('/api/chat/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: settings.baseUrl,
+        apiKey: settings.apiKey,
+        model: settings.model,
+        messages,
+      }),
+      signal: ctrl.signal,
+    })
+  } catch (e) {
+    clearTimeout(timer)
+    if (e.name === 'AbortError') throw new Error('请求超时：模型思考或生成时间过长，请重试')
+    throw e
+  }
   if (!res.ok) {
+    clearTimeout(timer)
     const json = await res.json().catch(() => ({}))
     throw new Error(json.message || `请求失败（HTTP ${res.status}）`)
   }
-  if (!res.body) throw new Error('浏览器不支持流式读取，已切换为整段输出')
-  const reader = res.body.getReader()
-  const decoder = new TextDecoder()
-  let acc = ''
-  let buffer = ''
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    let idx
-    while ((idx = buffer.indexOf('\n')) >= 0) {
-      const line = buffer.slice(0, idx).trim()
-      buffer = buffer.slice(idx + 1)
-      if (!line.startsWith('data:')) continue
-      const data = line.slice(5).trim()
-      if (!data) continue
-      let obj
-      try { obj = JSON.parse(data) } catch { continue }
-      if (obj.error) throw new Error(obj.error)
-      if (obj.delta) {
-        acc += obj.delta
-        onDelta?.(acc)
-      }
-      if (obj.done) return acc
-    }
+  if (!res.body) {
+    clearTimeout(timer)
+    throw new Error('浏览器不支持流式读取，已切换为整段输出')
   }
-  return acc
+  try {
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let acc = ''
+    let buffer = ''
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      let idx
+      while ((idx = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, idx).trim()
+        buffer = buffer.slice(idx + 1)
+        if (!line.startsWith('data:')) continue
+        const data = line.slice(5).trim()
+        if (!data) continue
+        let obj
+        try { obj = JSON.parse(data) } catch { continue }
+        if (obj.error) throw new Error(obj.error)
+        if (obj.delta) {
+          acc += obj.delta
+          onDelta?.(acc)
+        }
+        if (obj.done) return acc
+      }
+    }
+    return acc
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 /** 上传文件并解析（返回 {ok,type,headers,rows,text,name}） */
