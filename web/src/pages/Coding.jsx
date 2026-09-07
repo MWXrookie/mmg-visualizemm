@@ -247,6 +247,12 @@ function dataFilePrompt(files) {
 function mountDataFiles(py, files) {
   if (!files.length) return
   try { py.FS.mkdir('/data') } catch { /* already exists */ }
+  try {
+    for (const name of py.FS.readdir('/data')) {
+      if (name === '.' || name === '..' || name === 'manifest.txt') continue
+      try { py.FS.unlink(`/data/${name}`) } catch { /* ignore */ }
+    }
+  } catch { /* ignore */ }
   py.FS.writeFile('/data/manifest.txt', files.map((f) => `${f.path}\t${f.label}`).join('\n'))
   for (const f of files) py.FS.writeFile(f.path, f.csv)
 }
@@ -706,7 +712,7 @@ function normalizeOutWidthValue(v) {
   return '62%'
 }
 
-export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
+export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSidebar }) {
   const [code, setCode] = useState('')
   // 高亮显示层与逻辑层分离：编辑输入只更新 code（hl 不变 → React 不重写 innerHTML → 光标不丢），失焦时刷新高亮
   const [hl, setHl] = useState('')
@@ -740,6 +746,7 @@ export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
   const logRef = useRef(null) // 输出日志容器（运行后自动滚到底）
   const codeRef = useRef(code)
   codeRef.current = code
+  const wsIdRef = useRef(ws?.id || '')
   // 调参面板最新值引用：setParam 的 500ms 重算必须用最新参数（避免闭包旧值差 1 tick）
   const paramsRef = useRef(params)
   paramsRef.current = params
@@ -825,6 +832,7 @@ export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
   const gutter = useMemo(() => lines.map((_, i) => i + 1).join('\n'), [lines])
 
   // 工作区切换 → 载入该工作区已保存的代码
+  useEffect(() => { wsIdRef.current = wsIdNow || '' }, [wsIdNow])
   useEffect(() => {
     if (!wsIdNow || !ws || ws.id !== wsIdNow) return
     applyCode(ws.code || '')
@@ -835,9 +843,10 @@ export default function Coding({ settings, ws, patchWs, onExpandSidebar }) {
   useEffect(() => {
     if (!wsIdNow) return
     clearTimeout(codeTimer.current)
-    codeTimer.current = setTimeout(() => patchWs({ code }), 800)
+    const sourceWsId = wsIdNow
+    codeTimer.current = setTimeout(() => patchWsAt?.(sourceWsId, { code }), 800)
     return () => clearTimeout(codeTimer.current)
-  }, [wsIdNow, code]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [wsIdNow, code, patchWsAt]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function pushLog(cls, text) {
     setLog((prev) => [...prev, { time: now(), cls, text }])

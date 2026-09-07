@@ -3152,6 +3152,7 @@ const CARDS = [
 
 /** 全部卡片 id（知识卡片面板遍历用） */
 export const ALL_CARD_IDS = CARDS.map((c) => c.id)
+export const CARD_BY_ID = new Map(CARDS.map((c) => [c.id, c]))
 
 /**
  * 内嵌知识卡片（读题附属）：AI 输出提到建模概念时，就地出现在内容下方。

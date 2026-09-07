@@ -51,7 +51,7 @@ function loadPanelW() {
 let attSeq = 0
 const attId = (name) => `${name}-${Date.now()}-${attSeq++}`
 
-export default function Workbench({ settings, ws, patchWs, onExpandSidebar, onNewWorkspace }) {
+export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSidebar, onNewWorkspace }) {
   const [selResults, setSelResults] = useState([]) // 划词精读累积记录（角色判定卡列表，不因新划词被顶替）
   const [roleStream, setRoleStream] = useState('') // 划词精读流式输出（实时反馈）
   const [floatSel, setFloatSel] = useState(null)
@@ -67,6 +67,7 @@ export default function Workbench({ settings, ws, patchWs, onExpandSidebar, onNe
   const textRef = useRef(null)
   const fileInputRef = useRef(null)
   const problemFileInputRef = useRef(null)
+  const wsIdRef = useRef(ws?.id || '')
 
   const title = ws?.title || ''
   const problemText = ws?.problemText || ''
@@ -76,6 +77,7 @@ export default function Workbench({ settings, ws, patchWs, onExpandSidebar, onNe
 
   // 切换工作区时清空局部 UI 状态
   const wsIdNow = ws?.id
+  useEffect(() => { wsIdRef.current = wsIdNow || '' }, [wsIdNow])
   useEffect(() => {
     setSelResults([]); setFloatSel(null); setError(''); setStreamBuf(''); setPasteText(''); setRoleStream('')
   }, [wsIdNow])
@@ -95,6 +97,7 @@ export default function Workbench({ settings, ws, patchWs, onExpandSidebar, onNe
     const files = Array.from(fileList || [])
     if (!files.length) return
     setError('')
+    const sourceWsId = wsIdRef.current
     // 上传前先校验体积：base64 放大 ~33%，后端 100mb JSON 上限 ≈ 70MB 原始文件，提前拦截避免白传
     const MAX_FILE = 70 * 1024 * 1024
     for (const file of files) {
@@ -103,13 +106,13 @@ export default function Workbench({ settings, ws, patchWs, onExpandSidebar, onNe
         continue
       }
       const id = attId(file.name)
-      patchWs((prev) => ({ attachments: [...(prev?.attachments || []), { id, name: file.name, status: 'parsing' }] }))
+      patchWsAt?.(sourceWsId, (prev) => ({ attachments: [...(prev?.attachments || []), { id, name: file.name, status: 'parsing' }] }))
       try {
         const r = await parseFile(file)
-        patchWs((prev) => ({ attachments: (prev?.attachments || []).map((a) => (a.id === id ? { ...a, status: 'done', ...r } : a)) }))
+        patchWsAt?.(sourceWsId, (prev) => ({ attachments: (prev?.attachments || []).map((a) => (a.id === id ? { ...a, status: 'done', ...r } : a)) }))
       } catch (e) {
         setError(e.message)
-        patchWs((prev) => ({ attachments: (prev?.attachments || []).map((a) => (a.id === id ? { ...a, status: 'error', message: e.message } : a)) }))
+        patchWsAt?.(sourceWsId, (prev) => ({ attachments: (prev?.attachments || []).map((a) => (a.id === id ? { ...a, status: 'error', message: e.message } : a)) }))
       }
     }
   }
@@ -123,10 +126,11 @@ export default function Workbench({ settings, ws, patchWs, onExpandSidebar, onNe
 
   async function handleProblemFile(file) {
     if (!file) return
+    const sourceWsId = wsIdRef.current
     try {
       const r = await parseFile(file)
       if (r.type === 'text' && r.text) {
-        patchWs((prev) => ({
+        patchWsAt?.(sourceWsId, (prev) => ({
           title: file.name.replace(/\.(pdf|md|txt)$/i, ''),
           problemText: (prev?.problemText || '').trim() ? prev.problemText + '\n\n' + r.text : r.text,
         }))
@@ -138,6 +142,7 @@ export default function Workbench({ settings, ws, patchWs, onExpandSidebar, onNe
     if (!settings.apiKey) return setError('请先在「模型设置」配置 API Key')
     if (!problemText.trim()) return setError('请先输入题目内容')
     setBusy(true); setError(''); setStreamBuf('')
+    const sourceWsId = wsIdRef.current
     const summary = attachSummary(attachments)
     const user = summary ? `${problemText}\n\n【数据附件】\n${summary}\n\n请结合附件数据解读题目，并说明每个表格在题目中的角色。` : problemText
     let full = ''
@@ -149,7 +154,7 @@ export default function Workbench({ settings, ws, patchWs, onExpandSidebar, onNe
         { role: 'system', content: OVERVIEW_SYSTEM + kbContext },
         { role: 'user', content: user },
       ], { onDelta: (t) => { full = t; setStreamBuf(t) } })
-      patchWs({ overview: full })
+      patchWsAt?.(sourceWsId, { overview: full })
     } catch (e) { setError(e.message) }
     setStreamBuf('')
     setBusy(false)
@@ -178,6 +183,7 @@ export default function Workbench({ settings, ws, patchWs, onExpandSidebar, onNe
     const selectedText = floatSel.text
     if (selectedText.length > 500) return setError('选中内容过长（>500 字），请缩小选区')
     setBusy(true); setError(''); setBookmark('精读'); setRoleStream('')
+    const sourceWsId = wsIdRef.current
     try {
       let content = ''
       await streamChat(settings, [
@@ -189,7 +195,7 @@ export default function Workbench({ settings, ws, patchWs, onExpandSidebar, onNe
       const record = parsed && parsed.role
         ? { ...parsed, raw: content, time: Date.now(), selected: selectedText }
         : { raw: content, fallback: true, time: Date.now(), selected: selectedText }
-      setSelResults((prev) => [...prev, record])
+      if (sourceWsId === wsIdRef.current) setSelResults((prev) => [...prev, record])
     } catch (e) { setError(e.message) }
     setRoleStream('')
     setFloatSel(null); window.getSelection()?.removeAllRanges()

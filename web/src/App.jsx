@@ -1,17 +1,27 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Workbench from './pages/Workbench.jsx'
 import Modeling from './pages/Modeling.jsx'
 import Coding from './pages/Coding.jsx'
 import Settings from './pages/Settings.jsx'
 import { loadSettings, loadTheme, saveTheme, getCurrentWsId, setCurrentWsId } from './store.js'
 import { loadWorkspace, saveWorkspace, listWorkspaces, deleteWorkspace } from './api.js'
-import { IconBook, IconCompass, IconCode, IconGear, IconSun, IconMoon, IconEdit, IconTrash } from './components/Icons.jsx'
+import { IconBook, IconCompass, IconCode, IconGear, IconSun, IconMoon, IconEdit, IconTrash, IconLightbulb, IconChevronRight } from './components/Icons.jsx'
 
 const VIEWS = [
   { id: 'workbench', label: '读题工作台', icon: <IconBook size={18} /> },
   { id: 'modeling', label: '建模思路梳理', icon: <IconCompass size={18} /> },
   { id: 'coding', label: '编程工作台', icon: <IconCode size={18} /> },
 ]
+
+const GUIDE_KEY = 'mmg_onboarding_closed_v1'
+
+function loadGuideClosed() {
+  try {
+    return localStorage.getItem(GUIDE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
 
 /** 向后端保存工作区（keepalive 兼容 pagehide 强刷；请求体超 64KB 时降级同步 XHR，保证数据不静默丢失） */
 function persist(w) {
@@ -51,6 +61,7 @@ export default function App() {
   const [settings, setSettings] = useState(null)
   const [theme, setTheme] = useState(loadTheme)
   const [wsCollapsed, setWsCollapsed] = useState(() => !['settings'].includes(location.hash.replace('#/', '') || 'workbench'))
+  const [guideClosed, setGuideClosed] = useState(loadGuideClosed)
   const [wsId, setWsId] = useState(getCurrentWsId)
   const [ws, setWs] = useState(null) // 三台共享的工作区数据（题目/附件/拆解/代码）
   const [wsList, setWsList] = useState([]) // 工作区列表（侧栏切换/删除用）
@@ -81,6 +92,11 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', theme)
     saveTheme(theme)
   }, [theme])
+  useEffect(() => {
+    try {
+      localStorage.setItem(GUIDE_KEY, guideClosed ? '1' : '0')
+    } catch { /* ignore */ }
+  }, [guideClosed])
 
   // hash 路由
   useEffect(() => {
@@ -178,6 +194,12 @@ export default function App() {
     })
   }
 
+  /** 仅当写回时工作区仍是发起时的那个 id，才应用 patch。 */
+  function patchWsAt(sourceWsId, patch) {
+    if (sourceWsId && sourceWsId !== wsIdRef.current) return
+    patchWs(patch)
+  }
+
   /** 新建空白工作区 */
   function newWorkspace() {
     saveWorkspace({ title: '未命名题目' }).then((r) => {
@@ -243,6 +265,72 @@ export default function App() {
     setWs(null) // 清空当前 → wsId effect 检测到 id 变化后从后端加载
   }
 
+  const onboarding = useMemo(() => {
+    const hasKey = !!settings?.apiKey?.trim()
+    const hasProblem = !!ws?.problemText?.trim() || (ws?.attachments || []).length > 0
+    const hasBreakdown = (ws?.breakdown || []).length > 0
+    const hasCode = !!ws?.code?.trim()
+    const steps = [
+      {
+        id: 'settings',
+        no: '1',
+        label: '先配模型',
+        hint: hasKey ? '已配置' : '没有 Key，后面都跑不起来',
+        done: hasKey,
+      },
+      {
+        id: 'workbench',
+        no: '2',
+        label: '放入题目',
+        hint: hasProblem ? '已有题目或附件' : '粘贴题目或上传文件',
+        done: hasProblem,
+      },
+      {
+        id: 'modeling',
+        no: '3',
+        label: '拆解思路',
+        hint: hasBreakdown ? '已有拆解块' : '把题目拆成目标、约束、步骤',
+        done: hasBreakdown,
+      },
+      {
+        id: 'coding',
+        no: '4',
+        label: '生成代码',
+        hint: hasCode ? '已有代码' : '从拆解块生成并运行',
+        done: hasCode,
+      },
+    ]
+    const phase = !hasKey ? 'settings' : !hasProblem ? 'workbench' : !hasBreakdown ? 'modeling' : !hasCode ? 'coding' : 'done'
+    const copy = {
+      settings: {
+        title: '先把模型接上',
+        body: '这个产品的第一步不是聊天，是先把你的 API Key 配好。不配好，后面的读题、梳理、编程都不会真正跑起来。',
+        action: '去模型设置',
+      },
+      workbench: {
+        title: '先从题目开始',
+        body: '把题干和附件放进读题工作台，先让 AI 告诉你这题在问什么，再往下走。',
+        action: '去读题工作台',
+      },
+      modeling: {
+        title: '下一步是拆思路',
+        body: '读懂题以后，把问题拆成几个可执行块。这里不是复述题目，是把建模路径理顺。',
+        action: '去建模思路梳理',
+      },
+      coding: {
+        title: '最后生成代码',
+        body: '把拆解块带到编程台，先生成，再运行，再看结果和调参。',
+        action: '去编程工作台',
+      },
+      done: {
+        title: '流程已经接上了',
+        body: '你现在可以继续细化模型、换工作区，或者回头再补读题和思路。',
+        action: '去编程工作台',
+      },
+    }
+    return { phase, steps, ...copy[phase] }
+  }, [settings, ws])
+
   if (!settings) {
     return <div className="app-shell"><div style={{ padding: 40, color: 'var(--muted)' }}>加载本地设置…</div></div>
   }
@@ -251,6 +339,7 @@ export default function App() {
     settings,
     ws,
     patchWs,
+    patchWsAt,
     onExpandSidebar: () => setWsCollapsed(false),
   }
 
@@ -289,6 +378,14 @@ export default function App() {
           </div>
         )}
         <div className="sb-foot">
+          <button
+            className="nav-item"
+            onClick={() => setGuideClosed(false)}
+            title="重新打开使用引导"
+          >
+            <span className="ic"><IconLightbulb size={18} /></span>
+            {!wsCollapsed && '使用引导'}
+          </button>
           <button className={`nav-item ${view === 'settings' ? 'active' : ''}`} onClick={() => go('settings')} title="模型设置">
             <span className="ic"><IconGear size={18} /></span>
             {!wsCollapsed && '模型设置'}
@@ -305,6 +402,40 @@ export default function App() {
       </aside>
 
       <main className="content" style={{ minWidth: 0, overflow: 'hidden' }}>
+        {!guideClosed && (
+          <div className="onboard-strip">
+            <div className="onboard-main">
+              <div className="onboard-title">
+                <IconLightbulb size={14} />
+                <span>{onboarding.title}</span>
+              </div>
+              <div className="onboard-body">{onboarding.body}</div>
+            </div>
+            <div className="onboard-track" aria-label="建模流程">
+              {onboarding.steps.map((step) => (
+                <button
+                  type="button"
+                  key={step.id}
+                  className={`onboard-step ${step.done ? 'done' : step.id === onboarding.phase ? 'active' : ''}`}
+                  onClick={() => go(step.id)}
+                  aria-current={step.id === onboarding.phase ? 'step' : undefined}
+                >
+                  <span className="onboard-step-no">{step.no}</span>
+                  <span className="onboard-step-copy">
+                    <b>{step.label}</b>
+                    <span>{step.hint}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+            <div className="onboard-actions">
+              <button className="btn btn-primary btn-sm" onClick={() => go(onboarding.phase === 'done' ? 'coding' : onboarding.phase)}>
+                {onboarding.action} <IconChevronRight size={13} />
+              </button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setGuideClosed(true)}>我先自己试试</button>
+            </div>
+          </div>
+        )}
         {view === 'workbench' && <Workbench {...pageProps} onNewWorkspace={newWorkspace} />}
         {view === 'modeling' && <Modeling {...pageProps} />}
         {view === 'coding' && <Coding {...pageProps} />}

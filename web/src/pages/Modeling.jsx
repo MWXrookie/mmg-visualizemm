@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { marked } from 'marked'
 import { streamChat, chat, attachSummary, retrieveKnowledge, formatKnowledgeContext } from '../api.js'
-import { KnowledgeCard, findConcepts, ALL_CARD_IDS } from './Cards.jsx'
+import { KnowledgeCard, findConcepts, ALL_CARD_IDS, CARD_BY_ID } from './Cards.jsx'
 import MD, { sanitize } from '../components/MD.jsx'
 import AttachmentList from '../components/AttachmentList.jsx'
 import ResizeHandle from '../components/ResizeHandle.jsx'
@@ -61,10 +61,41 @@ function loadPanelW() {
   return '36%'
 }
 
+function normalizeStep(step) {
+  return {
+    label: typeof step?.label === 'string' ? step.label : '',
+    desc: typeof step?.desc === 'string' ? step.desc : '',
+  }
+}
+
+function normalizeBlock(block) {
+  return {
+    id: typeof block?.id === 'string' && block.id ? block.id : nid(),
+    title: typeof block?.title === 'string' ? block.title : '未命名拆解块',
+    quote: typeof block?.quote === 'string' ? block.quote : '',
+    body: typeof block?.body === 'string' ? block.body : '',
+    steps: Array.isArray(block?.steps) ? block.steps.map(normalizeStep) : [],
+    refs: Array.isArray(block?.refs) ? block.refs.filter((r) => typeof r === 'string') : [],
+  }
+}
+
+function normalizeBlocks(raw) {
+  return Array.isArray(raw) ? raw.map(normalizeBlock) : []
+}
+
+function normalizeBlockPatch(patch) {
+  return {
+    title: typeof patch?.title === 'string' ? patch.title : '',
+    quote: typeof patch?.quote === 'string' ? patch.quote : '',
+    body: typeof patch?.body === 'string' ? patch.body : '',
+    steps: Array.isArray(patch?.steps) ? patch.steps.map(normalizeStep) : [],
+  }
+}
+
 let uid = 0
 const nid = () => `b${Date.now()}-${uid++}`
 
-export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
+export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSidebar }) {
   const problemText = ws?.problemText || ''
   const attachments = ws?.attachments || []
   const [blocks, setBlocks] = useState([])
@@ -87,22 +118,31 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
 
   const wsIdNow = ws?.id
 
-  // 工作区切换 → 载入拆解块
+  // 工作区切换 / 首次载入 → 载入拆解块；等 ws 真正到位后再同步，避免空壳覆盖已存在数据
   useEffect(() => {
-    const raw = ws?.breakdown
-    const b = Array.isArray(raw) ? raw : []
+    if (!wsIdNow || !ws || ws.id !== wsIdNow) return
+    const b = normalizeBlocks(ws.breakdown)
     setBlocks(b)
     setOpenSet(new Set(b.map((blk) => blk.id)))
     setPreview(null); setMsgs([]); setError(''); setStreaming('')
-  }, [wsIdNow]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [wsIdNow, ws?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // 拆解块改动 → 自动保存到共享工作区（防抖）
   useEffect(() => {
     if (!wsIdNow) return
     clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => patchWs({ breakdown: blocks }), 600)
+    const sourceWsId = wsIdNow
+    saveTimer.current = setTimeout(() => {
+      patchWsAt?.(sourceWsId, {
+        breakdown: blocks.map((b) => ({
+          ...normalizeBlock(b),
+          steps: Array.isArray(b.steps) ? b.steps.map(normalizeStep) : [],
+          refs: Array.isArray(b.refs) ? b.refs.filter((r) => typeof r === 'string') : [],
+        })),
+      })
+    }, 600)
     return () => clearTimeout(saveTimer.current)
-  }, [wsIdNow, blocks]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [wsIdNow, blocks, patchWsAt]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight
@@ -133,12 +173,12 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
 
   /** 更新某个步骤的思路说明（有序列表每步独立填写） */
   function updateStep(blockId, si, desc) {
-    setBlocks((prev) => prev.map((blk) => (blk.id === blockId ? { ...blk, steps: (blk.steps || []).map((s, i) => (i === si ? { ...s, desc } : s)) } : blk)))
+    setBlocks((prev) => prev.map((blk) => (blk.id === blockId ? { ...blk, steps: (blk.steps || []).map((s, i) => (i === si ? { ...normalizeStep(s), desc } : normalizeStep(s))) } : blk)))
   }
 
   function startEdit(b) {
     setEditingId(b.id)
-    setDraft({ title: b.title, quote: b.quote, body: b.body || '', stepsText: b.steps.map((s) => `${s.label}：${s.desc}`).join('\n') })
+    setDraft({ title: b.title, quote: b.quote, body: b.body || '', stepsText: (b.steps || []).map((s) => `${s.label}：${s.desc}`).join('\n') })
   }
 
   function commitEdit() {
@@ -191,7 +231,8 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
         content = r.content || ''
       }
       const parsed = extractJson(content)
-      if (parsed && typeof parsed.blockId === 'number' && parsed.patch) {
+      const patch = parsed?.patch && typeof parsed.patch === 'object' ? normalizeBlockPatch(parsed.patch) : null
+      if (parsed && Number.isInteger(parsed.blockId) && patch) {
         const isNew = parsed.blockId === blocks.length + 1 // AI 按约定：新建块 blockId = 总数 + 1
         const idx = blocks.findIndex((_, i) => i + 1 === parsed.blockId)
         if (idx < 0 && !isNew) {
@@ -201,11 +242,11 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
             text: `AI 指向的拆解块 ${parsed.blockId} 不存在（当前共 ${blocks.length} 块），请重试或把指令写得更明确（如「把拆解块 2 改为…」）。`,
           }])
         } else {
-          setPreview({ blockId: parsed.blockId, patch: parsed.patch })
+          setPreview({ blockId: parsed.blockId, patch })
           // 友好提示而非 JSON 原文：具体修改在拆解块的"修改预览"卡片里展示
           setMsgs((prev) => [...prev, {
             role: 'ai', time: now(),
-            text: `✅ 已生成${isNew ? '新拆解块' : `拆解块 ${parsed.blockId}`}的修改预览（标题：${parsed.patch.title || '（未命名）'}），请在左侧检查后点击「确认写入」。`,
+            text: `✅ 已生成${isNew ? '新拆解块' : `拆解块 ${parsed.blockId}`}的修改预览（标题：${patch.title || '（未命名）'}），请在左侧检查后点击「确认写入」。`,
             preview: true,
           }])
         }
@@ -244,25 +285,26 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
     const idx = preview.blockId - 1
     const isNew = idx === blocks.length // 新建块：blockId = 总数 + 1 → idx = 总数
     const newId = isNew ? nid() : null
+    const patch = normalizeBlockPatch(preview.patch)
     setBlocks((prev) => {
       if (isNew) {
         return [...prev, {
           id: newId,
-          title: preview.patch.title || `拆解块 ${prev.length + 1}（未命名）`,
-          quote: preview.patch.quote || '',
-          body: preview.patch.body ?? '',
-          steps: preview.patch.steps || [],
+          title: patch.title || `拆解块 ${prev.length + 1}（未命名）`,
+          quote: patch.quote || '',
+          body: patch.body || '',
+          steps: patch.steps,
           refs: [],
         }]
       }
-      return prev.map((b, i) => (i === idx ? { ...b, title: preview.patch.title || b.title, quote: preview.patch.quote || b.quote, body: preview.patch.body ?? b.body, steps: preview.patch.steps || [] } : b))
+      return prev.map((b, i) => (i === idx ? { ...b, title: patch.title || b.title, quote: patch.quote || b.quote, body: patch.body || b.body, steps: patch.steps } : b))
     })
     if (newId) setOpenSet((prev) => new Set([...prev, newId]))
     // 若正在编辑该块，同步更新草稿，避免用户保存时用旧草稿覆盖 AI 写入的内容
     // 注意：editingId 是块 id（字符串），preview.blockId 是序号（数字），需先映射到块再比较
     const editingIdx = blocks.findIndex((b) => b.id === editingId)
     if (editingIdx === idx) {
-      setDraft((d) => (d ? { ...d, title: preview.patch.title || d.title, quote: preview.patch.quote || d.quote, body: preview.patch.body ?? d.body, stepsText: (preview.patch.steps || []).map((s) => `${s.label}：${s.desc}`).join('\n') } : d))
+      setDraft((d) => (d ? { ...d, title: patch.title || d.title, quote: patch.quote || d.quote, body: patch.body || d.body, stepsText: patch.steps.map((s) => `${s.label}：${s.desc}`).join('\n') } : d))
     }
     setPreview(null)
   }
@@ -339,6 +381,13 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
   }
 
   const doneTables = attachments.filter((a) => a.status === 'done' && a.type === 'table')
+  const conceptHits = ALL_CARD_IDS.filter((id) => {
+    const card = CARD_BY_ID.get(id)
+    if (!kcQuery.trim()) return true
+    if (!card) return false
+    const q = kcQuery.trim().toLowerCase()
+    return [card.title, card.tag, card.concept, card.note, card.try, card.src].filter(Boolean).some((v) => String(v).toLowerCase().includes(q))
+  })
 
   return (
     <div className="ws mdl" style={{ '--panel-w': panelW }}>
@@ -523,11 +572,11 @@ export default function Modeling({ settings, ws, patchWs, onExpandSidebar }) {
                 <input value={kcQuery} onChange={(e) => setKcQuery(e.target.value)} placeholder="搜索知识卡片…" />
               </div>
               <div className="kp-list">
-                {ALL_CARD_IDS.map((id) => (
+                {conceptHits.map((id) => (
                   <KnowledgeCard key={id} cardId={id} defaultOpen={false} />
                 ))}
               </div>
-              <div className={`kp-empty ${kcQuery ? 'show' : ''}`}>没有匹配的知识卡片。</div>
+              <div className={`kp-empty ${kcQuery && conceptHits.length === 0 ? 'show' : ''}`}>没有匹配的知识卡片。</div>
             </div>
           </>
         )}
