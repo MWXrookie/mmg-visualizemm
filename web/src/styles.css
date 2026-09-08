@@ -237,6 +237,33 @@ body.resizing * { cursor: col-resize !important; }
 
 .problem-text { font-size: 16px; line-height: 1.8; padding: 18px 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); white-space: pre-wrap; user-select: text; }
 .problem-text mark { background: rgba(37, 99, 235, .18); border-radius: 3px; padding: 0 1px; }
+.problem-shell { display: flex; flex-direction: column; gap: 8px; }
+.problem-shell.is-pdf { max-width: 1020px; }
+.problem-shell.is-pdf .problem-source-badge { position: sticky; top: 0; z-index: 5; width: fit-content; backdrop-filter: blur(10px); }
+.problem-shell.is-pdf .problem-text { display: none; }
+.pdf-problem-body { display: flex; flex-direction: column; gap: 16px; max-width: 100%; }
+.pdf-page-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
+.pdf-page-head { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: color-mix(in srgb, var(--primary) 7%, var(--surface)); border-bottom: 1px solid var(--border); color: var(--primary-strong); font-size: 12px; font-weight: 700; letter-spacing: 0; }
+.pdf-page-meta { font-size: 11px; font-weight: 600; color: var(--muted); background: color-mix(in srgb, var(--surface) 92%, var(--primary)); border: 1px solid color-mix(in srgb, var(--primary) 14%, var(--border)); border-radius: 999px; padding: 2px 8px; }
+.pdf-page-body { display: flex; flex-direction: column; gap: 12px; padding: 16px 18px 18px; background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 98%, var(--bg)), var(--surface)); }
+.pdf-page-hero { display: flex; flex-direction: column; gap: 8px; padding: 6px 0 10px; border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent); }
+.pdf-page-title { margin: 0; font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 20px; line-height: 1.35; font-weight: 800; letter-spacing: 0; color: var(--fg); }
+.pdf-page-subtitle { font-size: 14px; line-height: 1.7; color: var(--muted); }
+.pdf-page-lead { font-size: 14px; line-height: 1.8; color: var(--fg); }
+.pdf-page-content { display: flex; flex-direction: column; gap: 10px; }
+.pdf-section-line { display: flex; }
+.pdf-section-pill { display: inline-flex; align-items: center; min-height: 28px; padding: 4px 10px; border-radius: 999px; background: color-mix(in srgb, var(--primary) 10%, var(--surface)); color: var(--primary-strong); border: 1px solid color-mix(in srgb, var(--primary) 20%, var(--border)); font-size: 12px; font-weight: 700; }
+.pdf-lead { font-size: 14.5px; line-height: 1.9; color: var(--fg); background: color-mix(in srgb, var(--primary) 4%, var(--surface)); border-left: 3px solid color-mix(in srgb, var(--primary) 48%, var(--accent)); border-radius: 8px; padding: 10px 12px; }
+.pdf-body-block { font-size: 15px; line-height: 1.88; color: var(--fg); font-family: "Noto Serif SC", "Songti SC", "Source Han Serif SC", serif; letter-spacing: 0; }
+.pdf-body-block .markdown-body { font-family: inherit; }
+.pdf-body-block .markdown-body > :first-child { margin-top: 0; }
+.pdf-body-block .markdown-body h1, .pdf-body-block .markdown-body h2, .pdf-body-block .markdown-body h3, .pdf-body-block .markdown-body h4 { font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif; letter-spacing: 0; }
+.pdf-body-block .markdown-body h1 { font-size: 18px; }
+.pdf-body-block .markdown-body h2 { font-size: 16px; }
+.pdf-body-block .markdown-body h3 { font-size: 15px; }
+.pdf-body-block .markdown-body p { margin-bottom: 9px; }
+.pdf-body-block .markdown-body ul, .pdf-body-block .markdown-body ol { padding-left: 22px; margin: 8px 0 10px; }
+.pdf-empty { padding: 16px 14px; border: 1px dashed var(--border); border-radius: 10px; color: var(--muted); font-size: 13px; background: var(--surface-2); }
 
 /* 仅有附件、无题干时的引导条 */
 .slim-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border: 1px dashed var(--border); border-radius: var(--radius-md); background: var(--surface); font-size: 13px; color: var(--muted); margin-bottom: 14px; }
@@ -313,11 +340,18 @@ body.resizing * { cursor: col-resize !important; }
 /* 知识卡片（内嵌） */
 .concept-card { border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius-sm); background: var(--surface); margin: 8px 0; overflow: hidden; }
 .concept-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; font-size: 13px; }
+.concept-head-main { min-width: 0; display: flex; flex-direction: column; gap: 1px; flex: 1; }
+.concept-head-main b { font-size: 13px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .concept-head:hover { background: var(--surface-2); }
 .concept-badge { font-size: 12px; font-weight: 600; color: var(--accent); background: rgba(234, 88, 12, .1); border-radius: 999px; padding: 2px 8px; }
 .concept-toggle { margin-left: auto; color: var(--muted); font-size: 12px; }
 .concept-body { padding: 4px 12px 12px; border-top: 1px solid var(--border); }
 .concept-body .kc-concept { margin: 10px 0; font-size: 14px; color: var(--muted); }
+.concept-card-summary { border-left-color: color-mix(in srgb, var(--primary) 62%, var(--accent)); }
+.concept-head-summary { padding: 10px 12px 8px; align-items: flex-start; }
+.concept-summary { padding: 0 12px 10px; }
+.kc-summary { margin: 8px 0 0; font-size: 12.5px; line-height: 1.7; color: var(--fg); background: color-mix(in srgb, var(--primary) 5%, var(--surface)); border: 1px solid color-mix(in srgb, var(--primary) 16%, var(--border)); border-radius: var(--radius-sm); padding: 8px 10px; }
+.concept-body-summary { background: color-mix(in srgb, var(--surface) 96%, var(--primary)); }
 .kc-note { margin: 8px 0; font-size: 13px; color: var(--fg); background: rgba(59, 130, 246, .08); border-left: 3px solid var(--primary); border-radius: var(--radius-sm); padding: 8px 10px; line-height: 1.7; }
 .kc-note b { color: var(--primary); }
 /* 知识卡片演示区（demo 组件通用样式） */
@@ -592,6 +626,8 @@ pre.code { white-space: pre; font-size: 13.5px; line-height: 1.7; font-family: v
 .ctx-chev { margin-left: auto; color: var(--muted); font-size: 12px; font-weight: 500; }
 .ctx-body { border-top: 1px solid var(--border); padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
 .ctx-body .problem-text { padding: 12px 14px; font-size: 14.5px; }
+.ctx-body .problem-shell.is-pdf .problem-text { max-width: 100%; }
+.ctx-body .pdf-problem-body { max-width: 100%; }
 .ctx-body .table-card { margin-top: 0; }
 
 /* 附件列表（表格/文本/解析中/失败全展示） */
@@ -694,6 +730,8 @@ pre.code { white-space: pre; font-size: 13.5px; line-height: 1.7; font-family: v
 .mdl .kp-list { display: flex; flex-direction: column; gap: 10px; }
 .mdl .kp-empty { display: none; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--muted); padding: 30px 0; text-align: center; font-size: 12.5px; }
 .mdl .kp-empty.show { display: flex; }
+.mdl .concept-recall-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.mdl .concept-recall-list .concept-card { margin: 0; }
 .mdl .panel-body { display: none; flex-direction: column; flex: 1; min-height: 0; }
 .mdl .panel-body.active { display: flex; }
 .mdl .bm { position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 14px 4px; margin: 0 6px; border-radius: 10px; color: var(--muted); font-size: 11px; letter-spacing: .03em; border: none; background: none; cursor: pointer; transition: color .18s, background .18s; }

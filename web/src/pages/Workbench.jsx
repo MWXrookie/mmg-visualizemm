@@ -7,6 +7,8 @@ import AttachmentList from '../components/AttachmentList.jsx'
 import ResizeHandle from '../components/ResizeHandle.jsx'
 import { IconSparkles, IconFile, IconTable, IconBookmark, IconBook, IconClock, IconMenu, IconPlus, IconLightbulb } from '../components/Icons.jsx'
 import { EXPERT_CORE, OVERVIEW_EXPERT, ROLE_GUIDE_EXPERT } from '../lib/modelingExpert.js'
+import { normalizeProblemText } from '../lib/problemText.js'
+import ProblemTextView from '../components/ProblemTextView.jsx'
 
 const OVERVIEW_SYSTEM =
   '你是数学建模辅导助手。用户会给你一道数学建模题目（可能含数据说明），请做「整体解读」，输出四部分：\n' +
@@ -71,6 +73,7 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
 
   const title = ws?.title || ''
   const problemText = ws?.problemText || ''
+  const problemPages = Array.isArray(ws?.problemPages) ? ws.problemPages : []
   const attachments = ws?.attachments || []
   const overview = busy && streamBuf ? streamBuf : ws?.overview || ''
   const hasContent = !!problemText.trim()
@@ -130,9 +133,13 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
     try {
       const r = await parseFile(file)
       if (r.type === 'text' && r.text) {
+        const sourceKind = r.sourceKind || (file.name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'text')
+        const normalized = normalizeProblemText(r.text, sourceKind)
         patchWsAt?.(sourceWsId, (prev) => ({
           title: file.name.replace(/\.(pdf|md|txt)$/i, ''),
-          problemText: (prev?.problemText || '').trim() ? prev.problemText + '\n\n' + r.text : r.text,
+          problemText: (prev?.problemText || '').trim() ? prev.problemText + '\n\n' + normalized : normalized,
+          problemSourceKind: sourceKind,
+          problemPages: sourceKind === 'pdf' && Array.isArray(r.pages) ? r.pages : (prev?.problemPages || []),
         }))
       } else setError(`「${file.name}」不是可用的题干文件`)
     } catch (e) { setError(e.message) }
@@ -280,7 +287,7 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
                   </div>
                 </>
               )}
-              {hasContent && <div className="problem-text" dangerouslySetInnerHTML={{ __html: sanitize(marked.parse(problemText)) }} />}
+              {hasContent && <ProblemTextView text={problemText} sourceKind={ws?.problemSourceKind || ''} pages={problemPages} />}
               <AttachmentList attachments={attachments} onRemove={(id) => patchWs((prev) => ({ attachments: (prev?.attachments || []).filter((a) => a.id !== id) }))} />
             </>
           )}

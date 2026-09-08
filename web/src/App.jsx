@@ -30,6 +30,8 @@ function persist(w) {
     id: w.id,
     title: w.title || '',
     problemText: w.problemText || '',
+    problemSourceKind: w.problemSourceKind || '',
+    problemPages: w.problemPages || [],
     attachments: w.attachments || [],
     breakdown: w.breakdown || [],
     overview: w.overview || '',
@@ -124,7 +126,7 @@ export default function App() {
     if (wsRef.current?.id === wsId) return
     const seq = ++loadSeqRef.current
     loadWorkspace(wsId)
-      .then((w) => {
+    .then((w) => {
         if (seq !== loadSeqRef.current) return // 过期响应：已有更新的切换请求
         if (!wsRef.current?.id || wsRef.current.id !== wsId) setWs(w)
       })
@@ -402,7 +404,7 @@ export default function App() {
       </aside>
 
       <main className="content" style={{ minWidth: 0, overflow: 'hidden' }}>
-        {!guideClosed && (
+        {!guideClosed && view !== 'modeling' && (
           <div className="onboard-strip">
             <div className="onboard-main">
               <div className="onboard-title">

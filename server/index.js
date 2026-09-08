@@ -29,8 +29,16 @@ async function parsePdfText(buffer) {
   const parser = new PDFParse({ data: buffer })
   try {
     await parser.load()
-    const result = await parser.getText()
-    return (result && result.text) || ''
+    const info = await parser.getInfo({ parsePageInfo: true }).catch(() => null)
+    const result = await parser.getText({ lineEnforce: true, pageJoiner: '\n\n-- page_number of total_number --\n\n' })
+    return {
+      text: (result && result.text) || '',
+      pages: Array.isArray(result?.pages)
+        ? result.pages.map((p) => ({ num: p.num, text: String(p.text || '').trim() }))
+        : [],
+      total: Number(result?.total || info?.total || 0),
+      info: info?.info || null,
+    }
   } finally {
     await parser.destroy().catch(() => {})
   }
@@ -450,13 +458,22 @@ app.post('/api/parse', async (req, res) => {
       return res.json({ ok: true, ...r, name })
     }
     if (ext === '.pdf') {
-      const text = (await parsePdfText(buf)).trim()
+      const pdf = await parsePdfText(buf)
+      const text = String(pdf.text || '').trim()
       if (!text) return res.status(400).json({ ok: false, message: 'PDF 未能提取到文本（可能是扫描件，暂不支持 OCR）' })
-      return res.json({ ok: true, type: 'text', text: text.slice(0, 20000), name })
+      return res.json({
+        ok: true,
+        type: 'text',
+        text: text.slice(0, 20000),
+        name,
+        sourceKind: 'pdf',
+        pages: Array.isArray(pdf.pages) ? pdf.pages.slice(0, 40) : [],
+        totalPages: pdf.total || (Array.isArray(pdf.pages) ? pdf.pages.length : 0),
+      })
     }
     if (ext === '.txt' || ext === '.md') {
       const text = buf.toString('utf-8').trim()
-      return res.json({ ok: true, type: 'text', text: text.slice(0, 20000), name })
+      return res.json({ ok: true, type: 'text', text: text.slice(0, 20000), name, sourceKind: 'text' })
     }
     return res.status(400).json({ ok: false, message: `暂不支持 ${ext} 格式（支持 xlsx/csv/pdf/txt）` })
   } catch (e) {
@@ -476,6 +493,8 @@ db.exec(`
     id TEXT PRIMARY KEY,
     title TEXT DEFAULT '',
     problem_text TEXT DEFAULT '',
+    problem_source_kind TEXT DEFAULT '',
+    problem_pages TEXT DEFAULT '[]',
     attachments TEXT DEFAULT '[]',
     breakdown TEXT DEFAULT '[]',
     code TEXT DEFAULT '',
@@ -487,6 +506,12 @@ db.exec(`
 const wsCols = db.prepare(`PRAGMA table_info(workspaces)`).all().map((c) => c.name)
 if (!wsCols.includes('overview')) {
   db.exec(`ALTER TABLE workspaces ADD COLUMN overview TEXT DEFAULT ''`)
+}
+if (!wsCols.includes('problem_source_kind')) {
+  db.exec(`ALTER TABLE workspaces ADD COLUMN problem_source_kind TEXT DEFAULT ''`)
+}
+if (!wsCols.includes('problem_pages')) {
+  db.exec(`ALTER TABLE workspaces ADD COLUMN problem_pages TEXT DEFAULT '[]'`)
 }
 
 function parseJsonField(s) {
@@ -514,6 +539,10 @@ app.post('/api/workspaces', (req, res) => {
     const merged = {
       title: has('title') ? String(b.title ?? '') : (existing?.title ?? ''),
       problem_text: has('problemText') ? String(b.problemText ?? '') : (existing?.problem_text ?? ''),
+      problem_source_kind: has('problemSourceKind') ? String(b.problemSourceKind ?? '') : (existing?.problem_source_kind ?? ''),
+      problem_pages: has('problemPages')
+        ? JSON.stringify(Array.isArray(b.problemPages) ? b.problemPages : [])
+        : (existing?.problem_pages ?? '[]'),
       attachments: has('attachments') ? JSON.stringify(Array.isArray(b.attachments) ? b.attachments : []) : (existing?.attachments ?? '[]'),
       breakdown: has('breakdown')
         ? (typeof b.breakdown === 'string' ? b.breakdown : JSON.stringify(Array.isArray(b.breakdown) ? b.breakdown : []))
@@ -523,13 +552,13 @@ app.post('/api/workspaces', (req, res) => {
     }
     const createdAt = existing ? existing.created_at : now
     db.prepare(`
-      INSERT INTO workspaces (id, title, problem_text, attachments, breakdown, code, overview, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO workspaces (id, title, problem_text, problem_source_kind, problem_pages, attachments, breakdown, code, overview, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
-        title=excluded.title, problem_text=excluded.problem_text,
+        title=excluded.title, problem_text=excluded.problem_text, problem_source_kind=excluded.problem_source_kind, problem_pages=excluded.problem_pages,
         attachments=excluded.attachments, breakdown=excluded.breakdown,
         code=excluded.code, overview=excluded.overview, updated_at=excluded.updated_at
-    `).run(id, merged.title, merged.problem_text, merged.attachments, merged.breakdown, merged.code, merged.overview, createdAt, now)
+    `).run(id, merged.title, merged.problem_text, merged.problem_source_kind, merged.problem_pages, merged.attachments, merged.breakdown, merged.code, merged.overview, createdAt, now)
     res.json({ ok: true, id })
   } catch (e) {
     res.status(500).json({ ok: false, message: `保存失败：${e.message}` })
@@ -547,6 +576,8 @@ app.get('/api/workspaces/:id', (req, res) => {
         id: row.id,
         title: row.title,
         problemText: row.problem_text,
+        problemSourceKind: row.problem_source_kind || '',
+        problemPages: parseJsonField(row.problem_pages),
         attachments: parseJsonField(row.attachments),
         breakdown: parseJsonField(row.breakdown),
         code: row.code,

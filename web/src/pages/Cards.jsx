@@ -3158,7 +3158,7 @@ export const CARD_BY_ID = new Map(CARDS.map((c) => [c.id, c]))
  * 内嵌知识卡片（读题附属）：AI 输出提到建模概念时，就地出现在内容下方。
  * 折叠态只显示标题行；点击展开概念 + 交互演示 + 试一试。
  */
-export function KnowledgeCard({ cardId, defaultOpen = false }) {
+export function KnowledgeCard({ cardId, defaultOpen = false, variant = 'full', label }) {
   const card = CARDS.find((c) => c.id === cardId) || CARDS[0]
   const [open, setOpen] = useState(defaultOpen)
   const [favs, setFavs] = useState(loadFavorites)
@@ -3169,6 +3169,10 @@ export function KnowledgeCard({ cardId, defaultOpen = false }) {
     const next = isFav ? favs.filter((x) => x !== card.id) : [...favs, card.id]
     setFavs(next)
     saveFavorites(next)
+  }
+
+  if (variant === 'summary') {
+    return <KnowledgeCardSummary card={card} open={open} setOpen={setOpen} isFav={isFav} toggleFav={toggleFav} label={label} />
   }
 
   return (
@@ -3224,6 +3228,77 @@ export function KnowledgeCard({ cardId, defaultOpen = false }) {
       )}
     </div>
   )
+}
+
+function KnowledgeCardSummary({ card, open, setOpen, isFav, toggleFav, label = '召回摘要' }) {
+  const summary = buildSummary(card)
+  return (
+    <div className={`concept-card concept-card-summary ${open ? 'open' : ''}`}>
+      <div
+        className="concept-head concept-head-summary"
+        onClick={() => setOpen(!open)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(!open) }
+        }}
+      >
+        <span className="concept-badge"><IconLightbulb size={13} /> {label}</span>
+        <div className="concept-head-main">
+          <b>{card.title}</b>
+          <span className="hint">{card.tag}</span>
+        </div>
+        <span className="concept-toggle">{open ? '收起 ▴' : '展开详情 ▾'}</span>
+        <button
+          className={`mini-btn ${isFav ? 'on' : ''}`}
+          onClick={toggleFav}
+          title={isFav ? '取消收藏' : '收藏'}
+          aria-pressed={isFav}
+        >
+          {isFav ? <IconStar size={14} filled /> : <IconStar size={14} />}
+        </button>
+      </div>
+      <div className="concept-summary">
+        <p className="kc-summary">{summary}</p>
+      </div>
+      {open && (
+        <div className="concept-body concept-body-summary">
+          <p className="kc-concept">{card.concept}</p>
+          {card.note && (
+            <div className="kc-note"><b>💡 小白批注：</b>{card.note}</div>
+          )}
+          {card.freq && (
+            <div className="kc-src">
+              <b style={{ color: card.freqLevel === 'high' ? '#15803d' : card.freqLevel === 'low' ? '#b45309' : '#2563eb' }}>
+                {card.freq}
+              </b>
+              {card.src && <> · 来源：{card.src}</>}
+            </div>
+          )}
+          {card.demo && (
+            <div className="kc-demo">
+              <card.demo />
+            </div>
+          )}
+          {card.try && (
+            <div className="kc-try">
+              <b>试一试：</b>
+              {card.try}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function buildSummary(card) {
+  const parts = []
+  if (card.note) parts.push(card.note)
+  else if (card.concept) parts.push(card.concept)
+  if (!parts.length && card.try) parts.push(card.try)
+  const text = parts.join(' ')
+  return text.length > 66 ? `${text.slice(0, 66)}…` : text
 }
 
 /** 概念词表（对话/解读内容自动触发内嵌卡片） */

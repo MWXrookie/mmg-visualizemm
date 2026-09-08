@@ -7,6 +7,7 @@ import AttachmentList from '../components/AttachmentList.jsx'
 import ResizeHandle from '../components/ResizeHandle.jsx'
 import { IconMenu, IconDownload, IconArrowLeft, IconFile, IconTable, IconSparkles, IconLayers, IconSearch, IconEdit, IconChevronRight, IconChevronDown, IconLink, IconClose, IconSend, IconClock } from '../components/Icons.jsx'
 import { EXPERT_CORE, SANITY_CHECK } from '../lib/modelingExpert.js'
+import ProblemTextView from '../components/ProblemTextView.jsx'
 
 const MODIFY_SYSTEM =
   '你是数学建模思路梳理助手，采用**苏格拉底式引导**：新手需要自己说出思路才能真正学会建模。用户在「建模思路梳理台」上工作，页面有一组拆解块，每块含：编号、标题、核心说明(quote)、Markdown 思路正文(body)、思路步骤 steps[{label,desc}]。\n' +
@@ -123,7 +124,7 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
     if (!wsIdNow || !ws || ws.id !== wsIdNow) return
     const b = normalizeBlocks(ws.breakdown)
     setBlocks(b)
-    setOpenSet(new Set(b.map((blk) => blk.id)))
+    setOpenSet(b.length ? new Set([b[0].id]) : new Set())
     setPreview(null); setMsgs([]); setError(''); setStreaming('')
   }, [wsIdNow, ws?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -422,7 +423,7 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
             {ctxOpen && (
               <div className="ctx-body">
                 {problemText ? (
-                  <div className="problem-text" dangerouslySetInnerHTML={{ __html: sanitize(marked.parse(problemText)) }} />
+                  <ProblemTextView text={problemText} sourceKind={ws?.problemSourceKind || ''} pages={Array.isArray(ws?.problemPages) ? ws.problemPages : []} />
                 ) : (
                   <div className="hint" style={{ padding: '8px 2px' }}>暂无题干，请先在读题工作台上传。</div>
                 )}
@@ -573,7 +574,7 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
               </div>
               <div className="kp-list">
                 {conceptHits.map((id) => (
-                  <KnowledgeCard key={id} cardId={id} defaultOpen={false} />
+                  <KnowledgeCard key={id} cardId={id} defaultOpen={false} variant="summary" label="快速摘要" />
                 ))}
               </div>
               <div className={`kp-empty ${kcQuery && conceptHits.length === 0 ? 'show' : ''}`}>没有匹配的知识卡片。</div>
@@ -607,26 +608,28 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
 
 /** AI 消息中命中建模概念时，就地内嵌知识卡片（联动） */
 function ConceptCards({ text }) {
-  const hits = findConcepts(text || '')
+  const hits = findConcepts(text || '').slice(0, 3)
   if (!hits.length) return null
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-      {hits.map((id) => <KnowledgeCard key={id} cardId={id} />)}
+    <div className="concept-recall-list">
+      {hits.map((id) => <KnowledgeCard key={id} cardId={id} variant="summary" label="召回摘要" />)}
     </div>
   )
 }
 
 function Block({ b, index, open, preview, editing, draft, setDraft, onToggle, onEdit, onCommitEdit, onCancelEdit, onRelate, onRemove, onApply, onCancelPreview, onAiBody, aiBusy, onUpdateStep }) {
-  // 步骤展开状态：默认全部展开（步骤+思路相结合），点击可收起；新增步骤自动展开
-  const [openSteps, setOpenSteps] = useState(() => new Set(b.steps.map((_, i) => i)))
+  // 步骤展开状态：默认只展开第一步，减少初始密度；新增步骤自动展开到新增加的那一步
+  const prevStepCount = useRef(b.steps.length)
+  const [openSteps, setOpenSteps] = useState(() => (b.steps.length > 0 ? new Set([0]) : new Set()))
   const [editStep, setEditStep] = useState(null) // 正在填写思路的步骤索引
   const [stepDraft, setStepDraft] = useState('') // 步骤思路草稿
   useEffect(() => {
     setOpenSteps((prev) => {
       const next = new Set(prev)
-      b.steps.forEach((_, i) => { if (!next.has(i)) next.add(i) })
+      for (let i = prevStepCount.current; i < b.steps.length; i++) next.add(i)
       return next
     })
+    prevStepCount.current = b.steps.length
   }, [b.steps.length]) // eslint-disable-line react-hooks/exhaustive-deps
   function toggleStep(i) {
     setOpenSteps((prev) => {
