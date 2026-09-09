@@ -208,6 +208,7 @@ function RegressionDemo() {
           <b>{noise.toFixed(1)}</b>
         </label>
       </div>
+      <div className="demo-note demo-definition"><b>这里的“噪声”：</b>指观测值围绕真实规律的随机波动，例如测量误差、个体差异或没有被模型纳入的因素。它不是图像里的颗粒噪声；噪声越大，散点离总体趋势越远，回归线越难稳定地看出规律。</div>
       <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
         {[0, 2, 4, 6, 8, 10].map((g) => (
           <line key={g} x1={sx(g)} y1={pad} x2={sx(g)} y2={H - pad} stroke="#f1f5f9" />
@@ -2433,8 +2434,14 @@ const CARDS = [
     id: 'linear-regression',
     title: '线性回归（多项式）',
     tag: '预测 / 拟合',
+    definition: '用函数关系刻画因变量随自变量变化的平均趋势，并用观测数据估计参数。',
     concept: '用一条（或多项式）曲线描述变量之间的关系，使曲线尽可能贴近数据点——是数模里最常用的"找规律"工具。',
     note: '就像给一堆散点"画一条最合适的线"：比如用身高预测体重，数据点越高越重，一条斜线就能大致描述这种关系。多项式就是让线能拐弯，拟合得更细。',
+    when: '连续型因变量、希望解释或预测变量关系时使用；也常作为复杂模型之前的基线模型。',
+    cautions: '先看散点图和残差图。遇到明显非线性、异方差、截断值或大量 0 值时，不要直接套简单线性回归。',
+    demoGuide: '多项式次数控制曲线复杂度，噪声控制散点偏离真实趋势的程度；次数越高越贴点，但越要警惕过拟合。',
+    sourceBrief: '多届 C/A 题用回归或多项式拟合做趋势刻画。',
+    aiContext: '交互演示中的“噪声”是观测值围绕真实规律的随机波动，例如测量误差、个体差异或未纳入模型的因素；它不是图像处理里的颗粒噪声。噪声越大，散点离总体趋势越远，回归线越难稳定地看出规律。',
     demo: RegressionDemo,
     try: '调高多项式次数，曲线更贴合数据了，但你想过"过拟合"的风险吗？',
     related: ['最小二乘', '过拟合'],
@@ -2459,8 +2466,13 @@ const CARDS = [
     id: 'linear-programming',
     title: '线性规划',
     tag: '优化 / 决策',
+    definition: '在一组线性约束下最大化或最小化线性目标函数。',
     concept: '在一组线性约束下，求目标函数的最大/最小值——资源分配、更新替换、运输调度等"怎么安排最优"的问题首选。',
     note: '典型场景：工厂生产两种产品，每种消耗不同原料，原料总量有限，问怎么排产量利润最大。约束=限制条件，目标函数=要最大化的利润。',
+    when: '资源分配、运输、排产、订购等问题，且目标和约束都能写成线性关系时使用。',
+    cautions: '先明确决策变量、目标函数和约束条件。若变量必须取整数、0/1 或存在非线性关系，需要改成整数规划或非线性规划。',
+    demoGuide: '目标等值线不断平移，最后接触可行域边界的位置就是候选最优解。',
+    sourceBrief: '2021 C 题用规划骨架做订购与转运方案。',
     demo: LinearProgrammingDemo,
     try: '拖动目标值滑块，观察等值线离开可行域的瞬间——为什么最优解总在顶点？',
     related: ['整数规划', '单纯形法'],
@@ -2524,8 +2536,13 @@ const CARDS = [
     id: 'topsis',
     title: 'TOPSIS 优劣解距离法',
     tag: '评价 / 排序',
+    definition: '把方案与理想最优解、最劣解的距离转成相对贴近度来排序。',
     concept: '先"脑补"一个所有指标都最好的理想方案、一个都最差的最劣方案，再看每个真实方案离理想多近、离最劣多远（相对贴近度），越近排名越靠前。评价排序高频方法，常与熵权法组合（2021 年 C 题一等奖论文主方法）。',
     note: '就像选手机：先想"完美手机"（什么都最好）和"最差手机"（什么都最差），每款真机都比一比——越像完美的越值得买，越像最差的越别买。',
+    when: '多指标评价、需要给候选方案排序，且指标方向和权重已经确定时使用。',
+    cautions: '结果对指标选择、标准化方式和权重敏感；贴近度只能表示相对排序，不能当成绝对分数。',
+    demoGuide: '移动理想点可以看到排序会随指标目标和权重设定变化，适合用来理解敏感性。',
+    sourceBrief: '2021 C 题常与熵权法组合评价供应商。',
     demo: TopsisDemo,
     try: '把理想点往角落拖，观察排序如何变化——贴近度排序对理想点位置敏感吗？',
     related: ['熵权法', '综合评价'],
@@ -2602,8 +2619,13 @@ const CARDS = [
     id: 'data-cleaning',
     title: '数据预处理',
     tag: '通用 / 第一课',
+    definition: '在建模前处理缺失、异常、量纲和指标方向，使数据能被模型可靠使用。',
     concept: '建模前必须做的三件事：填缺失（众数/热卡/均值）、剔异常（阈值/业务规则）、标准化（极大型/极小型归一化）——不做预处理，模型结果不可信。高频率：15 篇获奖论文全部以数据预处理开篇。',
     note: '数据就像没打扫的厨房：缺失=碗筷不见了（补上：填众数/平均值）、异常=发霉的菜（扔掉：超过阈值）、量纲不同=菜刀和砧板混着量（统一单位/归一化）。不打扫就做饭，菜是馊的。',
+    when: '任何真实附件数据进入统计分析、评价、预测或优化模型之前都要先做。',
+    cautions: '清洗规则必须能解释，不能为了结果好看随意删样本；标准化前要先确认每个指标的方向。',
+    demoGuide: '缺失填补、异常剔除和标准化会直接改变后续权重、回归结果或评价排序。',
+    sourceBrief: '多篇获奖论文都以数据预处理开篇。',
     demo: DataCleaningDemo,
     try: '为什么"供货量方差"这类极小型指标要反向归一化？金额列 999 为什么该剔除？',
     related: ['标准化', '缺失值'],
@@ -2628,8 +2650,13 @@ const CARDS = [
     id: 'hypothesis-test',
     title: '假设检验（卡方检验）',
     tag: '统计 / 显著性',
+    definition: '用样本数据判断某个差异或关系是否足以排除随机波动。',
     concept: '差异是"真的"还是"随机波动"？给结论一个概率背书：p<0.05 才说"显著"。卡方检验查分类变量关联、Wilcoxon 查配对差异、K-S 查分布拟合。中频率标准工具：2022 年 C 题用卡方+Wilcoxon，2021 年 C 题用 K-S 选分布，2023 年 C 题用 Shapiro-Wilk 查正态性。',
     note: '"p<0.05 才显著"的意思是：如果差异纯属瞎蒙，出现这种结果的概率不到 5%，那就信它是真的。卡方=看分类之间有没有关联；K-S=看数据符不符合某个分布；Wilcoxon=看配对前后有没有差异。',
+    when: '需要证明分组差异、变量关联、分布拟合或模型残差假设是否成立时使用。',
+    cautions: 'p<0.05 不等于效果很大；先检查检验前提，样本小或分布不满足时应换非参数检验。',
+    demoGuide: '格子里的观测频数越偏离“互相独立”的期望频数，p 值通常越小。',
+    sourceBrief: '2022 C 题、2021 C 题、2023 C 题均用显著性检验支撑结论。',
     demo: HypothesisTestDemo,
     try: '把"铅钡有风化"一格的数字改大，观察 p 值如何骤降——为什么格子差异越大越显著？',
     related: ['相关性分析', 'p值'],
@@ -3158,7 +3185,7 @@ export const CARD_BY_ID = new Map(CARDS.map((c) => [c.id, c]))
  * 内嵌知识卡片（读题附属）：AI 输出提到建模概念时，就地出现在内容下方。
  * 折叠态只显示标题行；点击展开概念 + 交互演示 + 试一试。
  */
-export function KnowledgeCard({ cardId, defaultOpen = false, variant = 'full', label }) {
+export function KnowledgeCard({ cardId, defaultOpen = false, variant = 'full', label, reason }) {
   const card = CARDS.find((c) => c.id === cardId) || CARDS[0]
   const [open, setOpen] = useState(defaultOpen)
   const [favs, setFavs] = useState(loadFavorites)
@@ -3172,7 +3199,11 @@ export function KnowledgeCard({ cardId, defaultOpen = false, variant = 'full', l
   }
 
   if (variant === 'summary') {
-    return <KnowledgeCardSummary card={card} open={open} setOpen={setOpen} isFav={isFav} toggleFav={toggleFav} label={label} />
+    return <KnowledgeCardSummary card={card} open={open} setOpen={setOpen} isFav={isFav} toggleFav={toggleFav} label={label} reason={reason} />
+  }
+
+  if (variant === 'study') {
+    return <KnowledgeCardStudy card={card} open={open} setOpen={setOpen} isFav={isFav} toggleFav={toggleFav} label={label} />
   }
 
   return (
@@ -3187,8 +3218,11 @@ export function KnowledgeCard({ cardId, defaultOpen = false, variant = 'full', l
         }}
       >
         <span className="concept-badge"><IconLightbulb size={13} /> 相关概念</span>
-        <b>{card.title}</b>
-        <span className="hint">{card.tag}</span>
+        <div className="concept-head-main">
+          <b>{card.title}</b>
+          <span className="hint">{card.tag}</span>
+        </div>
+        {card.freq && <span className={`kc-freq ${card.freqLevel || 'mid'}`}>{card.freq}</span>}
         <span className="concept-toggle">{open ? '收起 ▴' : '展开演示 ▾'}</span>
         <button
           className={`mini-btn ${isFav ? 'on' : ''}`}
@@ -3201,36 +3235,55 @@ export function KnowledgeCard({ cardId, defaultOpen = false, variant = 'full', l
       </div>
       {open && (
         <div className="concept-body">
-          <p className="kc-concept">{card.concept}</p>
-          {card.note && (
-            <div className="kc-note"><b>💡 小白批注：</b>{card.note}</div>
-          )}
-          {card.freq && (
-            <div className="kc-src">
-              <b style={{ color: card.freqLevel === 'high' ? '#15803d' : card.freqLevel === 'low' ? '#b45309' : '#2563eb' }}>
-                {card.freq}
-              </b>
-              {card.src && <> · 来源：{card.src}</>}
-            </div>
-          )}
-          {card.demo && (
-            <div className="kc-demo">
-              <card.demo />
-            </div>
-          )}
-          {card.try && (
-            <div className="kc-try">
-              <b>试一试：</b>
-              {card.try}
-            </div>
-          )}
+          <CardDetail card={card} showDemo showTry showSourceDetails />
         </div>
       )}
     </div>
   )
 }
 
-function KnowledgeCardSummary({ card, open, setOpen, isFav, toggleFav, label = '召回摘要' }) {
+function KnowledgeCardStudy({ card, open, setOpen, isFav, toggleFav, label = '快速摘要' }) {
+  const summary = buildSummary(card)
+  return (
+    <div className={`concept-card concept-card-study ${open ? 'open' : ''}`}>
+      <div
+        className="concept-head concept-head-summary"
+        onClick={() => setOpen(!open)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(!open) }
+        }}
+      >
+        <span className="concept-badge"><IconLightbulb size={13} /> {label}</span>
+        <div className="concept-head-main">
+          <b>{card.title}</b>
+          <span className="hint">{card.tag}</span>
+        </div>
+        {card.freq && <span className={`kc-freq ${card.freqLevel || 'mid'}`}>{card.freq}</span>}
+        <span className="concept-toggle">{open ? '收起 ▴' : '展开学习 ▾'}</span>
+        <button
+          className={`mini-btn ${isFav ? 'on' : ''}`}
+          onClick={toggleFav}
+          title={isFav ? '取消收藏' : '收藏'}
+          aria-pressed={isFav}
+        >
+          {isFav ? <IconStar size={14} filled /> : <IconStar size={14} />}
+        </button>
+      </div>
+      <div className="concept-summary">
+        <p className="kc-summary"><b>一句话定义：</b>{summary}</p>
+      </div>
+      {open && (
+        <div className="concept-body concept-body-study">
+          <CardDetail card={card} showDefinition={false} showDemo showTry showSourceDetails />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function KnowledgeCardSummary({ card, open, setOpen, isFav, toggleFav, label = '召回摘要', reason }) {
   const summary = buildSummary(card)
   return (
     <div className={`concept-card concept-card-summary ${open ? 'open' : ''}`}>
@@ -3248,6 +3301,8 @@ function KnowledgeCardSummary({ card, open, setOpen, isFav, toggleFav, label = '
           <b>{card.title}</b>
           <span className="hint">{card.tag}</span>
         </div>
+        {reason && <span className="concept-reason" title={`关联关键词：${reason}`}>匹配「{reason}」</span>}
+        {card.freq && <span className={`kc-freq ${card.freqLevel || 'mid'}`}>{card.freq}</span>}
         <span className="concept-toggle">{open ? '收起 ▴' : '展开详情 ▾'}</span>
         <button
           className={`mini-btn ${isFav ? 'on' : ''}`}
@@ -3259,46 +3314,88 @@ function KnowledgeCardSummary({ card, open, setOpen, isFav, toggleFav, label = '
         </button>
       </div>
       <div className="concept-summary">
-        <p className="kc-summary">{summary}</p>
+        <p className="kc-summary"><b>一句话定义：</b>{summary}</p>
       </div>
       {open && (
         <div className="concept-body concept-body-summary">
-          <p className="kc-concept">{card.concept}</p>
-          {card.note && (
-            <div className="kc-note"><b>💡 小白批注：</b>{card.note}</div>
-          )}
-          {card.freq && (
-            <div className="kc-src">
-              <b style={{ color: card.freqLevel === 'high' ? '#15803d' : card.freqLevel === 'low' ? '#b45309' : '#2563eb' }}>
-                {card.freq}
-              </b>
-              {card.src && <> · 来源：{card.src}</>}
-            </div>
-          )}
-          {card.demo && (
-            <div className="kc-demo">
-              <card.demo />
-            </div>
-          )}
-          {card.try && (
-            <div className="kc-try">
-              <b>试一试：</b>
-              {card.try}
-            </div>
-          )}
+          <CardDetail card={card} showDefinition={false} showSourceBrief />
         </div>
       )}
     </div>
   )
 }
 
+function CardDetail({ card, showDefinition = true, showDemo = false, showTry = false, showSourceBrief = false, showSourceDetails = false }) {
+  const definition = card.definition || buildSummary(card)
+  const sourceBrief = card.sourceBrief || (showSourceBrief && !showSourceDetails ? card.src : '')
+  return (
+    <>
+      {showDefinition && (
+        <section className="kc-section kc-definition">
+          <div className="kc-section-label">一句话定义</div>
+          <p>{definition}</p>
+        </section>
+      )}
+      {card.note && (
+        <section className="kc-section kc-note">
+          <div className="kc-section-label">小白批注</div>
+          <p>{card.note}</p>
+        </section>
+      )}
+      {card.when && (
+        <section className="kc-section">
+          <div className="kc-section-label">什么时候用</div>
+          <p>{card.when}</p>
+        </section>
+      )}
+      {card.cautions && (
+        <section className="kc-section kc-caution">
+          <div className="kc-section-label">注意事项</div>
+          <p>{card.cautions}</p>
+        </section>
+      )}
+      {showDemo && card.demo && (
+        <section className="kc-section kc-demo-section">
+          <div className="kc-section-label">交互演示</div>
+          {card.demoGuide && <p className="kc-demo-guide">{card.demoGuide}</p>}
+          <div className="kc-demo">
+            <card.demo />
+          </div>
+        </section>
+      )}
+      {showTry && card.try && (
+        <section className="kc-try">
+          <b>试一试：</b>
+          {card.try}
+        </section>
+      )}
+      {(showSourceBrief || showSourceDetails) && (sourceBrief || card.src) && (
+        <section className="kc-source">
+          {sourceBrief && <div className="kc-source-brief">{sourceBrief}</div>}
+          {showSourceDetails && card.src && (
+            <details className="kc-source-details">
+              <summary>查看完整来源</summary>
+              <p>{card.src}</p>
+            </details>
+          )}
+        </section>
+      )}
+    </>
+  )
+}
+
 function buildSummary(card) {
-  const parts = []
-  if (card.note) parts.push(card.note)
-  else if (card.concept) parts.push(card.concept)
-  if (!parts.length && card.try) parts.push(card.try)
-  const text = parts.join(' ')
-  return text.length > 66 ? `${text.slice(0, 66)}…` : text
+  const text = String(card.definition || card.concept || card.note || card.try || '').replace(/\s+/g, ' ').trim()
+  if (!text) return '这张卡片暂时没有摘要。'
+  if (text.length <= 96) return text
+
+  // 优先在完整句子处收束，避免摘要截断在半句话里；找不到句号时再做短截断。
+  const boundary = [...text.slice(0, 96)].reverse().findIndex((char) => '。！？；'.includes(char))
+  if (boundary >= 0) {
+    const end = 95 - boundary
+    if (end >= 28) return text.slice(0, end + 1)
+  }
+  return `${text.slice(0, 92).replace(/[，、：；,/:：\s]+$/, '')}…`
 }
 
 /** 概念词表（对话/解读内容自动触发内嵌卡片） */
@@ -3577,22 +3674,29 @@ function countOccurrences(lower, kw) {
  * - score = Σ(关键词出现次数 × 特异性权重)，score < CONCEPT_SCORE_THRESHOLD 的概念不返回；
  * - 返回按分数降序的 cardId 数组（最相关的排最前）。
  */
-export function findConcepts(text, threshold = CONCEPT_SCORE_THRESHOLD) {
+export function findConceptMatches(text, threshold = CONCEPT_SCORE_THRESHOLD) {
   if (!text) return []
   const lower = text.toLowerCase()
-  const scores = new Map() // cardId -> score
+  const scores = new Map() // cardId -> { score, keywords }
   for (const c of CONCEPT_KEYWORDS) {
     const kw = c.keyword.toLowerCase()
     if (!kw) continue
     const n = countOccurrences(lower, kw)
     if (n > 0) {
-      scores.set(c.cardId, (scores.get(c.cardId) || 0) + n * keywordStrength(kw))
+      const current = scores.get(c.cardId) || { score: 0, keywords: [] }
+      current.score += n * keywordStrength(kw)
+      if (!current.keywords.includes(c.keyword)) current.keywords.push(c.keyword)
+      scores.set(c.cardId, current)
     }
   }
   return [...scores.entries()]
-    .filter(([, s]) => s >= threshold)
-    .sort((a, b) => b[1] - a[1])
-    .map(([id]) => id)
+    .filter(([, item]) => item.score >= threshold)
+    .sort((a, b) => b[1].score - a[1].score)
+    .map(([id, item]) => ({ id, score: item.score, keywords: item.keywords }))
+}
+
+export function findConcepts(text, threshold = CONCEPT_SCORE_THRESHOLD) {
+  return findConceptMatches(text, threshold).map((item) => item.id)
 }
 
 /** 兼容旧用法：返回第一个命中卡片 id */

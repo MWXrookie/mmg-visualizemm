@@ -956,7 +956,15 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
     if (selected.size === 0) return setError('请至少选择一个拆解块')
     setGenOpen(false); setRunning(true); setError('')
     const chosen = breakdown.filter((_, i) => selected.has(i))
-    const blocksDesc = chosen.map((b, i) => `【拆解块】${b.title}\n${b.quote}\n${(b.steps || []).map((s) => `${s.label}：${s.desc}`).join('；')}`).join('\n\n')
+    const blocksDesc = chosen.map((b) => {
+      const idea = typeof b.idea === 'string' ? b.idea : (b.body || '')
+      const steps = (b.steps || []).map((s) => {
+        const action = typeof s.action === 'string' ? s.action : (s.label || '')
+        const method = typeof s.method === 'string' ? s.method : (s.desc || '')
+        return `要怎么做：${action}；怎么实现：${method}`
+      }).join('；')
+      return `【拆解块】${b.title}\n题目依据：${b.quote || '（无）'}\n一句话思路：${idea || '（无）'}\n${steps || '步骤：（无）'}`
+    }).join('\n\n')
     const summary = attachSummary(attachments)
     // 题目全文注入：让 AI 生成代码时能读到完整题干（不只拆解块+附件摘要）
     const problemCtx = (ws?.problemText || '').trim() ? `【完整题目】\n${ws.problemText}\n\n` : ''
@@ -1479,7 +1487,7 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
                 aria-pressed={selected.has(i)}
               >
                 <span className="box">✓</span>
-                <div><div className="opt-t">{b.title}</div><div className="opt-d">{b.quote}</div></div>
+                <div><div className="opt-t">{b.title}</div><div className="opt-d">{b.idea || b.body || b.quote || '尚未填写思路'}</div></div>
               </button>
             ))}
             <div className="gen-scope">

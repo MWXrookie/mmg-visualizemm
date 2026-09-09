@@ -5,7 +5,7 @@ import { KnowledgeCard, findConcepts, ALL_CARD_IDS } from './Cards.jsx'
 import MD, { sanitize } from '../components/MD.jsx'
 import AttachmentList from '../components/AttachmentList.jsx'
 import ResizeHandle from '../components/ResizeHandle.jsx'
-import { IconSparkles, IconFile, IconTable, IconBookmark, IconBook, IconClock, IconMenu, IconPlus, IconLightbulb } from '../components/Icons.jsx'
+import { IconSparkles, IconFile, IconTable, IconBookmark, IconBook, IconClock, IconMenu, IconPlus, IconLightbulb, IconClose } from '../components/Icons.jsx'
 import { EXPERT_CORE, OVERVIEW_EXPERT, ROLE_GUIDE_EXPERT } from '../lib/modelingExpert.js'
 import { normalizeProblemText } from '../lib/problemText.js'
 import ProblemTextView from '../components/ProblemTextView.jsx'
@@ -53,6 +53,32 @@ function loadPanelW() {
 let attSeq = 0
 const attId = (name) => `${name}-${Date.now()}-${attSeq++}`
 
+const roleShortName = {
+  '约束条件': '约束',
+  '目标': '目标',
+  '已知条件': '已知',
+  '假设': '假设',
+  '背景信息': '背景',
+}
+
+function makeBreakdownId() {
+  return `b${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function clipRoleText(text, max = 24) {
+  const value = String(text || '').replace(/\s+/g, ' ').trim()
+  return value.length > max ? `${value.slice(0, max)}…` : value
+}
+
+function roleIdeaDraft(role, selected) {
+  const subject = `“${clipRoleText(selected, 18)}”`
+  if (role === '目标') return `围绕${subject}明确需要优化、比较或预测的结果，并把它转化为可评价的目标。`
+  if (role === '约束条件') return `把${subject}转化为模型中的边界条件，明确它会怎样限制可行方案。`
+  if (role === '已知条件') return `整理${subject}并把它转化为模型可以使用的数据、参数或初始条件。`
+  if (role === '假设') return `检验${subject}是否合理，并明确它对模型简化和结果解释的影响。`
+  return `判断${subject}是否会影响问题边界，并提取其中与建模相关的信息。`
+}
+
 export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSidebar, onNewWorkspace }) {
   const [selResults, setSelResults] = useState([]) // 划词精读累积记录（角色判定卡列表，不因新划词被顶替）
   const [roleStream, setRoleStream] = useState('') // 划词精读流式输出（实时反馈）
@@ -65,6 +91,10 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
   const [editOpen, setEditOpen] = useState(false) // 编辑题干弹窗
   const [editText, setEditText] = useState('') // 编辑题干草稿
   const [clearOpen, setClearOpen] = useState(false) // 清空题干确认弹窗
+  const [depositOpen, setDepositOpen] = useState(false)
+  const [depositMode, setDepositMode] = useState('new') // new | existing
+  const [depositDraft, setDepositDraft] = useState(null)
+  const [deposited, setDeposited] = useState(() => new Set())
   const [panelW, setPanelW] = useState(loadPanelW)
   const textRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -83,6 +113,7 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
   useEffect(() => { wsIdRef.current = wsIdNow || '' }, [wsIdNow])
   useEffect(() => {
     setSelResults([]); setFloatSel(null); setError(''); setStreamBuf(''); setPasteText(''); setRoleStream('')
+    setDepositOpen(false); setDepositDraft(null); setDeposited(new Set())
   }, [wsIdNow])
 
   /** 空态"粘贴题目文本"确认：写入题干（有已有题干则追加） */
@@ -209,6 +240,71 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
     setBusy(false)
   }
 
+  function openDeposit(record, index) {
+    const selected = record.quote || record.selected || ''
+    const role = record.role || '背景信息'
+    const title = `${roleShortName[role] || '问题'}：${clipRoleText(selected, 20) || '待命名'}`
+    const firstBlock = (ws?.breakdown || [])[0]
+    setDepositMode('new')
+    setDepositDraft({
+      recordIndex: index,
+      role,
+      quote: selected,
+      title,
+      idea: roleIdeaDraft(role, selected),
+      targetId: firstBlock?.id || '',
+      targetIndex: (ws?.breakdown || []).length ? 0 : -1,
+    })
+    setDepositOpen(true)
+  }
+
+  function closeDeposit() {
+    setDepositOpen(false)
+    setDepositDraft(null)
+  }
+
+  function saveDeposit() {
+    if (!depositDraft) return
+    const quote = depositDraft.quote.trim()
+    if (!quote) {
+      setError('请保留题目依据，至少需要一段原文才能写入拆解块')
+      return
+    }
+    const title = depositDraft.title.trim() || '未命名拆解块'
+    const idea = depositDraft.idea.trim()
+    if (depositMode === 'new') {
+      const block = {
+        id: makeBreakdownId(),
+        title,
+        quote,
+        idea,
+        steps: [{
+          action: '明确这条题目信息在本问题中的作用',
+          method: '回到题目目标和数据，说明它会怎样影响变量、约束或评价指标。',
+        }],
+        refs: [],
+      }
+      patchWs((prev) => ({ breakdown: [...(prev?.breakdown || []), block] }))
+    } else {
+      const targetIndex = Number(depositDraft.targetIndex)
+      patchWs((prev) => ({
+        breakdown: (prev?.breakdown || []).map((block, index) => {
+          const matchesTarget = depositDraft.targetId ? block?.id === depositDraft.targetId : index === targetIndex
+          if (!matchesTarget) return block
+          const oldQuote = String(block?.quote || '').trim()
+          return {
+            ...block,
+            quote: oldQuote && oldQuote !== quote ? `${oldQuote}\n${quote}` : quote,
+            idea: block?.idea || idea,
+          }
+        }),
+      }))
+    }
+    setDeposited((prev) => new Set([...prev, depositDraft.recordIndex]))
+    closeDeposit()
+    window.__notify?.(depositMode === 'new' ? '已新建拆解块，题目依据已带入' : '已将题目依据写入拆解块')
+  }
+
   const overviewHits = overview ? findConcepts(overview) : []
 
   return (
@@ -312,7 +408,7 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
       {/* AI 面板 */}
       <section className="ai-panel">
         <div className="ai-panel-body">
-          {overview && (
+          {bookmark === '精读' && overview && (
             <div className="card" style={{ padding: 14, marginBottom: 12 }}>
               <div className="section-label" style={{ marginBottom: 8 }}><IconBook size={14} /> 整体解读</div>
               <MD text={overview} />
@@ -358,6 +454,15 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
                       <div className="role-guide"><IconLightbulb size={13} /> 引导思考：{selResult.guide}</div>
                     )}
                     {selResult.quote && <div className="hint">引用原文：「{selResult.quote}」</div>}
+                    <div className="role-card-actions">
+                      {deposited.has(i) ? (
+                        <span className="role-deposited">已写入拆解块</span>
+                      ) : (
+                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => openDeposit(selResult, i)}>
+                          <IconPlus size={13} /> 写入拆解块
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ),
               )}
@@ -373,6 +478,75 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
           )}
         </div>
       </section>
+      {depositOpen && depositDraft && (
+        <div className="scrim" onClick={closeDeposit}>
+          <div className="sheet deposit-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="deposit-head">
+              <div>
+                <h2>写入拆解块</h2>
+                <p className="sub">把这条读题证据带到建模思路梳理台。</p>
+              </div>
+              <button type="button" className="ico-btn" onClick={closeDeposit} title="关闭"><IconClose size={15} /></button>
+            </div>
+            <div className="deposit-mode">
+              <button type="button" className={`deposit-mode-btn ${depositMode === 'new' ? 'active' : ''}`} onClick={() => setDepositMode('new')}>
+                新建拆解块
+              </button>
+              <button
+                type="button"
+                className={`deposit-mode-btn ${depositMode === 'existing' ? 'active' : ''}`}
+                onClick={() => setDepositMode('existing')}
+                disabled={!(ws?.breakdown || []).length}
+              >
+                写入已有拆解块
+              </button>
+            </div>
+            {depositMode === 'existing' && (
+              <label className="deposit-field">
+                <span>目标拆解块</span>
+                <select
+                  value={depositDraft.targetId || `index-${depositDraft.targetIndex}`}
+                  onChange={(e) => setDepositDraft((prev) => {
+                    const value = e.target.value
+                    const index = value.startsWith('index-') ? Number(value.slice(6)) : (ws?.breakdown || []).findIndex((block) => block.id === value)
+                    return { ...prev, targetId: value.startsWith('index-') ? '' : value, targetIndex: index }
+                  })}
+                >
+                  {(ws?.breakdown || []).map((block, index) => (
+                    <option key={block.id || index} value={block.id || `index-${index}`}>{index + 1}. {block.title || '未命名拆解块'}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {depositMode === 'new' && (
+              <>
+                <label className="deposit-field">
+                  <span>拆解块标题</span>
+                  <input value={depositDraft.title} onChange={(e) => setDepositDraft((prev) => ({ ...prev, title: e.target.value }))} placeholder="例如：目标识别" />
+                </label>
+                <label className="deposit-field">
+                  <span>一句话思路</span>
+                  <textarea value={depositDraft.idea} onChange={(e) => setDepositDraft((prev) => ({ ...prev, idea: e.target.value }))} rows={2} placeholder="先写一个可修改的方向判断" />
+                </label>
+              </>
+            )}
+            <label className="deposit-field">
+              <span>题目依据 · {depositDraft.role}</span>
+              <textarea value={depositDraft.quote} onChange={(e) => setDepositDraft((prev) => ({ ...prev, quote: e.target.value }))} rows={4} placeholder="保留这条证据，方便回到题干核对" />
+            </label>
+            {depositMode === 'new' && (
+              <div className="deposit-note">会同时生成一个待补充步骤，之后可在梳理台继续填写“要怎么做”和“怎么实现”。</div>
+            )}
+            {depositMode === 'existing' && (
+              <div className="deposit-note">已有块的思路和步骤不会被覆盖；这段依据会追加到该块。</div>
+            )}
+            <div className="sheet-actions">
+              <button className="btn btn-ghost" onClick={closeDeposit}>取消</button>
+              <button className="btn btn-primary" onClick={saveDeposit}>确认写入</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* 编辑题干弹窗 */}
       {editOpen && (
         <div className="scrim" onClick={() => setEditOpen(false)}>

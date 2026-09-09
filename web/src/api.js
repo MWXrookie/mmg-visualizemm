@@ -8,7 +8,10 @@ async function post(path, body) {
   })
   const json = await res.json().catch(() => ({}))
   if (!res.ok || json.ok === false) {
-    throw new Error(json.message || `请求失败（HTTP ${res.status}）`)
+    const err = new Error(json.message || `请求失败（HTTP ${res.status}）`)
+    err.code = json.code || ''
+    err.status = res.status
+    throw err
   }
   return json
 }
