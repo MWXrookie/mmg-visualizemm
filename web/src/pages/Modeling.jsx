@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { marked } from 'marked'
 import { streamChat, chat, attachSummary, retrieveKnowledge, formatKnowledgeContext } from '../api.js'
-import { KnowledgeCard, findConceptMatches, ALL_CARD_IDS, CARD_BY_ID } from './Cards.jsx'
+import { KnowledgeCard, findConceptMatches, ALL_CARD_IDS, CARD_BY_ID, CARD_STARTER_IDS, getCardWorkflow } from './Cards.jsx'
 import MD, { sanitize } from '../components/MD.jsx'
 import AttachmentList from '../components/AttachmentList.jsx'
 import ResizeHandle from '../components/ResizeHandle.jsx'
@@ -96,7 +96,8 @@ function buildCardContext(matchesByMessage, currentText = '') {
     const card = CARD_BY_ID.get(id)
     if (!card) return ''
     const demoContext = [card.demoGuide, card.aiContext].filter(Boolean).join('；')
-    return `【界面知识卡片 ${index + 1}】\n标题：${card.title}\n标签：${card.tag}\n一句话定义：${clipContext(card.definition || card.concept, 420) || '（无）'}\n小白批注：${clipContext(card.note, 420) || '（无）'}\n什么时候用：${clipContext(card.when, 420) || '（无）'}\n注意事项：${clipContext(card.cautions, 420) || '（无）'}\n演示说明：${clipContext(demoContext, 520) || '（卡片没有额外演示说明）'}\n来源摘要：${clipContext(card.sourceBrief, 260) || '（无）'}\n完整来源：${clipContext(card.src, 360) || '（无）'}`
+    const workflow = getCardWorkflow(card)
+    return `【界面知识卡片 ${index + 1}】\n标题：${card.title}\n标签：${card.tag}\n一句话定义：${clipContext(card.definition || card.concept, 420) || '（无）'}\n小白批注：${clipContext(card.note, 420) || '（无）'}\n什么时候用：${clipContext(card.when, 420) || '（无）'}\n题目信号：${clipContext(workflow?.signal, 360) || '（无）'}\n第一步怎么做：${clipContext(workflow?.firstStep, 360) || '（无）'}\n怎么实现：${clipContext(workflow?.method, 420) || '（无）'}\n注意事项：${clipContext(card.cautions, 420) || '（无）'}\n演示说明：${clipContext(demoContext, 520) || '（卡片没有额外演示说明）'}\n来源摘要：${clipContext(card.sourceBrief, 260) || '（无）'}\n完整来源：${clipContext(card.src, 360) || '（无）'}`
   }).filter(Boolean)
   return cards.length
     ? `\n\n【当前对话中已展示的知识卡片（优先于外部检索）】\n${cards.join('\n\n')}\n【知识卡片上下文结束】`
@@ -437,6 +438,23 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
     setRelateId(null)
   }
 
+  /** 将知识卡片的行动摘要放入左侧待确认的新拆解块预览。 */
+  function addCardToBreakdown(card) {
+    const workflow = getCardWorkflow(card)
+    if (!workflow) return
+    setPreview({
+      targetId: null,
+      isNew: true,
+      patch: {
+        title: card.title,
+        quote: '',
+        idea: workflow.idea,
+        steps: [{ action: workflow.firstStep, method: workflow.method }],
+      },
+    })
+    window.__notify?.('已生成知识卡片拆解块预览，请在左侧确认')
+  }
+
   /** 导出思路为 Markdown */
   function exportIdea() {
     const md = [
@@ -464,7 +482,7 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
   }
 
   const doneTables = attachments.filter((a) => a.status === 'done' && a.type === 'table')
-  const conceptHits = ALL_CARD_IDS.filter((id) => {
+  const conceptHits = (kcQuery.trim() ? ALL_CARD_IDS : CARD_STARTER_IDS).filter((id) => {
     const card = CARD_BY_ID.get(id)
     if (!kcQuery.trim()) return true
     if (!card) return false
@@ -716,9 +734,13 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
                 <span><IconSearch size={14} /></span>
                 <input value={kcQuery} onChange={(e) => setKcQuery(e.target.value)} placeholder="搜索知识卡片…" />
               </div>
+              <div className="kp-guide">
+                <strong>{kcQuery.trim() ? `找到 ${conceptHits.length} 张相关卡片` : '先从高频入门卡开始'}</strong>
+                <span>{kcQuery.trim() ? '展开后看题目信号与第一步。' : '需要其他方法时，再用上方搜索全部卡片。'}</span>
+              </div>
               <div className="kp-list">
                 {conceptHits.map((id) => (
-                  <KnowledgeCard key={id} cardId={id} defaultOpen={false} variant="study" label="快速摘要" />
+                  <KnowledgeCard key={id} cardId={id} defaultOpen={false} variant="study" label="快速摘要" onAddToBreakdown={addCardToBreakdown} />
                 ))}
               </div>
               <div className={`kp-empty ${kcQuery && conceptHits.length === 0 ? 'show' : ''}`}>没有匹配的知识卡片。</div>

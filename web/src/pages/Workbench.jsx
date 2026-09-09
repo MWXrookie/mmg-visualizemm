@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { marked } from 'marked'
 import { streamChat, parseFile, attachSummary, retrieveKnowledge, formatKnowledgeContext } from '../api.js'
-import { KnowledgeCard, findConcepts, ALL_CARD_IDS } from './Cards.jsx'
+import { KnowledgeCard, findConcepts, ALL_CARD_IDS, CARD_BY_ID, CARD_STARTER_IDS, getCardWorkflow } from './Cards.jsx'
 import MD, { sanitize } from '../components/MD.jsx'
 import AttachmentList from '../components/AttachmentList.jsx'
 import ResizeHandle from '../components/ResizeHandle.jsx'
-import { IconSparkles, IconFile, IconTable, IconBookmark, IconBook, IconClock, IconMenu, IconPlus, IconLightbulb, IconClose } from '../components/Icons.jsx'
+import { IconSparkles, IconFile, IconTable, IconBookmark, IconBook, IconClock, IconMenu, IconPlus, IconLightbulb, IconClose, IconSearch } from '../components/Icons.jsx'
 import { EXPERT_CORE, OVERVIEW_EXPERT, ROLE_GUIDE_EXPERT } from '../lib/modelingExpert.js'
 import { normalizeProblemText } from '../lib/problemText.js'
 import ProblemTextView from '../components/ProblemTextView.jsx'
@@ -95,6 +95,7 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
   const [depositMode, setDepositMode] = useState('new') // new | existing
   const [depositDraft, setDepositDraft] = useState(null)
   const [deposited, setDeposited] = useState(() => new Set())
+  const [cardQuery, setCardQuery] = useState('')
   const [panelW, setPanelW] = useState(loadPanelW)
   const textRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -248,12 +249,35 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
     setDepositMode('new')
     setDepositDraft({
       recordIndex: index,
+      sourceKey: index,
       role,
       quote: selected,
       title,
       idea: roleIdeaDraft(role, selected),
+      stepAction: '明确这条题目信息在本问题中的作用',
+      stepMethod: '回到题目目标和数据，说明它会怎样影响变量、约束或评价指标。',
       targetId: firstBlock?.id || '',
       targetIndex: (ws?.breakdown || []).length ? 0 : -1,
+    })
+    setDepositOpen(true)
+  }
+
+  function openCardDeposit(card) {
+    const workflow = getCardWorkflow(card)
+    if (!workflow) return
+    setDepositMode('new')
+    setDepositDraft({
+      recordIndex: `card:${card.id}`,
+      sourceKey: `card:${card.id}`,
+      source: 'knowledge-card',
+      role: '知识卡片',
+      quote: '',
+      title: card.title,
+      idea: workflow.idea,
+      stepAction: workflow.firstStep,
+      stepMethod: workflow.method,
+      targetId: '',
+      targetIndex: -1,
     })
     setDepositOpen(true)
   }
@@ -266,22 +290,22 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
   function saveDeposit() {
     if (!depositDraft) return
     const quote = depositDraft.quote.trim()
-    if (!quote) {
+    const fromCard = depositDraft.source === 'knowledge-card'
+    if (!quote && !fromCard) {
       setError('请保留题目依据，至少需要一段原文才能写入拆解块')
       return
     }
     const title = depositDraft.title.trim() || '未命名拆解块'
     const idea = depositDraft.idea.trim()
+    const stepAction = depositDraft.stepAction?.trim() || '明确这条信息在本问题中的作用'
+    const stepMethod = depositDraft.stepMethod?.trim() || '回到题目目标和数据，说明它会怎样影响变量、约束或评价指标。'
     if (depositMode === 'new') {
       const block = {
         id: makeBreakdownId(),
         title,
         quote,
         idea,
-        steps: [{
-          action: '明确这条题目信息在本问题中的作用',
-          method: '回到题目目标和数据，说明它会怎样影响变量、约束或评价指标。',
-        }],
+        steps: [{ action: stepAction, method: stepMethod }],
         refs: [],
       }
       patchWs((prev) => ({ breakdown: [...(prev?.breakdown || []), block] }))
@@ -292,20 +316,34 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
           const matchesTarget = depositDraft.targetId ? block?.id === depositDraft.targetId : index === targetIndex
           if (!matchesTarget) return block
           const oldQuote = String(block?.quote || '').trim()
+          const existingSteps = Array.isArray(block?.steps) ? block.steps : []
+          const hasSameStep = existingSteps.some((step) => step?.action === stepAction && step?.method === stepMethod)
+          const nextQuote = quote ? (oldQuote && oldQuote !== quote ? `${oldQuote}\n${quote}` : quote) : oldQuote
           return {
             ...block,
-            quote: oldQuote && oldQuote !== quote ? `${oldQuote}\n${quote}` : quote,
+            quote: nextQuote,
             idea: block?.idea || idea,
+            steps: fromCard && !hasSameStep ? [...existingSteps, { action: stepAction, method: stepMethod }] : existingSteps,
+            refs: fromCard ? [...new Set([...(block?.refs || []), `知识卡片：${title}`])] : (block?.refs || []),
           }
         }),
       }))
     }
-    setDeposited((prev) => new Set([...prev, depositDraft.recordIndex]))
+    setDeposited((prev) => new Set([...prev, depositDraft.sourceKey ?? depositDraft.recordIndex]))
     closeDeposit()
     window.__notify?.(depositMode === 'new' ? '已新建拆解块，题目依据已带入' : '已将题目依据写入拆解块')
   }
 
   const overviewHits = overview ? findConcepts(overview) : []
+  const cardHits = (cardQuery.trim() ? ALL_CARD_IDS : CARD_STARTER_IDS).filter((id) => {
+    if (!cardQuery.trim()) return true
+    const card = CARD_BY_ID.get(id)
+    if (!card) return false
+    const q = cardQuery.trim().toLowerCase()
+    return [card.title, card.tag, card.concept, card.definition, card.note, card.when, card.try, card.src]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(q))
+  })
 
   return (
     <div className="ws" style={{ '--panel-w': panelW }}>
@@ -412,7 +450,7 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
             <div className="card" style={{ padding: 14, marginBottom: 12 }}>
               <div className="section-label" style={{ marginBottom: 8 }}><IconBook size={14} /> 整体解读</div>
               <MD text={overview} />
-              {overviewHits.map((cid) => <KnowledgeCard key={cid} cardId={cid} />)}
+              {overviewHits.map((cid) => <KnowledgeCard key={cid} cardId={cid} onAddToBreakdown={openCardDeposit} />)}
             </div>
           )}
           {bookmark === '精读' && (
@@ -470,10 +508,21 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
             </>
           )}
           {bookmark === '卡片' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {ALL_CARD_IDS.map((id) => (
-                <KnowledgeCard key={id} cardId={id} />
-              ))}
+            <div className="workbench-kp">
+              <div className="kp-search">
+                <span><IconSearch size={14} /></span>
+                <input value={cardQuery} onChange={(e) => setCardQuery(e.target.value)} placeholder="搜索知识卡片…" />
+              </div>
+              <div className="kp-guide">
+                <strong>{cardQuery.trim() ? `找到 ${cardHits.length} 张相关卡片` : '先从高频入门卡开始'}</strong>
+                <span>{cardQuery.trim() ? '展开后看题目信号与第一步。' : '知识卡片是候选工具，不是直接答案。'}</span>
+              </div>
+              <div className="kp-list">
+                {cardHits.map((id) => (
+                  <KnowledgeCard key={id} cardId={id} variant="study" label="快速摘要" onAddToBreakdown={openCardDeposit} added={deposited.has(`card:${id}`)} />
+                ))}
+              </div>
+              {cardQuery.trim() && cardHits.length === 0 && <div className="kp-empty show">没有匹配的知识卡片。</div>}
             </div>
           )}
         </div>
@@ -531,11 +580,23 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
               </>
             )}
             <label className="deposit-field">
-              <span>题目依据 · {depositDraft.role}</span>
+              <span>题目依据 · {depositDraft.role}{depositDraft.source === 'knowledge-card' ? '（可选）' : ''}</span>
               <textarea value={depositDraft.quote} onChange={(e) => setDepositDraft((prev) => ({ ...prev, quote: e.target.value }))} rows={4} placeholder="保留这条证据，方便回到题干核对" />
             </label>
             {depositMode === 'new' && (
-              <div className="deposit-note">会同时生成一个待补充步骤，之后可在梳理台继续填写“要怎么做”和“怎么实现”。</div>
+              <div className="deposit-step-grid">
+                <label className="deposit-field">
+                  <span>要怎么做</span>
+                  <textarea value={depositDraft.stepAction} onChange={(e) => setDepositDraft((prev) => ({ ...prev, stepAction: e.target.value }))} rows={2} placeholder="这一步要完成什么" />
+                </label>
+                <label className="deposit-field">
+                  <span>怎么实现</span>
+                  <textarea value={depositDraft.stepMethod} onChange={(e) => setDepositDraft((prev) => ({ ...prev, stepMethod: e.target.value }))} rows={2} placeholder="用什么数据、方法或判断标准完成" />
+                </label>
+              </div>
+            )}
+            {depositMode === 'new' && (
+              <div className="deposit-note">先确认这条候选思路，再写入拆解块；之后仍可在梳理台继续修改。</div>
             )}
             {depositMode === 'existing' && (
               <div className="deposit-note">已有块的思路和步骤不会被覆盖；这段依据会追加到该块。</div>

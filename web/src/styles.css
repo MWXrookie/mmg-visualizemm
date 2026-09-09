@@ -374,6 +374,9 @@ body.resizing * { cursor: col-resize !important; }
 .concept-summary { padding: 0 12px 10px; }
 .kc-summary { margin: 8px 0 0; font-size: 12.5px; line-height: 1.65; color: var(--fg); background: var(--kc-accent-soft); border: 1px solid var(--kc-accent-border); border-left: 3px solid var(--kc-accent); border-radius: var(--radius-sm); padding: 9px 10px; }
 .kc-summary b { color: var(--kc-accent-strong); margin-right: 4px; }
+.kc-action-preview { display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 8px; margin-top: 7px; padding: 7px 9px; border: 1px solid var(--kc-demo-border); border-radius: var(--radius-sm); background: var(--kc-demo-soft); font-size: 11.5px; line-height: 1.55; }
+.kc-action-preview > span { color: var(--kc-demo); font-size: 10.5px; font-weight: 800; }
+.kc-action-preview p { margin: 0; color: var(--fg); }
 .concept-body-summary { background: var(--kc-neutral-soft); }
 .concept-body-study { background: color-mix(in srgb, var(--kc-demo-soft) 42%, var(--kc-neutral-soft)); }
 .kc-section { margin: 0; font-size: 13px; color: var(--fg); background: var(--surface); border: 1px solid var(--kc-neutral-border); border-radius: var(--radius-sm); padding: 9px 10px; line-height: 1.65; }
@@ -385,6 +388,14 @@ body.resizing * { cursor: col-resize !important; }
 .kc-note .kc-section-label, .kc-note b { color: var(--kc-note); }
 .kc-caution { background: var(--kc-caution-soft); border-color: var(--kc-caution-border); border-left: 3px solid var(--kc-caution); }
 .kc-caution .kc-section-label { color: var(--kc-caution); }
+.kc-action-section { margin: 0; padding: 10px; border: 1px solid var(--kc-demo-border); border-left: 3px solid var(--kc-demo); border-radius: var(--radius-sm); background: var(--kc-demo-soft); }
+.kc-action-section > .kc-section-label { color: var(--kc-demo); }
+.kc-action-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.kc-action-grid > div { min-width: 0; padding: 8px 9px; border: 1px solid color-mix(in srgb, var(--kc-demo-border) 72%, var(--surface)); border-radius: 7px; background: var(--surface); }
+.kc-action-grid span { display: block; margin-bottom: 3px; color: var(--kc-meta); font-size: 10.5px; font-weight: 800; }
+.kc-action-grid p { margin: 0; font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; }
+.kc-action-footer { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-top: 9px; padding-top: 8px; border-top: 1px solid color-mix(in srgb, var(--kc-demo-border) 70%, transparent); }
+.kc-action-footer > span { color: var(--kc-meta); font-size: 11px; }
 /* 知识卡片演示区（demo 组件通用样式） */
 .kc-demo { margin: 8px 0 0; }
 .kc-demo-section { padding: 9px; background: var(--kc-demo-soft); border-color: var(--kc-demo-border); border-left: 3px solid var(--kc-demo); }
@@ -820,6 +831,10 @@ pre.code { white-space: pre; font-size: 13.5px; line-height: 1.7; font-family: v
 .mdl .kp-search { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); padding: 8px 12px; margin-bottom: 14px; transition: border-color .2s; }
 .mdl .kp-search:focus-within { border-color: var(--accent); background: var(--surface); }
 .mdl .kp-search input { border: none; background: none; outline: none; flex: 1; font-size: 13px; color: inherit; }
+.kp-guide { display: flex; flex-direction: column; gap: 2px; margin: -4px 0 12px; padding: 8px 10px; border-left: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 5%, var(--surface)); color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+.kp-guide strong { color: var(--fg); font-size: 12px; }
+.workbench-kp { display: flex; flex-direction: column; min-width: 0; }
+.workbench-kp .kp-list { display: flex; flex-direction: column; gap: 8px; }
 .mdl .kp-list { display: flex; flex-direction: column; gap: 10px; }
 .mdl .kp-empty { display: none; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--muted); padding: 30px 0; text-align: center; font-size: 12.5px; }
 .mdl .kp-empty.show { display: flex; }
@@ -962,6 +977,7 @@ pre.code { white-space: pre; font-size: 13.5px; line-height: 1.7; font-family: v
 .deposit-field textarea { resize: vertical; line-height: 1.6; }
 .deposit-field input:focus, .deposit-field textarea:focus, .deposit-field select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 10%, transparent); }
 .deposit-note { margin-top: 14px; padding: 9px 11px; border-left: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--surface)); color: var(--muted); font-size: 12px; line-height: 1.55; }
+.deposit-step-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 
 /* 梳理台 AI 对话气泡内 Markdown 适配 */
 .mdl .bubble .markdown-body { font-size: 14px; line-height: 1.7; }
@@ -1417,4 +1433,6 @@ h1, h2, h3, h4 { font-weight: 600; letter-spacing: .01em; }
   .mdl .step-grid { grid-template-columns: 1fr; gap: 9px; }
   .mdl .step-cell + .step-cell { padding: 9px 0 0; border-top: 1px solid var(--border); border-left: 0; }
   .mdl .step-item { padding: 12px; }
+  .kc-action-grid { grid-template-columns: 1fr; }
+  .deposit-step-grid { grid-template-columns: 1fr; gap: 0; }
 }

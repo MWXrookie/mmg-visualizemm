@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { loadFavorites, saveFavorites } from '../store.js'
-import { IconLightbulb, IconStar, IconPlay, IconRefresh } from '../components/Icons.jsx'
+import { IconLightbulb, IconStar, IconPlay, IconRefresh, IconPlus } from '../components/Icons.jsx'
 
 /* ============ 数学工具 ============ */
 
@@ -3181,11 +3181,163 @@ const CARDS = [
 export const ALL_CARD_IDS = CARDS.map((c) => c.id)
 export const CARD_BY_ID = new Map(CARDS.map((c) => [c.id, c]))
 
+/** 首次进入知识库时优先展示的入门路径：先建立数据、关系、目标和验证的基本判断。 */
+export const CARD_STARTER_IDS = [
+  'data-cleaning',
+  'indicator-system',
+  'correlation',
+  'linear-regression',
+  'linear-programming',
+  'topsis',
+  'hypothesis-test',
+]
+
+/**
+ * 把“方法知识”落到“题目中的第一个动作”。
+ * 卡片正文仍然负责解释概念，这里只补齐新手最容易缺失的行动桥梁。
+ */
+const CARD_WORKFLOWS = {
+  'data-cleaning': {
+    signal: '附件存在缺失值、异常值、单位不一致或指标方向不同。',
+    firstStep: '先检查每一列的数据类型、缺失数量、异常范围和指标方向。',
+    method: '用表格统计与箱线图/业务阈值核对，记录每条清洗规则及其影响。',
+    idea: '先清洗并统一附件数据，再把可靠的变量交给后续分析、评价或优化模型。',
+  },
+  'indicator-system': {
+    signal: '题目要求比较多个对象的综合表现，但“好”由多个维度共同决定。',
+    firstStep: '先列出候选指标，并标记每个指标是效益型还是成本型。',
+    method: '结合题目目标、数据可得性和相关性筛选指标，形成可解释的指标表。',
+    idea: '先建立方向明确且互不重复的评价指标体系，再进行标准化和综合评分。',
+  },
+  correlation: {
+    signal: '你还不知道哪些变量有关联，或需要先判断变量关系再选模型。',
+    firstStep: '先画散点图或相关矩阵，观察关系方向、强弱和是否明显非线性。',
+    method: '连续近似正态时看 Pearson，非正态或只关心排序时看 Spearman，并结合显著性检验。',
+    idea: '先用相关性分析筛出值得关注的变量关系，再决定后续建模方向。',
+  },
+  'linear-regression': {
+    signal: '有连续型结果变量，想解释或预测它与一个或多个变量的关系。',
+    firstStep: '先画因变量与候选自变量的散点图，判断线性趋势和异常点。',
+    method: '用最小二乘拟合基线模型，再看残差图、R²和验证集误差是否支持这个关系。',
+    idea: '先用回归拟合变量之间的平均趋势，再根据残差和验证结果决定是否增加复杂度。',
+  },
+  'linear-programming': {
+    signal: '题目在问资源、产量、运输或订购怎么安排最优，且关系近似线性。',
+    firstStep: '先定义决策变量，并把题目中的目标和限制逐条翻译成式子。',
+    method: '写出线性目标函数与约束，检查单位、可行域和变量取值范围后再调用求解器。',
+    idea: '先把安排问题翻译成决策变量、线性目标和约束，再求满足限制的最优方案。',
+  },
+  'integer-programming': {
+    signal: '决策对象是车辆、人员、批次或“选/不选”，不能接受小数解。',
+    firstStep: '先标记哪些变量必须是整数或 0/1，并检查它们在目标和约束中的含义。',
+    method: '在线性规划骨架上加入整数约束，用整数求解器并比较连续解与整数解的差异。',
+    idea: '先识别不可分割的数量决策，再在线性模型上加入整数或 0/1 约束求解。',
+  },
+  topsis: {
+    signal: '有多个评价指标和候选方案，需要给方案排序。',
+    firstStep: '先确认指标方向、量纲和权重，再构造标准化后的评价矩阵。',
+    method: '计算每个方案到理想解和负理想解的距离，用相对贴近度排序并做敏感性分析。',
+    idea: '先统一指标方向和权重，再用方案接近理想解的程度完成相对排序。',
+  },
+  'entropy-weight': {
+    signal: '需要给多个评价指标定权，但不想完全依赖主观打分。',
+    firstStep: '先完成指标方向确认和标准化，检查是否存在全相同或极端列。',
+    method: '按各列差异程度计算熵值与冗余度，得到客观权重并检查权重是否符合数据直觉。',
+    idea: '先用数据差异度得到客观权重，再把权重带入综合评价或排序模型。',
+  },
+  ahp: {
+    signal: '评价标准包含专家经验，需要表达“哪个因素更重要”。',
+    firstStep: '先搭出目标、准则、方案三层结构，再明确两两比较的依据。',
+    method: '构造判断矩阵、计算权重并进行一致性检验，CR 不满足要求时回看比较判断。',
+    idea: '先把复杂评价拆成层次并量化专家比较，再用一致性检验保证权重可解释。',
+  },
+  'hypothesis-test': {
+    signal: '你需要判断组间差异、变量关联或分布差异是否可能只是随机波动。',
+    firstStep: '先明确原假设、样本类型和检验问题，不要先盯着 p 值。',
+    method: '根据分类/连续、独立/配对和分布前提选择检验，再同时报告 p 值与效果大小。',
+    idea: '先明确要排除的随机解释，再选择匹配的检验方法支撑建模判断。',
+  },
+  kmeans: {
+    signal: '数据没有现成标签，但你怀疑对象可以按特征自然分组。',
+    firstStep: '先标准化特征并观察数据分布，再用肘部法或轮廓系数试探 K 值。',
+    method: '运行 K-means，比较不同 K 的组内紧密度、组间差异和分组解释性。',
+    idea: '先统一特征尺度并判断分组数，再用 K-means 找到可解释的自然群组。',
+  },
+  pca: {
+    signal: '变量很多且相互相关，直接建模会冗余或难以可视化。',
+    firstStep: '先标准化变量并检查相关结构，明确希望保留多少信息。',
+    method: '分解协方差/相关矩阵，按累计解释方差选择主成分，并检查载荷含义。',
+    idea: '先用主成分压缩相关变量，再用解释方差和载荷确认降维没有丢掉关键含义。',
+  },
+  'dynamic-programming': {
+    signal: '问题有时间或阶段顺序，本阶段选择会改变下一阶段状态。',
+    firstStep: '先定义“阶段、状态、决策”和状态转移关系。',
+    method: '写出递推关系与边界条件，保存每个状态的最优值并回溯得到方案。',
+    idea: '先把多阶段问题表示成状态转移，再用递推逐阶段保留最优决策。',
+  },
+  'inventory-model': {
+    signal: '题目同时关心库存不能断供、订货频率和仓储成本。',
+    firstStep: '先整理需求速度、订货成本、持有成本和安全库存约束。',
+    method: '计算警戒点与经济订货量，再用逐期库存仿真检查是否会缺货。',
+    idea: '先用需求和成本确定补货时机与批量，再用库存约束检验方案可行性。',
+  },
+  'multi-objective': {
+    signal: '题目同时追求两个或多个互相冲突的目标。',
+    firstStep: '先判断目标优先级，明确哪些目标可以加权、哪些必须分层保障。',
+    method: '选择线性加权、序贯解法或 Pareto 分析，并做权重敏感性比较。',
+    idea: '先明确多个目标的优先关系，再把冲突目标转成可比较、可验证的求解方案。',
+  },
+  'genetic-algorithm': {
+    signal: '目标或约束复杂、变量组合多，常规解析方法难以直接求最优。',
+    firstStep: '先定义一个可行解如何编码，以及如何计算它的目标值和约束惩罚。',
+    method: '设置种群、选择、交叉、变异和停止条件，多次运行比较稳定性。',
+    idea: '先把候选方案编码成可评价的解，再用选择、交叉和变异搜索较优组合。',
+  },
+  'simulated-annealing': {
+    signal: '搜索容易卡在局部最优，希望允许短暂接受差解来探索更大范围。',
+    firstStep: '先定义一个可行解、邻域扰动方式和目标函数。',
+    method: '设置初温、降温策略和 Metropolis 接受概率，重复运行检查结果波动。',
+    idea: '先设计可行解和邻域，再用逐步降温的随机搜索跳出局部最优。',
+  },
+  'differential-equation': {
+    signal: '题目描述的是连续变化过程，且变化率由当前状态或物理规律决定。',
+    firstStep: '先明确状态变量、变化率、初始条件和边界条件。',
+    method: '从守恒/机理关系列微分方程，再用解析解或 Runge-Kutta/差分法求数值结果。',
+    idea: '先把变化规律写成带初边值条件的微分方程，再选择数值方法求解并校验。',
+  },
+  'monte-carlo': {
+    signal: '问题包含复杂积分、随机过程或难以直接枚举的高维不确定性。',
+    firstStep: '先明确要估计的期望/概率，以及随机变量的分布和采样方式。',
+    method: '重复随机采样并统计均值或比例，增加样本量观察估计误差是否收敛。',
+    idea: '先把目标写成可采样的期望或概率，再用大量随机试验估计结果与不确定性。',
+  },
+  'grey-prediction': {
+    signal: '数据点很少但序列有明显的单调或近似指数趋势。',
+    firstStep: '先画出原始序列，检查趋势、波动和数据量是否适合小样本预测。',
+    method: '做 AGO 累加生成、估计 GM(1,1) 参数，再累减还原并检验后验误差。',
+    idea: '先确认小样本序列具有稳定趋势，再用累加生成建立 GM(1,1) 预测。',
+  },
+}
+
+export function getCardWorkflow(cardOrId) {
+  const card = typeof cardOrId === 'string' ? CARD_BY_ID.get(cardOrId) : cardOrId
+  if (!card) return null
+  const mapped = CARD_WORKFLOWS[card.id]
+  if (mapped) return mapped
+  const topic = String(card.tag || '该类问题').split('/')[0].trim()
+  return {
+    signal: card.when || `题目中出现${topic}类目标，需要把现象转成可计算的问题。`,
+    firstStep: '先明确题目目标、关键变量、可用数据和必须满足的限制。',
+    method: `把变量与题目条件列成表，再用数据检查${card.title}是否满足使用前提。`,
+    idea: `先根据题目目标和数据特征判断${card.title}是否适用，再用验证结果决定是否继续采用。`,
+  }
+}
+
 /**
  * 内嵌知识卡片（读题附属）：AI 输出提到建模概念时，就地出现在内容下方。
  * 折叠态只显示标题行；点击展开概念 + 交互演示 + 试一试。
  */
-export function KnowledgeCard({ cardId, defaultOpen = false, variant = 'full', label, reason }) {
+export function KnowledgeCard({ cardId, defaultOpen = false, variant = 'full', label, reason, onAddToBreakdown, added = false }) {
   const card = CARDS.find((c) => c.id === cardId) || CARDS[0]
   const [open, setOpen] = useState(defaultOpen)
   const [favs, setFavs] = useState(loadFavorites)
@@ -3199,11 +3351,11 @@ export function KnowledgeCard({ cardId, defaultOpen = false, variant = 'full', l
   }
 
   if (variant === 'summary') {
-    return <KnowledgeCardSummary card={card} open={open} setOpen={setOpen} isFav={isFav} toggleFav={toggleFav} label={label} reason={reason} />
+    return <KnowledgeCardSummary card={card} open={open} setOpen={setOpen} isFav={isFav} toggleFav={toggleFav} label={label} reason={reason} onAddToBreakdown={onAddToBreakdown} added={added} />
   }
 
   if (variant === 'study') {
-    return <KnowledgeCardStudy card={card} open={open} setOpen={setOpen} isFav={isFav} toggleFav={toggleFav} label={label} />
+    return <KnowledgeCardStudy card={card} open={open} setOpen={setOpen} isFav={isFav} toggleFav={toggleFav} label={label} onAddToBreakdown={onAddToBreakdown} added={added} />
   }
 
   return (
@@ -3235,15 +3387,16 @@ export function KnowledgeCard({ cardId, defaultOpen = false, variant = 'full', l
       </div>
       {open && (
         <div className="concept-body">
-          <CardDetail card={card} showDemo showTry showSourceDetails />
+          <CardDetail card={card} showDemo showTry showSourceDetails onAddToBreakdown={onAddToBreakdown} added={added} />
         </div>
       )}
     </div>
   )
 }
 
-function KnowledgeCardStudy({ card, open, setOpen, isFav, toggleFav, label = '快速摘要' }) {
+function KnowledgeCardStudy({ card, open, setOpen, isFav, toggleFav, label = '快速摘要', onAddToBreakdown, added }) {
   const summary = buildSummary(card)
+  const workflow = getCardWorkflow(card)
   return (
     <div className={`concept-card concept-card-study ${open ? 'open' : ''}`}>
       <div
@@ -3273,18 +3426,23 @@ function KnowledgeCardStudy({ card, open, setOpen, isFav, toggleFav, label = '�
       </div>
       <div className="concept-summary">
         <p className="kc-summary"><b>一句话定义：</b>{summary}</p>
+        <div className="kc-action-preview">
+          <span>第一步</span>
+          <p>{workflow.firstStep}</p>
+        </div>
       </div>
       {open && (
         <div className="concept-body concept-body-study">
-          <CardDetail card={card} showDefinition={false} showDemo showTry showSourceDetails />
+          <CardDetail card={card} showDefinition={false} showDemo showTry showSourceDetails onAddToBreakdown={onAddToBreakdown} added={added} />
         </div>
       )}
     </div>
   )
 }
 
-function KnowledgeCardSummary({ card, open, setOpen, isFav, toggleFav, label = '召回摘要', reason }) {
+function KnowledgeCardSummary({ card, open, setOpen, isFav, toggleFav, label = '召回摘要', reason, onAddToBreakdown, added }) {
   const summary = buildSummary(card)
+  const workflow = getCardWorkflow(card)
   return (
     <div className={`concept-card concept-card-summary ${open ? 'open' : ''}`}>
       <div
@@ -3315,19 +3473,24 @@ function KnowledgeCardSummary({ card, open, setOpen, isFav, toggleFav, label = '
       </div>
       <div className="concept-summary">
         <p className="kc-summary"><b>一句话定义：</b>{summary}</p>
+        <div className="kc-action-preview">
+          <span>第一步</span>
+          <p>{workflow.firstStep}</p>
+        </div>
       </div>
       {open && (
         <div className="concept-body concept-body-summary">
-          <CardDetail card={card} showDefinition={false} showSourceBrief />
+          <CardDetail card={card} showDefinition={false} showSourceBrief onAddToBreakdown={onAddToBreakdown} added={added} />
         </div>
       )}
     </div>
   )
 }
 
-function CardDetail({ card, showDefinition = true, showDemo = false, showTry = false, showSourceBrief = false, showSourceDetails = false }) {
+function CardDetail({ card, showDefinition = true, showDemo = false, showTry = false, showSourceBrief = false, showSourceDetails = false, onAddToBreakdown, added = false }) {
   const definition = card.definition || buildSummary(card)
   const sourceBrief = card.sourceBrief || (showSourceBrief && !showSourceDetails ? card.src : '')
+  const workflow = getCardWorkflow(card)
   return (
     <>
       {showDefinition && (
@@ -3354,6 +3517,31 @@ function CardDetail({ card, showDefinition = true, showDemo = false, showTry = f
           <p>{card.cautions}</p>
         </section>
       )}
+      <section className="kc-action-section">
+        <div className="kc-section-label">落到题目里</div>
+        <div className="kc-action-grid">
+          <div>
+            <span>题目信号</span>
+            <p>{workflow.signal}</p>
+          </div>
+          <div>
+            <span>第一步怎么做</span>
+            <p>{workflow.firstStep}</p>
+          </div>
+          <div>
+            <span>怎么实现</span>
+            <p>{workflow.method}</p>
+          </div>
+        </div>
+        {onAddToBreakdown && (
+          <div className="kc-action-footer">
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => onAddToBreakdown(card)} disabled={added}>
+              <IconPlus size={13} /> {added ? '已加入候选' : '加入拆解块'}
+            </button>
+            <span>{added ? '可在梳理台继续修改' : '先作为候选，确认后再写入'}</span>
+          </div>
+        )}
+      </section>
       {showDemo && card.demo && (
         <section className="kc-section kc-demo-section">
           <div className="kc-section-label">交互演示</div>
