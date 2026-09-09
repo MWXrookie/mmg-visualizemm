@@ -108,6 +108,9 @@ input, textarea, select { font-family: inherit; }
 .content { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
 .content > .ws, .content > .code-split, .content > .settings-page { flex: 1; min-height: 0; }
 .content > .settings-page { overflow: auto; width: 100%; }
+.page-view { display: none; min-width: 0; min-height: 0; overflow: hidden; }
+.page-view.active { display: flex; flex: 1; }
+.page-view.active > .ws { flex: 1; min-height: 0; }
 
 .sidebar { background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 14px 12px; }
 .onboard-strip {

@@ -438,8 +438,12 @@ export default function App() {
             </div>
           </div>
         )}
-        {view === 'workbench' && <Workbench {...pageProps} onNewWorkspace={newWorkspace} />}
-        {view === 'modeling' && <Modeling {...pageProps} />}
+        <div className={`page-view ${view === 'workbench' ? 'active' : ''}`}>
+          <Workbench {...pageProps} onNewWorkspace={newWorkspace} />
+        </div>
+        <div className={`page-view ${view === 'modeling' ? 'active' : ''}`}>
+          <Modeling {...pageProps} />
+        </div>
         {view === 'coding' && <Coding {...pageProps} />}
         {view === 'settings' && <Settings settings={settings} setSettings={setSettings} />}
       </main>
