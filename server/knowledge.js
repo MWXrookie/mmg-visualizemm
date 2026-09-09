@@ -15,6 +15,7 @@
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { requestUpstream, responseText } from './upstream.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PAPER_DIR = path.join(__dirname, '..', 'docs', '07-论文库')
@@ -23,7 +24,7 @@ const ENV_FILE = path.join(__dirname, '.env.local')
 
 /* ---------- 读取本地 embedding 配置（不硬编码 key） ---------- */
 function loadLocalConfig() {
-  const cfg = { baseUrl: '', apiKey: '', embedModel: '' }
+  const cfg = { baseUrl: '', apiKey: '', embedModel: '', proxyUrl: '' }
   try {
     if (fs.existsSync(ENV_FILE)) {
       // 用 /\r?\n/ 兼容 CRLF/LF；正则容忍行尾 \r（最后一行常无换行符）
@@ -34,10 +35,12 @@ function loadLocalConfig() {
     }
   } catch { /* ignore */ }
   // 字段映射：EMBED_API_KEY → apiKey, EMBED_MODEL → embedModel, EMBED_BASE_URL → baseUrl
+  // 代理也支持放在 server/.env.local，适合统一部署配置。
   return {
     baseUrl: cfg.EMBED_BASE_URL || cfg.baseUrl || '',
     apiKey: cfg.EMBED_API_KEY || cfg.apiKey || '',
     embedModel: cfg.EMBED_MODEL || cfg.embedModel || '',
+    proxyUrl: cfg.HTTPS_PROXY || cfg.HTTP_PROXY || cfg.ALL_PROXY || cfg.proxyUrl || '',
   }
 }
 const localCfg = loadLocalConfig()
@@ -140,19 +143,22 @@ function localEmbed(text) {
 async function embedText(text, provider = {}) {
   // 优先级：本地 .env.local 千问 > 浏览器传入 provider > 本地哈希
   const candidates = []
-  if (localCfg.apiKey && localCfg.baseUrl) candidates.push({ baseUrl: localCfg.baseUrl, apiKey: localCfg.apiKey, model: localCfg.embedModel })
-  if (provider.baseUrl && provider.apiKey) candidates.push({ baseUrl: provider.baseUrl, apiKey: provider.apiKey, model: provider.embedModel })
+  if (localCfg.apiKey && localCfg.baseUrl) candidates.push({ baseUrl: localCfg.baseUrl, apiKey: localCfg.apiKey, model: localCfg.embedModel, proxyUrl: localCfg.proxyUrl })
+  if (provider.baseUrl && provider.apiKey) candidates.push({ baseUrl: provider.baseUrl, apiKey: provider.apiKey, model: provider.embedModel, proxyUrl: provider.proxyUrl })
   for (const c of candidates) {
     const base = (c.baseUrl || '').trim().replace(/\/+$/, '').replace(/\/chat\/completions$/, '')
     try {
-      const res = await fetch(`${base}/embeddings`, {
+      const res = await requestUpstream({
+        url: `${base}/embeddings`,
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${c.apiKey}` },
         body: JSON.stringify({ model: c.model || 'text-embedding-v3', input: text.slice(0, 6000), dimensions: 512 }),
         signal: AbortSignal.timeout(30000),
+        timeout: 30000,
+        proxyUrl: c.proxyUrl || '',
       })
-      if (res.ok) {
-        const json = await res.json()
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        const json = JSON.parse(await responseText(res))
         const vec = json?.data?.[0]?.embedding
         if (Array.isArray(vec) && vec.length > 0) return { vector: vec, source: 'api' }
       }

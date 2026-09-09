@@ -11,6 +11,7 @@ import fs from 'fs'
 import { Readable } from 'stream'
 import { createRequire } from 'module'
 import ExcelJS from 'exceljs'
+import { formatNetworkError, requestUpstream, responseText } from './upstream.js'
 
 // pdf-parse 2.x：导出 { PDFParse } 类（ESM 下用 createRequire 加载）
 const require = createRequire(import.meta.url)
@@ -60,7 +61,7 @@ function normalizeBase(baseUrl) {
   return u.replace(/\/chat\/completions$/, '') // 去掉完整端点后缀，由调用方统一拼 /chat/completions
 }
 
-async function callChat({ baseUrl, apiKey, model, messages, maxTokens }) {
+async function callChat({ baseUrl, apiKey, model, messages, maxTokens, proxyUrl }) {
   const base = normalizeBase(baseUrl)
   if (!base || !apiKey || !model) {
     const err = new Error('缺少 baseUrl / apiKey / model')
@@ -75,40 +76,29 @@ async function callChat({ baseUrl, apiKey, model, messages, maxTokens }) {
     temperature: 0.4,
     stream: false,
   }
+  const requestBody = JSON.stringify(body)
   let res
   try {
-    res = await fetch(url, {
+    const upstream = await requestUpstream({
+      url,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify(body),
+      body: requestBody,
+      proxyUrl,
       signal: AbortSignal.timeout(300000),
+      timeout: 300000,
     })
+    res = { ok: upstream.statusCode >= 200 && upstream.statusCode < 300, status: upstream.statusCode, text: await responseText(upstream) }
   } catch (e) {
-    const cause = e?.cause || {}
-    const code = cause.code || e.code || ''
-    let msg = '连不上模型服务'
-    if (e.name === 'AbortError' || /timeout/i.test(String(e.message || cause.message || ''))) {
-      msg = '请求超时'
-    } else if (code === 'ENOTFOUND') {
-      msg = '找不到模型服务地址'
-    } else if (code === 'ECONNREFUSED') {
-      msg = '模型服务拒绝连接'
-    } else if (code === 'ECONNRESET') {
-      msg = '连接被模型服务中断'
-    } else if (code === 'CERT_HAS_EXPIRED' || code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE') {
-      msg = '模型服务证书校验失败'
-    } else if (code === 'UND_ERR_CONNECT_TIMEOUT') {
-      msg = '连接模型服务超时'
-    }
-    const detail = code || e.message || cause.message || 'network error'
-    const err = new Error(`${msg}：${detail}。请检查 Base URL、网络或代理设置`)
-    err.code = 'NETWORK'
+    const err = e.code === 'BAD_CONFIG' || e.code === 'PROXY_BAD_CONFIG'
+      ? e
+      : formatNetworkError(e, url)
     throw err
   }
-  const text = await res.text()
+  const text = res.text
   let json = null
   try { json = text ? JSON.parse(text) : null } catch { /* ignore */ }
 
@@ -159,10 +149,10 @@ function formatError(status, json, text) {
 }
 
 app.post('/api/test-key', async (req, res) => {
-  const { baseUrl, apiKey, model } = req.body || {}
+  const { baseUrl, apiKey, model, proxyUrl } = req.body || {}
   try {
     const r = await callChat({
-      baseUrl, apiKey, model: model || 'qwen-plus',
+      baseUrl, apiKey, model: model || 'qwen-plus', proxyUrl,
       messages: [{ role: 'user', content: 'ping' }],
       maxTokens: 5,
     })
@@ -173,12 +163,12 @@ app.post('/api/test-key', async (req, res) => {
 })
 
 app.post('/api/chat', async (req, res) => {
-  const { baseUrl, apiKey, model, messages } = req.body || {}
+  const { baseUrl, apiKey, model, messages, proxyUrl } = req.body || {}
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ ok: false, message: 'messages 不能为空' })
   }
   try {
-    const r = await callChat({ baseUrl, apiKey, model, messages })
+    const r = await callChat({ baseUrl, apiKey, model, messages, proxyUrl })
     res.json({ ok: true, content: r.content, model: r.model })
   } catch (e) {
     res.status(400).json({ ok: false, code: e.code, message: e.message })
@@ -188,7 +178,7 @@ app.post('/api/chat', async (req, res) => {
 /* ---------- AI 流式中继（SSE，首字 <3s 验收项） ---------- */
 
 app.post('/api/chat/stream', async (req, res) => {
-  const { baseUrl, apiKey, model, messages } = req.body || {}
+  const { baseUrl, apiKey, model, messages, proxyUrl } = req.body || {}
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ ok: false, message: 'messages 不能为空' })
   }
@@ -197,26 +187,30 @@ app.post('/api/chat/stream', async (req, res) => {
     return res.status(400).json({ ok: false, code: 'BAD_CONFIG', message: '缺少 baseUrl / apiKey / model' })
   }
   const controller = new AbortController()
+  const url = `${base}/chat/completions`
   // 客户端断开（而非请求体读完）时才中止上游请求
   res.on('close', () => {
     if (!res.writableEnded) controller.abort()
   })
   try {
-    const upstream = await fetch(`${base}/chat/completions`, {
+    const upstream = await requestUpstream({
+      url,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({ model, messages, max_tokens: 16384, temperature: 0.4, stream: true }),
+      proxyUrl,
       signal: AbortSignal.any([controller.signal, AbortSignal.timeout(300000)]),
+      timeout: 300000,
     })
-    if (!upstream.ok || !upstream.body) {
-      const text = await upstream.text().catch(() => '')
+    if (!upstream || upstream.statusCode < 200 || upstream.statusCode >= 300) {
+      const text = await responseText(upstream).catch(() => '')
       let json = null
       try { json = text ? JSON.parse(text) : null } catch { /* ignore */ }
-      const err = new Error(formatError(upstream.status, json, text))
-      err.code = statusToCode(upstream.status)
+      const err = new Error(formatError(upstream.statusCode, json, text))
+      err.code = statusToCode(upstream.statusCode)
       throw err
     }
     res.writeHead(200, {
@@ -229,7 +223,7 @@ app.post('/api/chat/stream', async (req, res) => {
     let buffer = ''
     let sseLen = 0 // 诊断：统计本次流式转发的总字符数
     let reasoningLen = 0 // 推理模型：统计 reasoning_content 字符数（思考过程，不转发给前端）
-    for await (const chunk of upstream.body) {
+    for await (const chunk of upstream) {
       buffer += decoder.decode(chunk, { stream: true })
       let idx
       while ((idx = buffer.indexOf('\n')) >= 0) {
@@ -266,11 +260,14 @@ app.post('/api/chat/stream', async (req, res) => {
     res.write(`data: ${JSON.stringify({ done: true })}\n\n`)
     res.end()
   } catch (e) {
+    const error = e.code === 'MODEL_ERROR' || e.code === 'INVALID_KEY' || e.code === 'QUOTA' || e.code === 'NOT_FOUND' || e.code === 'BAD_CONFIG' || e.code === 'PROXY_BAD_CONFIG'
+      ? e
+      : formatNetworkError(e, url)
     if (!res.headersSent) {
-      return res.status(400).json({ ok: false, code: e.code, message: e.message })
+      return res.status(400).json({ ok: false, code: error.code, message: error.message })
     }
     // 已开始流式输出：以 SSE error 事件告知前端（保留已展示的部分内容）
-    res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`)
+    res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`)
     res.end()
   }
 })
@@ -655,7 +652,7 @@ import { ensureKnowledgeBase, searchKnowledge, knowledgeStats } from './knowledg
 // 知识库状态：论文数 / 分块数（按类型）/ embedding 来源
 app.get('/api/knowledge/stats', async (_req, res) => {
   try {
-    const provider = { baseUrl: String(_req.query.baseUrl || ''), apiKey: String(_req.query.apiKey || ''), embedModel: String(_req.query.embedModel || '') }
+    const provider = { baseUrl: String(_req.query.baseUrl || ''), apiKey: String(_req.query.apiKey || ''), embedModel: String(_req.query.embedModel || ''), proxyUrl: String(_req.query.proxyUrl || '') }
     const kb = await ensureKnowledgeBase(provider)
     res.json({ ok: true, ...knowledgeStats(), vecsReady: !!kb && kb.vecs.length === kb.chunks.length })
   } catch (e) {
@@ -666,9 +663,9 @@ app.get('/api/knowledge/stats', async (_req, res) => {
 // 检索：POST /api/knowledge/search { query, baseUrl, apiKey, embedModel, topK }
 app.post('/api/knowledge/search', async (req, res) => {
   try {
-    const { query, baseUrl, apiKey, embedModel, topK } = req.body || {}
+    const { query, baseUrl, apiKey, embedModel, proxyUrl, topK } = req.body || {}
     if (!query || !query.trim()) return res.status(400).json({ ok: false, message: '缺少检索词 query' })
-    const provider = { baseUrl: String(baseUrl || ''), apiKey: String(apiKey || ''), embedModel: String(embedModel || '') }
+    const provider = { baseUrl: String(baseUrl || ''), apiKey: String(apiKey || ''), embedModel: String(embedModel || ''), proxyUrl: String(proxyUrl || '') }
     const hits = await searchKnowledge(query.trim(), provider, Math.min(Number(topK) || 4, 8))
     res.json({ ok: true, hits, count: hits.length })
   } catch (e) {

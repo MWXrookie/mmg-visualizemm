@@ -9,6 +9,7 @@ function draftFingerprint(value) {
     baseUrl: value.baseUrl.trim(),
     apiKey: value.apiKey.trim(),
     model: value.model.trim(),
+    proxyUrl: (value.proxyUrl || '').trim(),
     guideMode: value.guideMode,
   })
 }
@@ -19,20 +20,30 @@ function friendlyError(error) {
   if (code === 'INVALID_KEY' || /API Key 无效|Key 无效|401/.test(message)) return 'API Key 无效或已过期。请重新复制 Key，确认没有多余空格，并检查它是否属于当前服务商。'
   if (code === 'QUOTA' || /余额不足|额度|请求过于频繁|402|429/.test(message)) return '服务商余额或调用额度不足。请检查账户余额、模型权限，或稍后再试。'
   if (code === 'NOT_FOUND' || /模型不存在|接口地址|404/.test(message)) return '找不到接口或模型。请检查 Base URL 是否带正确的 /v1，以及模型名是否与服务商控制台一致。'
-  if (/EACCES|权限被拒绝|permission denied/i.test(message)) return '本机网络权限拒绝了连接。请检查代理、防火墙或安全软件是否拦截了本地服务的出站请求。'
+  if (code === 'PROXY_BAD_CONFIG') return message
+  if (code === 'NETWORK' && message) return message
+  if (/EACCES|EPERM|权限被拒绝|permission denied/i.test(message)) return '本机网络策略拒绝了连接。请检查代理、防火墙或安全软件，也可以填写可用的 HTTP 代理后重试。'
   if (/Failed to fetch|NetworkError|网络请求失败|fetch failed/i.test(message)) return '本地中继服务没有响应。请确认应用服务已启动，并刷新页面后再测试。'
   if (code === 'NETWORK' || /连不上|找不到模型服务|拒绝连接|连接.*超时|证书校验|ENOTFOUND|ECONNREFUSED|timeout/i.test(message)) return '连不上模型服务。请检查 Base URL、网络代理和服务商地址是否可访问。'
   if (code === 'BAD_CONFIG' || /缺少 baseUrl|缺少.*model/i.test(message)) return '配置不完整。请填入 Base URL、API Key 和模型名。'
   return message || '连接测试失败，请检查配置后重试。'
 }
 
-function validateDraft({ baseUrl, apiKey, model }) {
+function validateDraft({ baseUrl, apiKey, model, proxyUrl }) {
   if (!baseUrl || !apiKey || !model) return '请先填全 Base URL、API Key 和模型名。'
   try {
     const url = new URL(baseUrl)
     if (!['http:', 'https:'].includes(url.protocol)) throw new Error()
   } catch {
     return 'Base URL 格式不正确，请填写以 http:// 或 https:// 开头的地址。'
+  }
+  if (proxyUrl) {
+    try {
+      const proxy = new URL(proxyUrl)
+      if (!['http:', 'https:'].includes(proxy.protocol) || !proxy.hostname) throw new Error()
+    } catch {
+      return '网络代理地址格式不正确，请填写类似 http://127.0.0.1:7890 的地址。'
+    }
   }
   return ''
 }
@@ -42,6 +53,7 @@ export default function Settings({ settings, setSettings }) {
   const [baseUrl, setBaseUrl] = useState(settings.baseUrl)
   const [apiKey, setApiKey] = useState(settings.apiKey)
   const [model, setModel] = useState(settings.model)
+  const [proxyUrl, setProxyUrl] = useState(settings.proxyUrl || '')
   const [showKey, setShowKey] = useState(false)
   const [testing, setTesting] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -53,8 +65,9 @@ export default function Settings({ settings, setSettings }) {
     baseUrl: baseUrl.trim(),
     apiKey: apiKey.trim(),
     model: model.trim(),
+    proxyUrl: proxyUrl.trim(),
     guideMode,
-  }), [providerId, baseUrl, apiKey, model, guideMode])
+  }), [providerId, baseUrl, apiKey, model, proxyUrl, guideMode])
   const isDirty = draftFingerprint(draft) !== draftFingerprint(settings)
   const hasKey = Boolean(apiKey.trim())
   const provider = PROVIDERS.find((p) => p.id === providerId) || PROVIDERS[0]
@@ -149,6 +162,12 @@ export default function Settings({ settings, setSettings }) {
           </div>
 
           <div className="field">
+            <label htmlFor="proxy-url">网络代理 <span className="label-note">可选</span></label>
+            <input id="proxy-url" type="url" value={proxyUrl} onChange={(e) => { setProxyUrl(e.target.value); clearResult() }} placeholder="http://127.0.0.1:7890" autoComplete="url" spellCheck="false" />
+            <span className="field-hint">模型服务无法直连时填写 HTTP/HTTPS 代理；留空表示直连。代理只用于本地中继访问模型服务。</span>
+          </div>
+
+          <div className="field">
             <label htmlFor="model">模型名</label>
             <input id="model" value={model} onChange={(e) => { setModel(e.target.value); clearResult() }} placeholder="qwen-plus / deepseek-chat" autoComplete="off" spellCheck="false" />
             <span className="field-hint">模型名必须是对应服务商控制台中可调用的名称。</span>
@@ -174,6 +193,7 @@ export default function Settings({ settings, setSettings }) {
               <div><dt>服务商</dt><dd>{provider.label}</dd></div>
               <div><dt>模型</dt><dd title={model}>{model || '未填写'}</dd></div>
               <div><dt>API Key</dt><dd className={hasKey ? 'ok' : 'muted'}>{hasKey ? '已填写' : '未填写'}</dd></div>
+              <div><dt>网络代理</dt><dd className={proxyUrl.trim() ? 'ok' : 'muted'}>{proxyUrl.trim() ? '已配置' : '直连'}</dd></div>
               <div><dt>本地保存</dt><dd>{isDirty ? '待保存' : '已同步'}</dd></div>
             </dl>
           </section>

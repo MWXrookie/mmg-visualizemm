@@ -114,6 +114,16 @@ EMBED_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 
 配置后重启服务，知识库自动用千问语义向量重建（约 1238 块）。
 
+### 网络代理（可选）
+
+如果当前网络无法直连模型服务，可在「模型设置」中填写 HTTP/HTTPS 代理，例如：
+
+```text
+http://127.0.0.1:7890
+```
+
+代理地址会随本地配置保存，并用于测试、对话、流式生成和知识库请求。也可以在 `server/.env.local` 中配置 `HTTPS_PROXY`、`HTTP_PROXY` 或 `ALL_PROXY`，重启服务后统一生效；设置页填写的代理优先于环境变量。代理不可用时，页面会显示代理连接的具体失败原因。
+
 ---
 
 ## 📁 项目结构

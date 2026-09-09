@@ -57,7 +57,7 @@ export async function decryptText(cipher) {
 }
 
 export function defaults() {
-  return { providerId: 'dashscope', baseUrl: PROVIDERS[0].baseUrl, apiKey: '', model: PROVIDERS[0].model, guideMode: true }
+  return { providerId: 'dashscope', baseUrl: PROVIDERS[0].baseUrl, apiKey: '', model: PROVIDERS[0].model, proxyUrl: '', guideMode: true }
 }
 
 /** 异步读取设置：apiKey 自动解密 */

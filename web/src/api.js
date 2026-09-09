@@ -21,6 +21,7 @@ export function testKey(settings) {
     baseUrl: settings.baseUrl,
     apiKey: settings.apiKey,
     model: settings.model,
+    proxyUrl: settings.proxyUrl || '',
   })
 }
 
@@ -29,6 +30,7 @@ export function chat(settings, messages) {
     baseUrl: settings.baseUrl,
     apiKey: settings.apiKey,
     model: settings.model,
+    proxyUrl: settings.proxyUrl || '',
     messages,
   })
 }
@@ -50,6 +52,7 @@ export async function streamChat(settings, messages, { onDelta } = {}) {
         baseUrl: settings.baseUrl,
         apiKey: settings.apiKey,
         model: settings.model,
+        proxyUrl: settings.proxyUrl || '',
         messages,
       }),
       signal: ctrl.signal,
@@ -213,6 +216,7 @@ export async function retrieveKnowledge(query, settings, topK = 3) {
         baseUrl: settings.baseUrl,
         apiKey: settings.apiKey,
         embedModel: settings.embedModel || '',
+        proxyUrl: settings.proxyUrl || '',
         topK,
       }),
     })
