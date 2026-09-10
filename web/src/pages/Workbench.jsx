@@ -49,6 +49,37 @@ function loadPanelW() {
   return '36%'
 }
 
+const WORKBENCH_PANEL_STATE_KEY = 'mmg_workbench_panel_state_v1'
+
+function loadWorkbenchPanelState(wsId) {
+  if (!wsId) return null
+  try {
+    const raw = localStorage.getItem(`${WORKBENCH_PANEL_STATE_KEY}:${wsId}`)
+    if (!raw) return null
+    const state = JSON.parse(raw)
+    return {
+      bookmark: state.bookmark === '卡片' ? '卡片' : '精读',
+      selResults: Array.isArray(state.selResults) ? state.selResults : [],
+      deposited: new Set(Array.isArray(state.deposited) ? state.deposited : []),
+      cardQuery: typeof state.cardQuery === 'string' ? state.cardQuery : '',
+    }
+  } catch {
+    return null
+  }
+}
+
+function saveWorkbenchPanelState(wsId, state) {
+  if (!wsId) return
+  try {
+    localStorage.setItem(`${WORKBENCH_PANEL_STATE_KEY}:${wsId}`, JSON.stringify({
+      bookmark: state.bookmark,
+      selResults: state.selResults,
+      deposited: [...state.deposited],
+      cardQuery: state.cardQuery,
+    }))
+  } catch { /* ignore local cache failures */ }
+}
+
 // 附件 id 唯一化：同毫秒批量上传同名文件时，仅 Date.now() 会撞 id 导致后一个覆盖前一个
 let attSeq = 0
 const attId = (name) => `${name}-${Date.now()}-${attSeq++}`
@@ -80,12 +111,13 @@ function roleIdeaDraft(role, selected) {
 }
 
 export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSidebar, onNewWorkspace }) {
-  const [selResults, setSelResults] = useState([]) // 划词精读累积记录（角色判定卡列表，不因新划词被顶替）
+  const initialPanelState = useRef(loadWorkbenchPanelState(ws?.id))
+  const [selResults, setSelResults] = useState(() => initialPanelState.current?.selResults || []) // 划词精读累积记录（角色判定卡列表，不因新划词被顶替）
   const [roleStream, setRoleStream] = useState('') // 划词精读流式输出（实时反馈）
   const [floatSel, setFloatSel] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [bookmark, setBookmark] = useState('精读') // 精读 | 卡片
+  const [bookmark, setBookmark] = useState(() => initialPanelState.current?.bookmark || '精读') // 精读 | 卡片
   const [streamBuf, setStreamBuf] = useState('') // 整体解读流式缓冲
   const [pasteText, setPasteText] = useState('') // 空态"粘贴题目文本"输入
   const [editOpen, setEditOpen] = useState(false) // 编辑题干弹窗
@@ -94,13 +126,14 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
   const [depositOpen, setDepositOpen] = useState(false)
   const [depositMode, setDepositMode] = useState('new') // new | existing
   const [depositDraft, setDepositDraft] = useState(null)
-  const [deposited, setDeposited] = useState(() => new Set())
-  const [cardQuery, setCardQuery] = useState('')
+  const [deposited, setDeposited] = useState(() => initialPanelState.current?.deposited || new Set())
+  const [cardQuery, setCardQuery] = useState(() => initialPanelState.current?.cardQuery || '')
   const [panelW, setPanelW] = useState(loadPanelW)
   const textRef = useRef(null)
   const fileInputRef = useRef(null)
   const problemFileInputRef = useRef(null)
   const wsIdRef = useRef(ws?.id || '')
+  const restoringPanelStateRef = useRef(false)
 
   const title = ws?.title || ''
   const problemText = ws?.problemText || ''
@@ -113,9 +146,24 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
   const wsIdNow = ws?.id
   useEffect(() => { wsIdRef.current = wsIdNow || '' }, [wsIdNow])
   useEffect(() => {
+    const saved = loadWorkbenchPanelState(wsIdNow)
+    restoringPanelStateRef.current = true
     setSelResults([]); setFloatSel(null); setError(''); setStreamBuf(''); setPasteText(''); setRoleStream('')
-    setDepositOpen(false); setDepositDraft(null); setDeposited(new Set())
+    setDepositOpen(false); setDepositDraft(null)
+    setBookmark(saved?.bookmark || '精读')
+    setSelResults(saved?.selResults || [])
+    setDeposited(saved?.deposited || new Set())
+    setCardQuery(saved?.cardQuery || '')
   }, [wsIdNow])
+
+  // 右栏状态独立于页面挂载，避免导航或热更新时丢失当前 tab、精读记录和卡片搜索。
+  useEffect(() => {
+    if (restoringPanelStateRef.current) {
+      restoringPanelStateRef.current = false
+      return
+    }
+    saveWorkbenchPanelState(wsIdNow, { bookmark, selResults, deposited, cardQuery })
+  }, [wsIdNow, bookmark, selResults, deposited, cardQuery])
 
   /** 空态"粘贴题目文本"确认：写入题干（有已有题干则追加） */
   function confirmPaste() {

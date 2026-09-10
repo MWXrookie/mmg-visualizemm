@@ -118,6 +118,35 @@ function loadPanelW() {
   return '36%'
 }
 
+const MODELING_PANEL_STATE_KEY = 'mmg_modeling_panel_state_v1'
+
+function loadModelingPanelState(wsId) {
+  if (!wsId) return null
+  try {
+    const raw = localStorage.getItem(`${MODELING_PANEL_STATE_KEY}:${wsId}`)
+    if (!raw) return null
+    const state = JSON.parse(raw)
+    return {
+      panel: state.panel === 'kc' ? 'kc' : 'chat',
+      msgs: Array.isArray(state.msgs) ? state.msgs : [],
+      kcQuery: typeof state.kcQuery === 'string' ? state.kcQuery : '',
+    }
+  } catch {
+    return null
+  }
+}
+
+function saveModelingPanelState(wsId, state) {
+  if (!wsId) return
+  try {
+    localStorage.setItem(`${MODELING_PANEL_STATE_KEY}:${wsId}`, JSON.stringify({
+      panel: state.panel,
+      msgs: state.msgs,
+      kcQuery: state.kcQuery,
+    }))
+  } catch { /* ignore local cache failures */ }
+}
+
 function normalizeStep(step) {
   return {
     action: typeof step?.action === 'string' ? step.action : (typeof step?.label === 'string' ? step.label : ''),
@@ -165,10 +194,11 @@ const nid = () => `b${Date.now()}-${uid++}`
 export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSidebar }) {
   const problemText = ws?.problemText || ''
   const attachments = ws?.attachments || []
+  const initialPanelState = useRef(loadModelingPanelState(ws?.id))
   const [blocks, setBlocks] = useState([])
   const [openSet, setOpenSet] = useState(() => new Set())
-  const [panel, setPanel] = useState('chat') // chat | kc
-  const [msgs, setMsgs] = useState([])
+  const [panel, setPanel] = useState(() => initialPanelState.current?.panel || 'chat') // chat | kc
+  const [msgs, setMsgs] = useState(() => initialPanelState.current?.msgs || [])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [streaming, setStreaming] = useState('') // AI 对话流式输出（实时显示，与 Workbench/Coding 一致）
@@ -177,11 +207,12 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
   const [relateId, setRelateId] = useState(null)
   const [editingId, setEditingId] = useState(null)
   const [draft, setDraft] = useState(null)
-  const [kcQuery, setKcQuery] = useState('')
+  const [kcQuery, setKcQuery] = useState(() => initialPanelState.current?.kcQuery || '')
   const [ctxOpen, setCtxOpen] = useState(false)
   const [panelW, setPanelW] = useState(loadPanelW)
   const chatRef = useRef(null)
   const saveTimer = useRef(null)
+  const restoringPanelStateRef = useRef(false)
 
   const wsIdNow = ws?.id
 
@@ -189,10 +220,24 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
   useEffect(() => {
     if (!wsIdNow || !ws || ws.id !== wsIdNow) return
     const b = normalizeBlocks(ws.breakdown)
+    const saved = loadModelingPanelState(wsIdNow)
+    restoringPanelStateRef.current = true
     setBlocks(b)
     setOpenSet(b.length ? new Set([b[0].id]) : new Set())
-    setPreview(null); setMsgs([]); setError(''); setStreaming('')
+    setPreview(null); setError(''); setStreaming('')
+    setPanel(saved?.panel || 'chat')
+    setMsgs(saved?.msgs || [])
+    setKcQuery(saved?.kcQuery || '')
   }, [wsIdNow, ws?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 保留思路梳理台右栏的对话、知识卡片 tab 和搜索状态。
+  useEffect(() => {
+    if (restoringPanelStateRef.current) {
+      restoringPanelStateRef.current = false
+      return
+    }
+    saveModelingPanelState(wsIdNow, { panel, msgs, kcQuery })
+  }, [wsIdNow, panel, msgs, kcQuery])
 
   // 拆解块改动 → 自动保存到共享工作区（防抖）
   useEffect(() => {
