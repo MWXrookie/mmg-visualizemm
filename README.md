@@ -40,10 +40,11 @@
 - 方法库每条含：适用场景 / 使用步骤 / 失效边界 / 评委视角 / 来源论文
 
 ### ⚙️ BYOK · 自带密钥
-- 通义百炼 / DeepSeek / OpenAI / 自定义端点预设，**Key 经 AES-GCM 加密只存浏览器本地**，数据不出浏览器
+- 通义百炼 / DeepSeek / OpenAI / 自定义端点预设；安全上下文中 **Key 经 AES-GCM 加密只存浏览器本地**，服务端仅按请求中继且不持久化对话模型 Key
 
 ### 🎨 体验细节
 - 深色模式一键切换、SSE 流式打字机、👍/👎/重新生成、会话自动保存/恢复/导出 Markdown
+- 工作区支持带版本的 JSON 备份与安全导入；导入始终创建新工作区，不覆盖现有数据，也不包含 API Key
 - 门户页：`/ai-portal.html`（产品介绍落地页）
 
 ---
@@ -95,6 +96,21 @@ ipconfig    # 找"以太网"或"WLAN"的 IPv4 地址，如 192.168.x.x
 npm run dev    # Vite(5173) + 后端(3088)，改代码自动刷新
 ```
 
+### 提交前检查
+
+```bash
+npm run check   # 单元/API/金标准契约测试 + 服务端语法检查 + 前端生产构建
+npx playwright install chromium  # 首次运行浏览器冒烟前安装（只需一次）
+npm run test:browser             # 隔离数据下的 Chromium 工作区主路径冒烟
+git diff --check
+```
+
+仓库的 GitHub Actions 会在 push 和 pull request 时执行基础检查及 Playwright 浏览器冒烟。基础检查包含 9 道金标准样本的 Schema、路径、哈希、原文证据与确定性基线；其中 3 道开放数据题还会核对 CC BY 4.0 许可、DOI、原始快照和改编记录。当前浏览器冒烟覆盖无 Key 设置、TXT 题干上传、拆解块、编程台入口、备份导入导出与刷新恢复，并用本地确定性替身验证整体解读、划词角色卡、代码生成、Pyodide 文本/图表输出和 CDN 断网提示。真实模型质量和真实 Pyodide 下载执行仍需按[质量保障与发布规范](docs/04-质量/质量保障与发布规范.md)完成人工验收。
+
+### 工作区备份与恢复
+
+在展开的左侧栏中使用「导出当前」生成 `.mmg-workspace.json` 文件，使用「导入备份」恢复。备份包含题目、分页文本、附件解析结果、拆解块、代码和整体解读；不包含 API Key、模型设置和浏览器偏好。导入会先验证格式与 `schemaVersion`，通过后创建新的工作区，原工作区不会被覆盖。
+
 ### 首次使用配置
 
 1. 打开 `http://127.0.0.1:3088`（或门户页 `/ai-portal.html` → 进入应用）
@@ -112,7 +128,7 @@ EMBED_MODEL=text-embedding-v3
 EMBED_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 ```
 
-配置后重启服务，知识库自动用千问语义向量重建（约 1238 块）。
+配置后重启服务，知识库会用千问语义向量重建；知识块数量随 `docs/07-论文库/` 内容变化（当前仓库扫描为 1251 块）。
 
 ### 网络代理（可选）
 
@@ -132,21 +148,28 @@ http://127.0.0.1:7890
 MMG_VisualizeMM/
 ├── web/                        # 前端（React 18 + Vite，JavaScript）
 │   ├── src/pages/              # 三台 + 设置（Workbench/Modeling/Coding/Settings）
-│   ├── src/pages/Cards.jsx     # 40 张知识卡片（注册表 + 交互 demo + 触发词）
+│   ├── src/pages/Cards.jsx     # 59 张知识卡片（注册表 + 交互 demo + 触发词）
 │   ├── src/lib/                # modelingExpert（专家核心）/ pyodide 封装
 │   └── public/ai-portal.html   # 门户页
 ├── server/                     # 后端（Express + node:sqlite）
-│   ├── index.js                # API 中继 / 工作区 / 知识库检索
-│   └── knowledge.js            # RAG 模块（切块/向量化/检索/缓存）
+│   ├── index.js                # API 中继 / SSE / 附件解析 / 工作区 / 静态托管
+│   ├── knowledge.js            # RAG 模块（切块/向量化/混合检索/缓存）
+│   └── upstream.js             # 模型与 Embedding 上游直连/代理传输
 ├── docs/                       # 全部文档
+│   ├── 00-项目治理/            # 单人 + AI 工作流、文档职责与稳定决策
+│   ├── 03-开发/                # 长期路线图与历史验收
+│   ├── 04-质量/                # 测试、发布、安全与验收规范
+│   ├── 05-立项/                # 创新项目申报底稿
+│   ├── diagrams/               # 已核验运行时架构 HTML + 四张浅/深色 PNG
 │   └── 07-论文库/              # 获奖论文精读 + 方法库 + 知识卡片库 + 深度档案
 └── data/                       # SQLite 工作区 + 知识库向量缓存（运行时生成）
 ```
 
 ## 📄 文档导航
 
-- [产品 PRD](docs/01-产品/PRD.md) ｜ [竞品调研](docs/01-产品/竞品调研报告.md) ｜ [技术架构](docs/01-产品/技术框架与架构.md)
-- [开发规划与验收](docs/03-开发/开发规划与验收.md)
+- [产品 PRD](docs/01-产品/PRD.md) ｜ [竞品调研](docs/01-产品/竞品调研报告.md) ｜ [技术架构](docs/01-产品/技术框架与架构.md) ｜ [交互式运行时架构图](docs/diagrams/mmg-runtime.architecture.html)
+- [长期开发规划与验收](docs/03-开发/开发规划与验收.md) ｜ [项目治理与文档规范](docs/00-项目治理/项目治理与文档规范.md)
+- [项目全局记忆](PROJECT_MEMORY.md) ｜ [质量保障与发布规范](docs/04-质量/质量保障与发布规范.md) ｜ [金标准评测集规范](docs/04-质量/金标准评测集规范.md) ｜ [创新项目立项准备](docs/05-立项/创新项目立项准备.md)
 - [设计系统 DESIGN.md](design-systems/mmg_visualizemm/DESIGN.md)
 - [论文库与方法库](docs/07-论文库/README.md) ｜ [知识卡片产出清单](docs/07-论文库/知识卡片产出清单.md) ｜ [知识库扩充计划](docs/07-论文库/知识库扩充计划.md)
 
@@ -156,7 +179,7 @@ MMG_VisualizeMM/
 - **后端**：Node.js + Express + `node:sqlite`（单进程，静态托管前端产物）
 - **代码执行**：Pyodide（浏览器内 Python，预装 numpy/pandas/matplotlib/scipy/sklearn）
 - **知识库**：RAG（切块 → embedding → 余弦+关键词混合检索 → 上下文注入）
-- **安全**：API Key AES-GCM 加密存 localStorage；`server/.env.local` 已 gitignore
+- **安全**：API Key 在 HTTPS/localhost 等安全上下文中以 AES-GCM 加密存入 localStorage；普通局域网 HTTP 会降级为明文并告警；服务端不持久化对话模型 Key
 
 ## ⚠️ 非商业公益项目
 
