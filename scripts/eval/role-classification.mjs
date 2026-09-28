@@ -1,22 +1,22 @@
 #!/usr/bin/env node
 /**
- * 角色判定评测集复跑脚本（M2 验收基准，对应 docs/评测集-角色判定.md）
+ * 角色判定评测集复跑脚本（对应 docs/03-开发/评测集-角色判定.md）。
  *
- * 用法：
- *   EVAL_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1 \
- *   EVAL_API_KEY=sk-xxx \
- *   EVAL_MODEL=qwen-plus \
- *   node scripts/eval-role.mjs
+ * 需要显式提供模型凭据；脚本不会读取项目的 .env.local，也不进入默认 CI。
+ * PowerShell 示例：
+ *   $env:EVAL_API_KEY = '<your-key>'
+ *   $env:EVAL_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+ *   $env:EVAL_MODEL = 'qwen-plus'
+ *   npm run eval:role
  *
- * 也可省略环境变量（默认走 dashscope / qwen-plus），改用自己的模型后建议重跑本集。
- * 阈值：正确率 ≥ 90% 退出码 0，否则退出码 1。
+ * 阈值：正确率 >= 90% 时退出码为 0，否则为 1。
  */
 const BASE_URL = (process.env.EVAL_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1').replace(/\/+$/, '')
 const API_KEY = process.env.EVAL_API_KEY || ''
 const MODEL = process.env.EVAL_MODEL || 'qwen-plus'
 
 if (!API_KEY) {
-  console.error('缺少 EVAL_API_KEY 环境变量（或用 EVAL_BASE_URL / EVAL_MODEL 指定模型）')
+  console.error('缺少 EVAL_API_KEY 环境变量（可用 EVAL_BASE_URL / EVAL_MODEL 指定其他 OpenAI 兼容模型）')
   process.exit(2)
 }
 
@@ -27,7 +27,7 @@ const SYSTEM =
   '{"role":"约束条件","confidence":92,"info":"这段提供的信息","impact":"对建模的影响","quote":"从题目原文引用的原句"}\n' +
   '要求：confidence 是 0-100 整数；quote 必须逐字复制原文。若无法判断，role 填"背景信息"。'
 
-// 与 docs/评测集-角色判定.md 完全一致的 10 条用例
+// 与 docs/03-开发/评测集-角色判定.md 一致的 10 条用例。
 const CASES = [
   { text: '车辆更新须满足各线路最低运营班次要求', expect: '约束条件' },
   { text: '单条线路新能源车占比不超过 80%', expect: '约束条件' },
@@ -43,19 +43,19 @@ const CASES = [
 
 function extractJson(text) {
   if (!text) return null
-  let t = text.trim()
-  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/)
-  if (fence) t = fence[1].trim()
-  const start = t.indexOf('{')
-  const end = t.lastIndexOf('}')
+  let candidate = text.trim()
+  const fence = candidate.match(/```(?:json)?\s*([\s\S]*?)```/)
+  if (fence) candidate = fence[1].trim()
+  const start = candidate.indexOf('{')
+  const end = candidate.lastIndexOf('}')
   if (start >= 0 && end > start) {
-    try { return JSON.parse(t.slice(start, end + 1)) } catch { /* fallthrough */ }
+    try { return JSON.parse(candidate.slice(start, end + 1)) } catch { /* fall through */ }
   }
-  try { return JSON.parse(t) } catch { return null }
+  try { return JSON.parse(candidate) } catch { return null }
 }
 
 async function judge(text) {
-  const res = await fetch(`${BASE_URL}/chat/completions`, {
+  const response = await fetch(`${BASE_URL}/chat/completions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_KEY}` },
     body: JSON.stringify({
@@ -69,31 +69,30 @@ async function judge(text) {
     }),
     signal: AbortSignal.timeout(60000),
   })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`HTTP ${res.status}: ${body.slice(0, 200)}`)
+  if (!response.ok) {
+    const body = await response.text().catch(() => '')
+    throw new Error(`HTTP ${response.status}: ${body.slice(0, 200)}`)
   }
-  const json = await res.json()
+  const json = await response.json()
   const content = json.choices?.[0]?.message?.content || ''
-  const parsed = extractJson(content)
-  return parsed?.role || '(解析失败)'
+  return extractJson(content)?.role || '(解析失败)'
 }
 
 const results = []
 for (let i = 0; i < CASES.length; i++) {
-  const c = CASES[i]
+  const testCase = CASES[i]
   let got
   try {
-    got = await judge(c.text)
-  } catch (e) {
-    got = `错误:${e.message}`
+    got = await judge(testCase.text)
+  } catch (error) {
+    got = `错误:${error.message}`
   }
-  const ok = got === c.expect
-  results.push({ ...c, got, ok })
-  console.log(`${ok ? '✓' : '✗'} [${String(i + 1).padStart(2)}] 判定=${got.padEnd(6)} 正确=${c.expect}`)
+  const ok = got === testCase.expect
+  results.push({ ...testCase, got, ok })
+  console.log(`${ok ? '✓' : '✗'} [${String(i + 1).padStart(2)}] 判定=${got.padEnd(6)} 正确=${testCase.expect}`)
 }
 
-const pass = results.filter((r) => r.ok).length
+const pass = results.filter((result) => result.ok).length
 const rate = (pass / CASES.length) * 100
-console.log(`\n结果：${pass}/${CASES.length} = ${rate.toFixed(1)}%（门槛 ≥90%）${rate >= 90 ? '✅ 达标' : '❌ 未达标'}`)
+console.log(`\n结果：${pass}/${CASES.length} = ${rate.toFixed(1)}%（门槛 >=90%）${rate >= 90 ? '✅ 达标' : '❌ 未达标'}`)
 process.exit(rate >= 90 ? 0 : 1)

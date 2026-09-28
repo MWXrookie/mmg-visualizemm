@@ -19,8 +19,12 @@ import { requestUpstream, responseText } from './upstream.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PAPER_DIR = path.join(__dirname, '..', 'docs', '07-论文库')
-const CACHE_FILE = path.join(__dirname, '..', 'data', 'knowledge_cache.json')
+const DATA_DIR = process.env.MMG_DATA_DIR
+  ? path.resolve(process.env.MMG_DATA_DIR)
+  : path.join(__dirname, '..', 'data')
+const CACHE_FILE = path.join(DATA_DIR, 'knowledge_cache.json')
 const ENV_FILE = path.join(__dirname, '.env.local')
+const FORCE_LOCAL_EMBEDDING = process.env.MMG_FORCE_LOCAL_EMBEDDING === '1'
 
 /* ---------- 读取本地 embedding 配置（不硬编码 key） ---------- */
 function loadLocalConfig() {
@@ -143,8 +147,8 @@ function localEmbed(text) {
 async function embedText(text, provider = {}) {
   // 优先级：本地 .env.local 千问 > 浏览器传入 provider > 本地哈希
   const candidates = []
-  if (localCfg.apiKey && localCfg.baseUrl) candidates.push({ baseUrl: localCfg.baseUrl, apiKey: localCfg.apiKey, model: localCfg.embedModel, proxyUrl: localCfg.proxyUrl })
-  if (provider.baseUrl && provider.apiKey) candidates.push({ baseUrl: provider.baseUrl, apiKey: provider.apiKey, model: provider.embedModel, proxyUrl: provider.proxyUrl })
+  if (!FORCE_LOCAL_EMBEDDING && localCfg.apiKey && localCfg.baseUrl) candidates.push({ baseUrl: localCfg.baseUrl, apiKey: localCfg.apiKey, model: localCfg.embedModel, proxyUrl: localCfg.proxyUrl })
+  if (!FORCE_LOCAL_EMBEDDING && provider.baseUrl && provider.apiKey) candidates.push({ baseUrl: provider.baseUrl, apiKey: provider.apiKey, model: provider.embedModel, proxyUrl: provider.proxyUrl })
   for (const c of candidates) {
     const base = (c.baseUrl || '').trim().replace(/\/+$/, '').replace(/\/chat\/completions$/, '')
     try {
@@ -273,6 +277,6 @@ export function knowledgeStats() {
     byType,
     source: kb ? kb.source : '未构建',
     builtAt: kb ? kb.builtAt : null,
-    embedConfig: localCfg.apiKey ? 'qwen-api' : 'local-hash',
+    embedConfig: !FORCE_LOCAL_EMBEDDING && localCfg.apiKey ? 'qwen-api' : 'local-hash',
   }
 }
