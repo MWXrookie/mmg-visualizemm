@@ -10,6 +10,11 @@ data/
 .env.local
 .dsh-vision-router/
 
+# Archify local validation snapshots and contact sheets (the four PNGs are deliverables)
+docs/diagrams/.archify-delivery-*/
+docs/diagrams/*.visual-check.html
+docs/diagrams/*.visual-check.json
+
 # OpenDesign 运行时缓存
 **/.od-skills/
 server/.env.local
