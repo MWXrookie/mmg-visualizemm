@@ -1,0 +1,2 @@
+# Preserve byte-exact upstream snapshots for provenance SHA-256 checks.
+tests/fixtures/golden/cases/*/source/* -text -diff
