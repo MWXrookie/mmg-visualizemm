@@ -1,0 +1,321 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "MMG_VisualizeMM 运行时架构",
+    "locale": "zh-CN",
+    "output": "docs/diagrams/mmg-runtime.architecture.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/MWXrookie/mmg-visualizemm",
+      "revision": "05cbf6e3437edea120aaa1443b591c3b242cd8b3"
+    },
+    "viewBox": [1380, 660],
+    "views": [
+      {
+        "id": "main-conversation",
+        "label": "主对话链路",
+        "focus": ["users", "web_app", "api_relay", "llm_provider"],
+        "note": "用户请求从 React 前端进入 Express 中继，再由 BYOK 调用外部模型并流式返回。"
+      },
+      {
+        "id": "knowledge-retrieval",
+        "label": "知识库检索",
+        "focus": ["web_app", "api_relay", "rag_service", "knowledge_cache", "embedding_provider"],
+        "note": "服务端返回论文、方法与卡片命中片段，前端将其组装进 system prompt。"
+      },
+      {
+        "id": "browser-runtime",
+        "label": "浏览器运行时",
+        "focus": ["web_app", "key_vault", "pyodide", "card_library"],
+        "note": "模型配置、对话与收藏保存在浏览器；安全上下文中 API Key 使用 AES-GCM。"
+      },
+      {
+        "id": "workspace-data",
+        "label": "工作区数据",
+        "focus": ["web_app", "api_relay", "file_parser", "workspace_db"],
+        "note": "题目附件由服务端解析并保存在 SQLite；JSON 备份经浏览器导出，导入校验版本后新建工作区。"
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "users",
+      "type": "external",
+      "label": "用户",
+      "sublabel": "本机 / 局域网浏览器",
+      "pos": [40, 280],
+      "size": [120, 64]
+    },
+    {
+      "id": "web_app",
+      "type": "frontend",
+      "label": "React 前端",
+      "sublabel": "读题 / 建模 / 编程 / 卡片",
+      "pos": [200, 280],
+      "size": [180, 76],
+      "tag": "React 18 + Vite",
+      "sources": [
+        { "path": "web/src/App.jsx", "line": 1 },
+        { "path": "web/src/api.js", "line": 1 }
+      ]
+    },
+    {
+      "id": "card_library",
+      "type": "frontend",
+      "label": "知识卡片库",
+      "sublabel": "概念卡 + 交互演示",
+      "pos": [200, 80],
+      "size": [180, 64],
+      "tag": "59 张 / 41 个演示",
+      "sources": [
+        { "path": "web/src/pages/Cards.jsx", "line": 2419 }
+      ]
+    },
+    {
+      "id": "key_vault",
+      "type": "security",
+      "label": "浏览器本地存储",
+      "sublabel": "模型配置 / 对话 / 收藏",
+      "pos": [200, 460],
+      "size": [140, 64],
+      "tag": "Key：AES-GCM（安全上下文）",
+      "sources": [
+        { "path": "web/src/store.js", "line": 1 }
+      ]
+    },
+    {
+      "id": "pyodide",
+      "type": "frontend",
+      "label": "Pyodide",
+      "sublabel": "浏览器内 Python",
+      "pos": [360, 460],
+      "size": [160, 64],
+      "tag": "numpy / scipy / sklearn",
+      "sources": [
+        { "path": "web/src/lib/pyodide.js", "line": 1 }
+      ]
+    },
+    {
+      "id": "api_relay",
+      "type": "backend",
+      "label": "Express 服务",
+      "sublabel": "API 中继 + SSE",
+      "pos": [550, 280],
+      "size": [180, 76],
+      "tag": "Node.js :3088",
+      "sources": [
+        { "path": "server/index.js", "line": 48 },
+        { "path": "server/upstream.js", "line": 288 }
+      ]
+    },
+    {
+      "id": "file_parser",
+      "type": "backend",
+      "label": "附件解析",
+      "sublabel": "结构化题目与表格",
+      "pos": [550, 80],
+      "size": [180, 64],
+      "tag": "XLSX / CSV / PDF / TXT",
+      "sources": [
+        { "path": "server/index.js", "line": 275 },
+        { "path": "server/index.js", "line": 432 }
+      ]
+    },
+    {
+      "id": "workspace_db",
+      "type": "database",
+      "label": "工作区数据库",
+      "sublabel": "题目 / 附件 / 拆解 / 代码",
+      "pos": [550, 460],
+      "size": [180, 64],
+      "tag": "data/mmg.db",
+      "sources": [
+        { "path": "server/index.js", "line": 482 }
+      ]
+    },
+    {
+      "id": "rag_service",
+      "type": "backend",
+      "label": "RAG 检索服务",
+      "sublabel": "切块 / 向量 / 混合检索",
+      "pos": [770, 460],
+      "size": [180, 64],
+      "tag": "top-k 命中回传",
+      "sources": [
+        { "path": "server/knowledge.js", "line": 233 },
+        { "path": "web/src/api.js", "line": 208 }
+      ]
+    },
+    {
+      "id": "knowledge_cache",
+      "type": "database",
+      "label": "知识库缓存",
+      "sublabel": "论文 / 方法 / 卡片",
+      "pos": [1000, 460],
+      "size": [170, 64],
+      "tag": "1251 个知识块",
+      "sources": [
+        { "path": "server/knowledge.js", "line": 182 }
+      ]
+    },
+    {
+      "id": "llm_provider",
+      "type": "cloud",
+      "label": "对话模型 API",
+      "sublabel": "OpenAI 兼容端点",
+      "pos": [1200, 280],
+      "size": [180, 70],
+      "tag": "BYOK",
+      "sources": [
+        { "path": "server/index.js", "line": 55 }
+      ]
+    },
+    {
+      "id": "embedding_provider",
+      "type": "cloud",
+      "label": "Embedding API",
+      "sublabel": "千问语义向量（可选）",
+      "pos": [770, 560],
+      "size": [180, 64],
+      "tag": "失败回退本地哈希",
+      "sources": [
+        { "path": "server/knowledge.js", "line": 108 }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "security-group",
+      "label": "浏览器信任边界",
+      "wraps": ["web_app", "card_library", "key_vault", "pyodide"]
+    },
+    {
+      "kind": "region",
+      "label": "单机自托管服务",
+      "wraps": ["api_relay", "file_parser", "workspace_db", "rag_service", "knowledge_cache"]
+    }
+  ],
+  "connections": [
+    {
+      "id": "users-to-web",
+      "from": "users",
+      "to": "web_app",
+      "label": "HTTP / 局域网",
+      "labelDx": -30,
+      "labelDy": 68,
+      "variant": "emphasis"
+    },
+    {
+      "id": "web-to-cards",
+      "from": "web_app",
+      "to": "card_library",
+      "label": "卡片与交互演示",
+      "variant": "dashed"
+    },
+    {
+      "id": "vault-to-web",
+      "from": "key_vault",
+      "to": "web_app",
+      "label": "解密配置",
+      "variant": "security",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "web-to-pyodide",
+      "from": "web_app",
+      "to": "pyodide",
+      "label": "执行 Python 并回传图表",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "bottom",
+      "via": [[540, 318], [540, 540], [440, 540], [440, 524]]
+    },
+    {
+      "id": "web-to-api",
+      "from": "web_app",
+      "to": "api_relay",
+      "label": "JSON / SSE / 备份 + Key",
+      "variant": "emphasis"
+    },
+    {
+      "id": "api-to-parser",
+      "from": "api_relay",
+      "to": "file_parser",
+      "label": "上传附件"
+    },
+    {
+      "id": "api-to-workspace",
+      "from": "api_relay",
+      "to": "workspace_db",
+      "label": "读写工作区",
+      "labelDy": 24
+    },
+    {
+      "id": "api-to-rag",
+      "from": "api_relay",
+      "to": "rag_service",
+      "label": "检索请求 / 命中回传",
+      "fromSide": "right",
+      "toSide": "top",
+      "via": [[750, 318], [750, 410], [860, 410], [860, 460]],
+      "labelAt": [774, 370]
+    },
+    {
+      "id": "rag-to-cache",
+      "from": "rag_service",
+      "to": "knowledge_cache",
+      "label": "向量",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "rag-to-embedding",
+      "from": "rag_service",
+      "to": "embedding_provider",
+      "label": "可选：生成 embedding",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDx": 80,
+      "labelDy": 24
+    },
+    {
+      "id": "api-to-llm",
+      "from": "api_relay",
+      "to": "llm_provider",
+      "label": "SSE 中继",
+      "variant": "security"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "浏览器与用户",
+      "items": [
+        "题目与附件进入读题工作台",
+        "建模思路通过苏格拉底对话沉淀",
+        "Python 代码与图表由 Pyodide 在浏览器内完成"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "服务端与知识库",
+      "items": [
+        "Express 提供 BYOK 中继与 SSE 流式响应",
+        "服务端解析 PDF、Excel、CSV 和 TXT，SQLite 保存工作区；备份导入校验版本并新建 ID",
+        "RAG 返回论文、方法和卡片片段，由前端组装 prompt"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "信任边界",
+      "items": [
+        "安全上下文中 API Key 使用 AES-GCM；局域网 HTTP 会明文降级并告警",
+        "服务端按请求中转，不持久化 Key；工作区备份不包含 Key",
+        "Pyodide 代码执行不离开浏览器"
+      ]
+    }
+  ]
+}
