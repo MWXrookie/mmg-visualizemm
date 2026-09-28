@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mmg.local/schemas/golden/run-result.schema.json",
+  "title": "MMG golden evaluation run",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "runId", "suiteVersion", "runType", "startedAt", "gitSha", "environment", "cases", "summary"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "runId": { "type": "string", "minLength": 1 },
+    "suiteVersion": { "type": "string", "pattern": "^[1-9][0-9]*\\.[0-9]+\\.[0-9]+$" },
+    "runType": { "type": "string", "enum": ["deterministic", "mocked", "live-model", "manual"] },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "completedAt": { "type": "string", "format": "date-time" },
+    "gitSha": { "type": "string", "pattern": "^[a-fA-F0-9]{7,40}$" },
+    "promptVersion": { "type": "string" },
+    "knowledgeVersion": { "type": "string" },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": { "type": "string" },
+        "name": { "type": "string" },
+        "temperature": { "type": "number", "minimum": 0 },
+        "seed": { "type": ["integer", "null"] }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node", "os"],
+      "properties": {
+        "node": { "type": "string" },
+        "browser": { "type": "string" },
+        "os": { "type": "string" }
+      }
+    },
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["caseId", "gates", "rubric", "blockers", "status", "attribution"],
+        "properties": {
+          "caseId": { "type": "string", "pattern": "^G(0[1-9]|10)$" },
+          "gates": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["inputIntegrity", "stateReliability", "executionCorrectness", "safetyAndProvenance"],
+            "properties": {
+              "inputIntegrity": { "$ref": "#/$defs/gateStatus" },
+              "stateReliability": { "$ref": "#/$defs/gateStatus" },
+              "executionCorrectness": { "$ref": "#/$defs/gateStatus" },
+              "safetyAndProvenance": { "$ref": "#/$defs/gateStatus" }
+            }
+          },
+          "rubric": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["formulate", "employ", "interpretEvaluate", "grounding", "communicationAgency"],
+            "properties": {
+              "formulate": { "$ref": "#/$defs/rubricScore" },
+              "employ": { "$ref": "#/$defs/rubricScore" },
+              "interpretEvaluate": { "$ref": "#/$defs/rubricScore" },
+              "grounding": { "$ref": "#/$defs/rubricScore" },
+              "communicationAgency": { "$ref": "#/$defs/rubricScore" }
+            }
+          },
+          "rubricTotal": { "type": ["integer", "null"], "minimum": 0, "maximum": 15, "description": "Descriptive only; not a calibrated pass score." },
+          "blockers": { "type": "array", "items": { "type": "string" } },
+          "status": { "type": "string", "enum": ["passed", "failed", "not-run"] },
+          "attribution": { "type": "string", "enum": ["product", "model", "external-service", "environment", "annotation-review", "none"] },
+          "evidencePaths": { "type": "array", "items": { "type": "string" } },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["planned", "executed", "passed", "blockingFailures", "repeatCount", "rubricMeans", "citationAccuracy", "claimSupportRate", "contextRecall", "contextPrecision", "severeUnsupportedFacts"],
+      "properties": {
+        "planned": { "type": "integer", "minimum": 0 },
+        "executed": { "type": "integer", "minimum": 0 },
+        "passed": { "type": "integer", "minimum": 0 },
+        "blockingFailures": { "type": "integer", "minimum": 0 },
+        "repeatCount": { "type": "integer", "minimum": 1 },
+        "rubricMeans": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["formulate", "employ", "interpretEvaluate", "grounding", "communicationAgency"],
+          "properties": {
+            "formulate": { "$ref": "#/$defs/nullableMetric" },
+            "employ": { "$ref": "#/$defs/nullableMetric" },
+            "interpretEvaluate": { "$ref": "#/$defs/nullableMetric" },
+            "grounding": { "$ref": "#/$defs/nullableMetric" },
+            "communicationAgency": { "$ref": "#/$defs/nullableMetric" }
+          }
+        },
+        "citationAccuracy": { "$ref": "#/$defs/rate" },
+        "claimSupportRate": { "$ref": "#/$defs/rate" },
+        "contextRecall": { "$ref": "#/$defs/rate" },
+        "contextPrecision": { "$ref": "#/$defs/rate" },
+        "severeUnsupportedFacts": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": { "type": "string", "enum": ["single-rater-formative", "independent-double-rating"] },
+        "agreementRate": { "$ref": "#/$defs/rate" },
+        "weightedKappa": { "type": ["number", "null"], "minimum": -1, "maximum": 1 },
+        "notes": { "type": "string" }
+      }
+    },
+    "decision": { "type": "string", "enum": ["passed", "failed", "conditional"] },
+    "limitations": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "gateStatus": { "type": "string", "enum": ["passed", "failed", "not-run"] },
+    "rubricScore": { "type": ["integer", "null"], "minimum": 0, "maximum": 3 },
+    "nullableMetric": { "type": ["number", "null"], "minimum": 0, "maximum": 3 },
+    "rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+  }
+}

@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mmg.local/schemas/golden/expected.schema.json",
+  "title": "MMG golden case expectations",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "caseId", "input", "understanding", "evidence", "modeling", "execution", "blockers"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "caseId": { "type": "string", "pattern": "^G(0[1-9]|10)$" },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requiredFiles", "assertions"],
+      "properties": {
+        "requiredFiles": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true },
+        "assertions": { "type": "array", "items": { "$ref": "#/$defs/assertion" } }
+      }
+    },
+    "understanding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["roles", "requiredPoints"],
+      "properties": {
+        "roles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["quote", "role"],
+            "properties": {
+              "quote": { "type": "string", "minLength": 1 },
+              "role": { "type": "string", "enum": ["constraint", "objective", "given", "assumption", "background"] },
+              "notes": { "type": "string" }
+            }
+          }
+        },
+        "requiredPoints": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 },
+        "acceptableAlternatives": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["problemQuote", "file", "fields"],
+        "properties": {
+          "problemQuote": { "type": "string", "minLength": 1 },
+          "file": { "type": "string", "minLength": 1 },
+          "sheet": { "type": "string" },
+          "fields": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "uniqueItems": true },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "modeling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requiredConcepts", "forbiddenClaims"],
+      "properties": {
+        "requiredConcepts": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 },
+        "acceptableAlternatives": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "forbiddenClaims": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "risks": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assertions", "requiredOutputs"],
+      "properties": {
+        "assertions": { "type": "array", "items": { "$ref": "#/$defs/assertion" } },
+        "requiredOutputs": { "type": "array", "items": { "type": "string", "enum": ["text", "table", "plot", "saved-workspace"] }, "uniqueItems": true },
+        "tolerances": { "type": "object", "additionalProperties": { "type": "number", "minimum": 0 } }
+      }
+    },
+    "blockers": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "reviewedAt": { "type": "string", "format": "date" },
+        "reviewer": { "type": "string" },
+        "notes": { "type": "string" }
+      }
+    }
+  },
+  "$defs": {
+    "assertion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "description"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "kind": { "type": "string", "enum": ["exists", "equals", "contains", "range", "constraint", "schema", "manual"] },
+        "description": { "type": "string", "minLength": 1 },
+        "target": { "type": "string" },
+        "expected": {},
+        "minimum": { "type": "number" },
+        "maximum": { "type": "number" },
+        "tolerance": { "type": "number", "minimum": 0 },
+        "blocking": { "type": "boolean", "default": false }
+      }
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "caseId": "G10",
+  "input": {
+    "requiredFiles": ["problem.txt", "attachments/道路网络.csv"],
+    "assertions": [
+      { "id": "edge-count", "kind": "equals", "description": "CSV 包含 9 条无向道路", "target": "attachments/道路网络.csv.rows", "expected": 9, "blocking": true }
+    ]
+  },
+  "understanding": {
+    "roles": [
+      { "quote": "请在满足约束的路径中最小化总里程。", "role": "objective" },
+      { "quote": "配送车必须经过医疗点 C，且单段道路长度不得超过 3.0 千米。道路 B-D 临时关闭，不得使用。", "role": "constraint" },
+      { "quote": "附件“道路网络.csv”给出无向道路两端节点、节点坐标和道路长度", "role": "given" }
+    ],
+    "requiredPoints": ["道路是无向边", "必经 C", "过滤超长边与关闭边", "识别所有等长最优路径", "默认方案按字典序选择"]
+  },
+  "evidence": [
+    { "problemQuote": "附件“道路网络.csv”给出无向道路两端节点、节点坐标和道路长度", "file": "attachments/道路网络.csv", "fields": ["起点", "终点", "起点x", "起点y", "终点x", "终点y", "长度"] }
+  ],
+  "modeling": {
+    "requiredConcepts": ["带权无向图", "路径可行性过滤", "必经点约束", "最短路", "并列最优解"],
+    "acceptableAlternatives": ["可枚举小图简单路径，或分别求 S 到 C 与 C 到 T 的最短路并组合所有并列解"],
+    "forbiddenClaims": ["使用长度超过 3.0 的道路", "使用关闭的 B-D 道路", "省略必经点 C", "存在并列最优却只宣称唯一解"],
+    "risks": ["道路长度被视为静态确定值", "真实配送还可能受通行时间、容量和道路方向影响"]
+  },
+  "execution": {
+    "assertions": [
+      { "id": "distance", "kind": "equals", "description": "约束下最短总里程为 8.9", "target": "baseline.shortestDistance", "expected": 8.9, "blocking": true },
+      { "id": "optimal-paths", "kind": "equals", "description": "存在两条等长最优路径", "target": "baseline.optimalPaths", "expected": [["S", "A", "C", "D", "T"], ["S", "B", "C", "D", "T"]], "blocking": true },
+      { "id": "default-path", "kind": "equals", "description": "默认展示字典序最小路径", "target": "baseline.defaultPath", "expected": ["S", "A", "C", "D", "T"], "blocking": true }
+    ],
+    "requiredOutputs": ["text", "table", "plot", "saved-workspace"],
+    "tolerances": { "distance": 0.000001 }
+  },
+  "blockers": ["无法读取道路网络", "违反任一路径约束", "总里程计算错误", "网络图与结果路径不一致"]
+}

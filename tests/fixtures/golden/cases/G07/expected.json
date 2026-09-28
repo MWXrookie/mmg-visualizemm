@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "caseId": "G07",
+  "input": {
+    "requiredFiles": ["problem.md", "attachments/红酒质量分类.csv"],
+    "assertions": [{ "id": "sample-count", "kind": "equals", "description": "改编 CSV 保留 1599 个红葡萄酒样本", "target": "attachments/红酒质量分类.csv.rows", "expected": 1599, "blocking": true }]
+  },
+  "understanding": {
+    "roles": [
+      { "quote": "目标 `high_quality` 定义为原始感官评分不低于 6 时取 1，否则取 0。", "role": "given" },
+      { "quote": "`source_quality` 直接决定目标，只用于追溯和审计，严禁作为特征；`sample_id` 只是行标识，也不得作为特征。", "role": "constraint" },
+      { "quote": "请建立一个透明、可复现的分类基线", "role": "objective" }
+    ],
+    "requiredPoints": ["排除 source_quality、sample_id 和目标本身", "按标签分层固定划分", "标准化仅拟合训练集", "报告混淆矩阵与多项指标", "不扩张为健康或价格结论"]
+  },
+  "evidence": [{ "problemQuote": "附件“红酒质量分类.csv”改编自 UCI Wine Quality 红葡萄酒数据", "file": "attachments/红酒质量分类.csv", "fields": ["sample_id", "source_quality", "high_quality", "alcohol", "volatile_acidity"] }],
+  "modeling": {
+    "requiredConcepts": ["目标泄漏", "分层划分", "训练集标准化", "混淆矩阵", "F1", "平衡准确率"],
+    "acceptableAlternatives": ["可使用其他透明分类器，但必须保持相同划分和泄漏排除规则"],
+    "forbiddenClaims": ["把 source_quality 或 sample_id 当作特征", "在全数据上拟合标准化参数", "只报告准确率而忽略类别表现", "推断健康、安全或售价"],
+    "risks": ["二元阈值损失原始有序信息", "感官标签存在主观性", "类别不平衡会使准确率具有误导性"]
+  },
+  "execution": {
+    "assertions": [
+      { "id": "row-count", "kind": "equals", "description": "基线读取 1599 个样本", "target": "baseline.rowCount", "expected": 1599, "blocking": true },
+      { "id": "excluded", "kind": "equals", "description": "基线排除 ID、原评分和目标字段", "target": "baseline.excludedFields", "expected": ["sample_id", "source_quality", "high_quality"], "blocking": true },
+      { "id": "k", "kind": "equals", "description": "透明基线固定使用 7 近邻", "target": "baseline.k", "expected": 7, "blocking": true },
+      { "id": "split", "kind": "equals", "description": "分层固定划分产生 1279 条训练和 320 条测试", "target": "baseline.split", "expected": { "train": 1279, "test": 320, "trainClassCounts": { "0": 595, "1": 684 }, "testClassCounts": { "0": 149, "1": 171 } }, "blocking": true },
+      { "id": "confusion", "kind": "equals", "description": "7-NN 基线混淆矩阵可复现", "target": "baseline.confusion", "expected": { "tn": 102, "fp": 47, "fn": 40, "tp": 131 }, "blocking": true },
+      { "id": "balanced-accuracy", "kind": "equals", "description": "7-NN 基线平衡准确率为 0.725322815", "target": "baseline.metrics.balancedAccuracy", "expected": 0.725322815, "blocking": true }
+    ],
+    "requiredOutputs": ["text", "table", "plot", "saved-workspace"],
+    "tolerances": { "metric": 0.000001 }
+  },
+  "blockers": ["无法读取 CSV", "发生目标泄漏", "划分或标准化使用测试信息", "混淆矩阵与指标不一致"]
+}

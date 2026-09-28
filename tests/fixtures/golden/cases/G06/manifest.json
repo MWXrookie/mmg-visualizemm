@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "id": "G06",
+  "version": "1.0.0",
+  "title": "校园夜间接驳方案多目标选择",
+  "category": "optimization",
+  "difficulty": "intermediate",
+  "language": "zh-CN",
+  "source": {
+    "kind": "original",
+    "title": "MMG 原创合成题与数据",
+    "provider": "MMG_VisualizeMM",
+    "license": "CC BY 4.0",
+    "attribution": "MMG_VisualizeMM contributors, G06 synthetic fixture",
+    "redistributable": true,
+    "modifications": "原创生成，无真实主体或个人数据",
+    "reviewedAt": "2026-09-28"
+  },
+  "files": {
+    "problem": {
+      "path": "problem.txt",
+      "sha256": "8a43f90c35ed603a9d8343a1725498e5f4ff4ae5bb865e365b6875d38ee2f4c7",
+      "mediaType": "text/plain"
+    },
+    "expected": {
+      "path": "expected.json",
+      "sha256": "84ded78a2ee650a2257e48e7d0d66bc6746417da83987e7198e80c7d6cd9c047",
+      "mediaType": "application/json"
+    },
+    "baseline": {
+      "path": "baseline.mjs",
+      "sha256": "fecc311123dff66dcbc312faa161776437d708909e9d5a252a2cee80403a21f2",
+      "mediaType": "text/javascript"
+    },
+    "attachments": [
+      {
+        "path": "attachments/决策规则.pdf",
+        "sha256": "f2db9a6d2795a8bbb730878f5f101e13f10edc505cdc9b6fd4d8dde4bac688b6",
+        "mediaType": "application/pdf"
+      },
+      {
+        "path": "attachments/候选方案.csv",
+        "sha256": "e206a63b2fd96cdca3dd212cafa9d8832018e0a20cfa2f22e30fcb822b369abe",
+        "mediaType": "text/csv"
+      }
+    ]
+  },
+  "coverage": {
+    "stages": [
+      "import",
+      "interpret",
+      "evidence",
+      "model",
+      "code",
+      "execute",
+      "persist"
+    ],
+    "formats": [
+      "txt",
+      "pdf",
+      "csv"
+    ]
+  },
+  "tags": [
+    "原创",
+    "多目标决策",
+    "Pareto",
+    "PDF"
+  ]
+}

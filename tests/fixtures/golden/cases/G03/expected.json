@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "caseId": "G03",
+  "input": {
+    "requiredFiles": ["problem.md", "attachments/月度骑行需求.csv"],
+    "assertions": [{ "id": "month-count", "kind": "equals", "description": "改编 CSV 覆盖连续 24 个月", "target": "attachments/月度骑行需求.csv.rows", "expected": 24, "blocking": true }]
+  },
+  "understanding": {
+    "roles": [
+      { "quote": "请把 2012 年 10 月至 12 月作为最终留出集，其余月份作为训练数据。", "role": "constraint" },
+      { "quote": "首先建立可复核的同比季节朴素基线", "role": "objective" },
+      { "quote": "`total_rentals` 是 `casual_rentals` 与 `registered_rentals` 之和", "role": "given" }
+    ],
+    "requiredPoints": ["保持时间顺序", "留出期不得参与拟合", "同比季节基线使用 2011 同月", "总量字段不能重复计数", "报告 MAE 和 MAPE"]
+  },
+  "evidence": [{ "problemQuote": "附件“月度骑行需求.csv”由 UCI Bike Sharing 数据集的 `day.csv` 按自然月聚合得到", "file": "attachments/月度骑行需求.csv", "fields": ["month", "days", "casual_rentals", "registered_rentals", "total_rentals"] }],
+  "modeling": {
+    "requiredConcepts": ["时间留出", "季节朴素预测", "无数据泄漏", "MAE", "MAPE"],
+    "acceptableAlternatives": ["可补充复杂模型，但必须保持相同留出期并保留季节基线"],
+    "forbiddenClaims": ["随机打乱月份后划分", "使用留出期实际值调参", "把 casual、registered 和 total 当成三份独立总需求相加"],
+    "risks": ["只有两年数据", "运营和天气变化可能导致跨年季节模式失效", "聚合会隐藏日内和天气效应"]
+  },
+  "execution": {
+    "assertions": [
+      { "id": "row-count", "kind": "equals", "description": "基线读取 24 个月", "target": "baseline.rowCount", "expected": 24, "blocking": true },
+      { "id": "training-end", "kind": "equals", "description": "训练数据截止 2012-09", "target": "baseline.trainingEnd", "expected": "2012-09", "blocking": true },
+      { "id": "identity", "kind": "equals", "description": "每月总量等于两类用户之和", "target": "baseline.additiveIdentityHolds", "expected": true, "blocking": true },
+      { "id": "mae", "kind": "equals", "description": "同比季节基线留出 MAE 为 54072.333333", "target": "baseline.mae", "expected": 54072.333333, "blocking": true },
+      { "id": "mape", "kind": "equals", "description": "同比季节基线留出 MAPE 为 0.334588705", "target": "baseline.mape", "expected": 0.334588705, "blocking": true }
+    ],
+    "requiredOutputs": ["text", "table", "plot", "saved-workspace"],
+    "tolerances": { "metric": 0.000001 }
+  },
+  "blockers": ["无法读取 CSV", "训练与留出边界错误", "预测使用未来数据", "误差指标或时间图与结果不一致"]
+}

@@ -1,0 +1,16 @@
+{
+  "caseId": "G08",
+  "access": "local-only",
+  "sourceUrl": "https://www.mcm.edu.cn/html_cn/node/388239ded4b057d37b7b8e51e33fe903.html",
+  "redistributable": false,
+  "files": [
+    {
+      "path": "docs/06-素材/C题.pdf",
+      "sha256": "573ee0f2865af13f8b2fbd12dab7f8efa68cf61ec6b8edf132a2120424480dbd"
+    },
+    {
+      "path": "docs/06-素材/附件.xlsx",
+      "sha256": "ffb82a8e209a005f26883e115de3ddea42ab6e0a34986d312a52a3cea6b1063c"
+    }
+  ]
+}

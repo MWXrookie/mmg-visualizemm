@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "id": "G01",
+  "version": "1.0.0",
+  "title": "建筑节能方案综合评价",
+  "category": "evaluation",
+  "difficulty": "intermediate",
+  "language": "zh-CN",
+  "source": {
+    "kind": "open-data-adaptation",
+    "title": "Energy Efficiency",
+    "provider": "UCI Machine Learning Repository",
+    "url": "https://archive.ics.uci.edu/dataset/242/energy+efficiency",
+    "doi": "10.24432/C51307",
+    "accessedAt": "2026-09-28",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "attribution": "Tsanas, A. & Xifara, A. (2012). Energy Efficiency [Dataset]. UCI Machine Learning Repository. DOI 10.24432/C51307.",
+    "redistributable": true,
+    "modifications": "固定抽取 12 行，重命名字段，增加方案 ID 和原始行号；题目情境、权重和敏感性场景由 MMG 添加。",
+    "reviewedAt": "2026-09-28"
+  },
+  "files": {
+    "problem": {
+      "path": "problem.md",
+      "sha256": "adc7868be50beeef8df32ae7c751600dbfddbc08c8c7fd867c2a04f063824fff",
+      "mediaType": "text/markdown"
+    },
+    "expected": {
+      "path": "expected.json",
+      "sha256": "ae4fb63b8df67d267765760a115e5a6ade16f1947af7eead7e291218392332d3",
+      "mediaType": "application/json"
+    },
+    "baseline": {
+      "path": "baseline.mjs",
+      "sha256": "144cc4192aa2c52cd0f6f0dbac37af011835fc07714edd0ca8ccc31c2da0ad50",
+      "mediaType": "text/javascript"
+    },
+    "provenance": {
+      "path": "provenance.json",
+      "sha256": "c66fcf37e8acead73359a6f34bc1dec26b3aeba0fad6814e02c6b48b27a4c84d",
+      "mediaType": "application/json"
+    },
+    "attachments": [
+      {
+        "path": "attachments/建筑方案.csv",
+        "sha256": "013853a5f14786bff14c8be36af6fa82762d283dbbbf24821331db4a03d90808",
+        "mediaType": "text/csv"
+      }
+    ],
+    "sources": [
+      {
+        "path": "source/ENB2012_data.xlsx",
+        "sha256": "0089fcffc1415e41e2ff63730cca5280efe54fc43d722dfde1b0aaa808e35dc4",
+        "mediaType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      }
+    ]
+  },
+  "coverage": {
+    "stages": [
+      "import",
+      "interpret",
+      "evidence",
+      "model",
+      "code",
+      "execute",
+      "persist"
+    ],
+    "formats": [
+      "md",
+      "csv"
+    ]
+  },
+  "tags": [
+    "开放数据",
+    "综合评价",
+    "建筑节能",
+    "敏感性",
+    "CC BY 4.0"
+  ]
+}

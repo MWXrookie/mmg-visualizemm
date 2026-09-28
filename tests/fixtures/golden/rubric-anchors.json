@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "version": "1.0.0",
+  "references": [
+    {
+      "id": "oecd-pisa-2022",
+      "title": "OECD PISA 2022 Mathematics Framework",
+      "url": "https://www.oecd.org/en/publications/pisa-2022-assessment-and-analytical-framework_dfe0bf9c-en/full-report/component-3.html",
+      "scope": "formulate, employ, interpret and evaluate"
+    },
+    {
+      "id": "comap-mcm-guidance",
+      "title": "COMAP MCM/ICM Contest Instructions and Judging Guidance",
+      "url": "https://www.contest.comap.com/undergraduate/contests/mcm/instructions.php",
+      "scope": "variables, assumptions, model justification, testing, limitations, conclusions and references"
+    },
+    {
+      "id": "ragas-eacl-2024",
+      "title": "RAGAS: Automated Evaluation of Retrieval Augmented Generation",
+      "url": "https://aclanthology.org/2024.eacl-demo.16/",
+      "scope": "faithfulness, answer relevance and context relevance"
+    },
+    {
+      "id": "mmg-product-principle",
+      "title": "MMG product principle: AI is a coach and preserves user agency",
+      "url": "urn:mmg:product-principle:coach",
+      "scope": "project-defined user agency dimension; not an external standard"
+    }
+  ],
+  "dimensions": {
+    "formulate": {
+      "label": "M1 形成问题",
+      "referenceIds": ["oecd-pisa-2022", "comap-mcm-guidance"],
+      "projectDefined": false,
+      "levels": [
+        { "score": 0, "descriptor": "未识别目标、变量或硬约束，或陈述与题意冲突。", "evidence": "存在关键遗漏或相反定义。", "caseExamples": ["G02 把单价和缺陷率解释为效益型指标。"] },
+        { "score": 1, "descriptor": "识别部分要素，但遗漏会改变结论的变量、约束或数据关系。", "evidence": "要点覆盖不完整。", "caseExamples": ["G04 识别预测目标但没有时间顺序约束。"] },
+        { "score": 2, "descriptor": "目标、变量、约束和合理假设基本完整。", "evidence": "expected.requiredPoints 无关键遗漏。", "caseExamples": ["G02 正确识别成本/效益方向和缺失值规则。"] },
+        { "score": 3, "descriptor": "在完整形成问题的基础上解释简化、单位、边界和问题拆分。", "evidence": "明确说明建模边界及其影响。", "caseExamples": ["G04 指出只有两年数据，结论仅用于短期三个月预测。"] }
+      ]
+    },
+    "employ": {
+      "label": "M2 执行与推理",
+      "referenceIds": ["oecd-pisa-2022", "comap-mcm-guidance"],
+      "projectDefined": false,
+      "levels": [
+        { "score": 0, "descriptor": "方法不可用于当前问题，或计算和推理存在根本错误。", "evidence": "无法产生满足题意的有效结果。", "caseExamples": ["G04 随机打乱时间序列并据此验证。"] },
+        { "score": 1, "descriptor": "方法方向可理解，但实现、参数或推理存在重大缺陷。", "evidence": "结果需要实质性修正。", "caseExamples": ["G02 标准化正确但敏感性权重和不为 1。"] },
+        { "score": 2, "descriptor": "方法适配问题，步骤和计算基本正确。", "evidence": "确定性断言通过且无数据泄漏。", "caseExamples": ["G04 使用按时间顺序的同比季节基线并正确计算 MAE。"] },
+        { "score": 3, "descriptor": "方法选择有论证，并提供稳健实现或合理替代比较。", "evidence": "说明为何选择方法并与至少一个合理基线比较。", "caseExamples": ["G04 在复杂模型之外保留季节朴素基线并采用相同时间切分比较。"] }
+      ]
+    },
+    "interpretEvaluate": {
+      "label": "M3 解释与评价",
+      "referenceIds": ["oecd-pisa-2022", "comap-mcm-guidance"],
+      "projectDefined": false,
+      "levels": [
+        { "score": 0, "descriptor": "没有把结果解释回实际问题，或结论明显违反情境。", "evidence": "结论与硬约束、单位或数据冲突。", "caseExamples": ["G04 输出负订单量且无解释。"] },
+        { "score": 1, "descriptor": "给出结论但缺乏合理性、误差或约束检查。", "evidence": "只有数值，没有评价。", "caseExamples": ["G02 给出排名但不说明缺失值或权重敏感性。"] },
+        { "score": 2, "descriptor": "正确解释结果并检查主要约束。", "evidence": "结果、表格和问题目标一致。", "caseExamples": ["G02 说明前两名次序变化但成员未变。"] },
+        { "score": 3, "descriptor": "进一步分析误差、敏感性或稳定性、局限和适用范围。", "evidence": "包含验证、风险和边界。", "caseExamples": ["G04 报告留出 MAE，并说明长期外推和合成数据局限。"] }
+      ]
+    },
+    "grounding": {
+      "label": "M4 证据与忠实性",
+      "referenceIds": ["ragas-eacl-2024", "comap-mcm-guidance"],
+      "projectDefined": false,
+      "levels": [
+        { "score": 0, "descriptor": "关键事实捏造、引用不存在或与来源相反。", "evidence": "出现严重无来源事实错误。", "caseExamples": ["G02 声称附件含有历史合作年限字段。"] },
+        { "score": 1, "descriptor": "部分关键主张无支撑或引用错位。", "evidence": "主张支撑率或引用定位存在明显缺口。", "caseExamples": ["G02 引用了工作簿但没有指出对应工作表和字段。"] },
+        { "score": 2, "descriptor": "关键主张能够回到题干、附件或知识库。", "evidence": "主要证据映射准确。", "caseExamples": ["G04 将时间范围和字段正确定位到月度订单 CSV。"] },
+        { "score": 3, "descriptor": "支撑完整且定位准确，并区分题目事实、假设和外部知识。", "evidence": "来源层级和不确定性均明确。", "caseExamples": ["G02 明确哪些权重来自题目，哪些风险判断属于模型解释。"] }
+      ]
+    },
+    "communicationAgency": {
+      "label": "M5 沟通与用户主导",
+      "referenceIds": ["comap-mcm-guidance", "mmg-product-principle"],
+      "projectDefined": true,
+      "levels": [
+        { "score": 0, "descriptor": "输出不可理解，或在未确认时覆盖用户题目、附件或决策。", "evidence": "用户无法追踪或纠正关键决定。", "caseExamples": ["直接替换用户数据且没有说明。"] },
+        { "score": 1, "descriptor": "结构混乱、解释不足或过早代做完整方案。", "evidence": "缺少可执行的确认节点。", "caseExamples": ["直接给出排名但不展示规则和数据处理。"] },
+        { "score": 2, "descriptor": "结构清晰，给出可执行下一步并保留用户确认。", "evidence": "重要选择可见、可修改。", "caseExamples": ["展示 G02 填补和权重规则后再让用户确认。"] },
+        { "score": 3, "descriptor": "简洁暴露取舍、不确定性和可质疑节点，并支持回溯。", "evidence": "用户能从结论回到规则、字段和结果。", "caseExamples": ["G04 同时展示基线、误差、限制和可选复杂模型。"] }
+      ]
+    }
+  }
+}
