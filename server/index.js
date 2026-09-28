@@ -10,6 +10,7 @@ import { fileURLToPath } from 'url'
 import fs from 'fs'
 import { Readable } from 'stream'
 import { createRequire } from 'module'
+import { randomUUID } from 'node:crypto'
 import ExcelJS from 'exceljs'
 import { formatNetworkError, requestUpstream, responseText } from './upstream.js'
 
@@ -482,9 +483,18 @@ app.post('/api/parse', async (req, res) => {
 /* ---------- 工作区存储（三台共用数据层，SQLite，零依赖 node:sqlite） ---------- */
 import { DatabaseSync } from 'node:sqlite'
 
-const dataDir = path.join(__dirname, '..', 'data')
+// 测试和隔离部署可显式指定数据目录；默认行为仍保持为仓库根目录下的 data/。
+const dataDir = process.env.MMG_DATA_DIR
+  ? path.resolve(process.env.MMG_DATA_DIR)
+  : path.join(__dirname, '..', 'data')
 fs.mkdirSync(dataDir, { recursive: true })
 const db = new DatabaseSync(path.join(dataDir, 'mmg.db'))
+const WORKSPACE_BACKUP_FORMAT = 'mmg-workspace-backup'
+const WORKSPACE_SCHEMA_VERSION = 1
+const currentDbSchemaVersion = Number(db.prepare('PRAGMA user_version').get()?.user_version || 0)
+if (currentDbSchemaVersion > WORKSPACE_SCHEMA_VERSION) {
+  throw new Error(`数据库 schema 版本 ${currentDbSchemaVersion} 高于当前程序支持的版本 ${WORKSPACE_SCHEMA_VERSION}`)
+}
 db.exec(`
   CREATE TABLE IF NOT EXISTS workspaces (
     id TEXT PRIMARY KEY,
@@ -510,9 +520,84 @@ if (!wsCols.includes('problem_source_kind')) {
 if (!wsCols.includes('problem_pages')) {
   db.exec(`ALTER TABLE workspaces ADD COLUMN problem_pages TEXT DEFAULT '[]'`)
 }
+if (currentDbSchemaVersion < WORKSPACE_SCHEMA_VERSION) {
+  db.exec(`PRAGMA user_version = ${WORKSPACE_SCHEMA_VERSION}`)
+}
 
 function parseJsonField(s) {
   try { return JSON.parse(s || '[]') } catch { return [] }
+}
+
+function newWorkspaceId() {
+  return `ws-${Date.now()}-${randomUUID().slice(0, 8)}`
+}
+
+function workspaceFromRow(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    problemText: row.problem_text,
+    problemSourceKind: row.problem_source_kind || '',
+    problemPages: parseJsonField(row.problem_pages),
+    attachments: parseJsonField(row.attachments),
+    breakdown: parseJsonField(row.breakdown),
+    code: row.code,
+    overview: row.overview || '',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+function validateBackup(backup) {
+  if (!backup || typeof backup !== 'object' || Array.isArray(backup)) {
+    const error = new Error('备份内容不是有效的 JSON 对象')
+    error.code = 'BACKUP_INVALID'
+    throw error
+  }
+  if (backup.format !== WORKSPACE_BACKUP_FORMAT) {
+    const error = new Error('不是 MMG 工作区备份文件')
+    error.code = 'BACKUP_FORMAT'
+    throw error
+  }
+  const version = Number(backup.schemaVersion)
+  if (!Number.isInteger(version) || version < 1) {
+    const error = new Error('备份缺少有效的 schemaVersion')
+    error.code = 'BACKUP_VERSION_INVALID'
+    throw error
+  }
+  if (version > WORKSPACE_SCHEMA_VERSION) {
+    const error = new Error(`备份版本 ${version} 高于当前支持的版本 ${WORKSPACE_SCHEMA_VERSION}，请升级 MMG 后再导入`)
+    error.code = 'BACKUP_VERSION_NEWER'
+    throw error
+  }
+  if (version !== WORKSPACE_SCHEMA_VERSION) {
+    const error = new Error(`暂不支持 schemaVersion ${version}`)
+    error.code = 'BACKUP_VERSION_UNSUPPORTED'
+    throw error
+  }
+  const source = backup.workspace
+  if (!source || typeof source !== 'object' || Array.isArray(source)) {
+    const error = new Error('备份中缺少 workspace 对象')
+    error.code = 'BACKUP_WORKSPACE_MISSING'
+    throw error
+  }
+  for (const field of ['problemPages', 'attachments', 'breakdown']) {
+    if (source[field] !== undefined && !Array.isArray(source[field])) {
+      const error = new Error(`备份字段 ${field} 必须是数组`)
+      error.code = 'BACKUP_FIELD_INVALID'
+      throw error
+    }
+  }
+  return {
+    title: String(source.title || '导入的工作区').slice(0, 200),
+    problemText: String(source.problemText || ''),
+    problemSourceKind: String(source.problemSourceKind || ''),
+    problemPages: source.problemPages || [],
+    attachments: source.attachments || [],
+    breakdown: source.breakdown || [],
+    code: String(source.code || ''),
+    overview: String(source.overview || ''),
+  }
 }
 
 // 列表（不含正文，轻量）
@@ -529,7 +614,7 @@ app.get('/api/workspaces', (_req, res) => {
 app.post('/api/workspaces', (req, res) => {
   try {
     const b = req.body || {}
-    const id = typeof b.id === 'string' && b.id ? b.id : `ws-${Date.now()}`
+    const id = typeof b.id === 'string' && b.id ? b.id : newWorkspaceId()
     const now = Date.now()
     const existing = db.prepare('SELECT * FROM workspaces WHERE id = ?').get(id)
     const has = (k) => Object.prototype.hasOwnProperty.call(b, k)
@@ -567,24 +652,59 @@ app.get('/api/workspaces/:id', (req, res) => {
   try {
     const row = db.prepare('SELECT * FROM workspaces WHERE id = ?').get(req.params.id)
     if (!row) return res.status(404).json({ ok: false, message: '工作区不存在' })
-    res.json({
-      ok: true,
-      workspace: {
-        id: row.id,
-        title: row.title,
-        problemText: row.problem_text,
-        problemSourceKind: row.problem_source_kind || '',
-        problemPages: parseJsonField(row.problem_pages),
-        attachments: parseJsonField(row.attachments),
-        breakdown: parseJsonField(row.breakdown),
-        code: row.code,
-        overview: row.overview || '',
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      },
-    })
+    res.json({ ok: true, workspace: workspaceFromRow(row) })
   } catch (e) {
     res.status(500).json({ ok: false, message: `读取失败：${e.message}` })
+  }
+})
+
+// 导出单个工作区：仅含业务数据，不包含浏览器内的 API Key、模型设置或会话偏好。
+app.get('/api/workspaces/:id/backup', (req, res) => {
+  try {
+    const row = db.prepare('SELECT * FROM workspaces WHERE id = ?').get(req.params.id)
+    if (!row) return res.status(404).json({ ok: false, message: '工作区不存在' })
+    const workspace = workspaceFromRow(row)
+    res.setHeader('Content-Disposition', `attachment; filename="mmg-workspace-${encodeURIComponent(row.id)}.json"`)
+    res.json({
+      format: WORKSPACE_BACKUP_FORMAT,
+      schemaVersion: WORKSPACE_SCHEMA_VERSION,
+      exportedAt: new Date().toISOString(),
+      workspace,
+    })
+  } catch (e) {
+    res.status(500).json({ ok: false, message: `导出失败：${e.message}` })
+  }
+})
+
+// 安全导入：校验完整备份后始终创建新工作区，不覆盖现有 ID。
+app.post('/api/workspaces/import', (req, res) => {
+  try {
+    const data = validateBackup(req.body?.backup)
+    const id = newWorkspaceId()
+    const now = Date.now()
+    db.prepare(`
+      INSERT INTO workspaces (id, title, problem_text, problem_source_kind, problem_pages, attachments, breakdown, code, overview, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      data.title,
+      data.problemText,
+      data.problemSourceKind,
+      JSON.stringify(data.problemPages),
+      JSON.stringify(data.attachments),
+      JSON.stringify(data.breakdown),
+      data.code,
+      data.overview,
+      now,
+      now,
+    )
+    const row = db.prepare('SELECT * FROM workspaces WHERE id = ?').get(id)
+    res.status(201).json({ ok: true, id, schemaVersion: WORKSPACE_SCHEMA_VERSION, workspace: workspaceFromRow(row) })
+  } catch (e) {
+    if (e.code?.startsWith('BACKUP_')) {
+      return res.status(400).json({ ok: false, code: e.code, message: e.message })
+    }
+    res.status(500).json({ ok: false, message: `导入失败：${e.message}` })
   }
 })
 

@@ -183,6 +183,19 @@ export async function deleteWorkspace(id) {
   return json
 }
 
+/** 导出带 schemaVersion 的完整工作区备份（不含 API Key / 模型设置）。 */
+export async function exportWorkspaceBackup(id) {
+  const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}/backup`)
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok || json.ok === false) throw new Error(json.message || '导出工作区失败')
+  return json
+}
+
+/** 校验并导入工作区备份；服务端始终创建新工作区，不覆盖已有数据。 */
+export async function importWorkspaceBackup(backup) {
+  return post('/api/workspaces/import', { backup })
+}
+
 /** 附件表数据 → CSV 下载/文本（B3 数据注入） */
 export async function fetchAttachmentCsv(wsId, idx) {
   const res = await fetch(`/api/workspaces/${wsId}/attachments/${idx}/data.csv`)

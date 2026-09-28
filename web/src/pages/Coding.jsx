@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { getPyodide, runPython, onPyodideState } from '../lib/pyodide.js'
 import { streamChat, chat, attachSummary, retrieveKnowledge, formatKnowledgeContext } from '../api.js'
-import { IconMenu, IconDownload, IconArrowLeft, IconSparkles, IconPlay, IconGear, IconChart, IconTable, IconFile, IconLightbulb, IconZoomIn, IconBookmark, IconClip, IconInfo, IconClock } from '../components/Icons.jsx'
+import { IconMenu, IconDownload, IconArrowLeft, IconSparkles, IconPlay, IconGear, IconChart, IconTable, IconFile, IconLightbulb, IconZoomIn, IconBookmark, IconClip, IconInfo, IconClock, IconClose } from '../components/Icons.jsx'
 import { SANITY_CHECK } from '../lib/modelingExpert.js'
 
 const GEN_SYSTEM =
@@ -751,11 +751,15 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
   const paramsRef = useRef(params)
   paramsRef.current = params
 
-  /** 逻辑+显示层同步更新（用于按钮/工作区切换/AI 生成等外部写入场景） */
-  function applyCode(t) {
+  /** 逻辑+显示层同步更新。
+   * AI 生成、改进、中文化和调参属于离散操作，立即写回共享工作区，避免快速切页时丢失；
+   * 工作区载入只更新本地编辑器，不能反向覆盖刚切换的数据。 */
+  function applyCode(t, { persist = true } = {}) {
     codeRef.current = t
     setCode(t)
     setHl(t.split('\n').map(highlightLine).join('\n'))
+    const sourceWsId = wsIdRef.current
+    if (persist && sourceWsId) patchWsAt?.(sourceWsId, { code: t })
   }
 
   function parseOutWidthPx(v) {
@@ -835,7 +839,7 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
   useEffect(() => { wsIdRef.current = wsIdNow || '' }, [wsIdNow])
   useEffect(() => {
     if (!wsIdNow || !ws || ws.id !== wsIdNow) return
-    applyCode(ws.code || '')
+    applyCode(ws.code || '', { persist: false })
     setLog([]); setImg(null); setError(''); setChartTitle(''); setChartInfo(null); setRunOutput(''); setRunTime(''); setGenInfo(null); setOutOpen(false); setSelected(new Set())
   }, [wsIdNow, ws?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 

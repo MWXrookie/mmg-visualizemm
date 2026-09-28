@@ -4,7 +4,7 @@ import Modeling from './pages/Modeling.jsx'
 import Coding from './pages/Coding.jsx'
 import Settings from './pages/Settings.jsx'
 import { loadSettings, loadTheme, saveTheme, getCurrentWsId, setCurrentWsId } from './store.js'
-import { loadWorkspace, saveWorkspace, listWorkspaces, deleteWorkspace } from './api.js'
+import { loadWorkspace, saveWorkspace, listWorkspaces, deleteWorkspace, exportWorkspaceBackup, importWorkspaceBackup } from './api.js'
 import { IconBook, IconCompass, IconCode, IconGear, IconSun, IconMoon, IconEdit, IconTrash, IconLightbulb, IconChevronRight } from './components/Icons.jsx'
 
 const VIEWS = [
@@ -23,10 +23,8 @@ function loadGuideClosed() {
   }
 }
 
-/** 向后端保存工作区（keepalive 兼容 pagehide 强刷；请求体超 64KB 时降级同步 XHR，保证数据不静默丢失） */
-function persist(w) {
-  if (!w || !w.id) return
-  const body = JSON.stringify({
+function workspacePayload(w) {
+  return {
     id: w.id,
     title: w.title || '',
     problemText: w.problemText || '',
@@ -36,7 +34,13 @@ function persist(w) {
     breakdown: w.breakdown || [],
     overview: w.overview || '',
     code: w.code || '',
-  })
+  }
+}
+
+/** 向后端保存工作区（keepalive 兼容 pagehide 强刷；请求体超 64KB 时降级同步 XHR，保证数据不静默丢失） */
+function persist(w) {
+  if (!w || !w.id) return
+  const body = JSON.stringify(workspacePayload(w))
   try {
     // keepalive 请求体有 ~64KB 上限（浏览器限制），超限会在调用时同步抛 TypeError
     fetch('/api/workspaces', {
@@ -69,6 +73,7 @@ export default function App() {
   const [wsList, setWsList] = useState([]) // 工作区列表（侧栏切换/删除用）
   const [toast, setToast] = useState('') // 全局轻提示
   const [wsDialog, setWsDialog] = useState(null) // {mode:'rename'|'delete', id, title, value}
+  const [backupBusy, setBackupBusy] = useState(false)
 
   // 全局通知入口（供各页面调用：window.__notify('...')）
   useEffect(() => {
@@ -86,6 +91,7 @@ export default function App() {
   const wsIdRef = useRef(wsId)
   const pendingRef = useRef(null) // 尚无工作区时的暂存数据
   const ensurePromiseRef = useRef(null)
+  const backupInputRef = useRef(null)
 
   useEffect(() => { wsIdRef.current = wsId }, [wsId])
 
@@ -222,6 +228,68 @@ export default function App() {
 
   function openDeleteWs(w) {
     setWsDialog({ mode: 'delete', id: w.id, title: w.title || '未命名题目' })
+  }
+
+  async function exportCurrentWorkspace() {
+    const current = wsRef.current
+    if (!current?.id) {
+      window.__notify?.('当前没有可导出的工作区')
+      return
+    }
+    setBackupBusy(true)
+    try {
+      // 先显式保存最新状态，避免导出尚在 800ms 防抖队列中的旧版本。
+      await saveWorkspace(workspacePayload(current))
+      const backup = await exportWorkspaceBackup(current.id)
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      const safeTitle = (current.title || '未命名工作区')
+        .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')
+        .slice(0, 60)
+      anchor.href = url
+      anchor.download = `${safeTitle || 'MMG工作区'}.mmg-workspace.json`
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 0)
+      window.__notify?.('工作区备份已导出')
+    } catch (e) {
+      window.__notify?.(e.message || '导出失败')
+    } finally {
+      setBackupBusy(false)
+    }
+  }
+
+  async function importWorkspaceFile(event) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    setBackupBusy(true)
+    try {
+      if (file.size > 50 * 1024 * 1024) {
+        throw new Error('备份文件过大：请控制在 50MB 以内')
+      }
+      let backup
+      try {
+        backup = JSON.parse(await file.text())
+      } catch {
+        throw new Error('无法读取备份：文件不是有效 JSON')
+      }
+      const result = await importWorkspaceBackup(backup)
+      loadSeqRef.current += 1
+      wsIdRef.current = result.id
+      pendingRef.current = null
+      setWsId(result.id)
+      setCurrentWsId(result.id)
+      setWs(result.workspace)
+      await refreshWsList()
+      window.__notify?.('已导入为新工作区，原数据未被覆盖')
+    } catch (e) {
+      window.__notify?.(e.message || '导入失败')
+    } finally {
+      setBackupBusy(false)
+    }
   }
 
   async function submitWsDialog() {
@@ -377,6 +445,21 @@ export default function App() {
               </div>
             ))}
             <button className="sb-ws-new" onClick={newWorkspace}>＋ 新建工作区</button>
+            <div className="sb-ws-backup">
+              <button className="sb-ws-tool" onClick={exportCurrentWorkspace} disabled={backupBusy || !wsId}>
+                导出当前
+              </button>
+              <button className="sb-ws-tool" onClick={() => backupInputRef.current?.click()} disabled={backupBusy}>
+                {backupBusy ? '处理中…' : '导入备份'}
+              </button>
+              <input
+                ref={backupInputRef}
+                type="file"
+                accept="application/json,.json"
+                onChange={importWorkspaceFile}
+                hidden
+              />
+            </div>
           </div>
         )}
         <div className="sb-foot">
