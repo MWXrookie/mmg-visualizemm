@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 1,
+  "caseId": "G02",
+  "input": {
+    "requiredFiles": [
+      "problem.txt",
+      "attachments/供应商数据.xlsx"
+    ],
+    "assertions": [
+      {
+        "id": "xlsx-sheets",
+        "kind": "contains",
+        "description": "工作簿包含供应商指标和指标说明两个工作表",
+        "target": "attachments/供应商数据.xlsx",
+        "expected": ["供应商指标", "指标说明"],
+        "blocking": true
+      },
+      {
+        "id": "supplier-count",
+        "kind": "equals",
+        "description": "供应商指标表包含 5 家候选供应商",
+        "target": "供应商指标.rows",
+        "expected": 5,
+        "blocking": true
+      }
+    ]
+  },
+  "understanding": {
+    "roles": [
+      {
+        "quote": "各指标方向和初始权重见附件“供应商数据.xlsx”的“指标说明”工作表，候选供应商数据位于“供应商指标”工作表。",
+        "role": "given"
+      },
+      {
+        "quote": "请在保证方法透明且可复核的前提下，综合评价各供应商并推荐排名前两位的供应商。",
+        "role": "objective"
+      },
+      {
+        "quote": "若某项服务评分缺失，应采用全体已有服务评分的中位数填补，并说明理由。",
+        "role": "constraint"
+      }
+    ],
+    "requiredPoints": [
+      "识别成本型和效益型指标方向",
+      "识别服务评分缺失值的指定填补规则",
+      "分别输出初始权重和敏感性场景排名",
+      "说明权重变化是否改变前两名"
+    ],
+    "acceptableAlternatives": [
+      "在遵守题目指定标准化和权重规则的前提下，可使用表格或图形呈现排序",
+      "可补充其他评价方法作为对照，但不能替换指定的基线计算"
+    ]
+  },
+  "evidence": [
+    {
+      "problemQuote": "候选供应商数据位于“供应商指标”工作表",
+      "file": "attachments/供应商数据.xlsx",
+      "sheet": "供应商指标",
+      "fields": ["供应商", "单价(元)", "准时交付率(%)", "缺陷率(%)", "服务评分(100)", "年供货上限(件)"]
+    },
+    {
+      "problemQuote": "各指标方向和初始权重见附件",
+      "file": "attachments/供应商数据.xlsx",
+      "sheet": "指标说明",
+      "fields": ["指标", "方向", "初始权重"]
+    }
+  ],
+  "modeling": {
+    "requiredConcepts": [
+      "中位数填补后再标准化",
+      "成本型指标反向极差标准化",
+      "效益型指标正向极差标准化",
+      "权重和为 1",
+      "加权得分排序",
+      "单价权重变化的敏感性比较"
+    ],
+    "acceptableAlternatives": [
+      "保留更多小数位后再排序",
+      "在最终前两名一致的前提下使用等价的极差标准化表达式"
+    ],
+    "forbiddenClaims": [
+      "把单价或缺陷率当作越大越好的指标",
+      "删除服务评分缺失的供应商且不执行指定填补规则",
+      "声称附件包含题目未提供的历史合作信息",
+      "敏感性场景权重和不为 1"
+    ],
+    "risks": [
+      "极差标准化对极端值敏感",
+      "权重是题目给定偏好，不等同于客观真理",
+      "小样本排名不代表未来履约表现"
+    ]
+  },
+  "execution": {
+    "assertions": [
+      {
+        "id": "service-median",
+        "kind": "equals",
+        "description": "缺失服务评分填补为已有值中位数 89",
+        "target": "baseline.serviceMedian",
+        "expected": 89,
+        "blocking": true
+      },
+      {
+        "id": "original-top-two",
+        "kind": "equals",
+        "description": "初始权重下前两名为 E、D",
+        "target": "baseline.originalTopTwo",
+        "expected": ["E", "D"],
+        "blocking": true
+      },
+      {
+        "id": "sensitivity-top-two",
+        "kind": "equals",
+        "description": "提高单价权重后前两名为 D、E",
+        "target": "baseline.sensitivityTopTwo",
+        "expected": ["D", "E"],
+        "blocking": true
+      }
+    ],
+    "requiredOutputs": ["text", "table", "plot", "saved-workspace"],
+    "tolerances": {
+      "score": 0.000001
+    }
+  },
+  "blockers": [
+    "无法读取任一工作表",
+    "虚构附件字段或供应商数据",
+    "排名违反题目指定的指标方向或权重规则",
+    "工作区保存或恢复后题干、附件、结果丢失"
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "caseId": "G09",
+  "input": {
+    "requiredFiles": ["problem.txt", "attachments/坐标约定.pdf", "attachments/信标测距.csv"],
+    "assertions": [
+      { "id": "beacon-count", "kind": "equals", "description": "CSV 包含 4 个信标", "target": "attachments/信标测距.csv.rows", "expected": 4, "blocking": true },
+      { "id": "pdf-boundary", "kind": "contains", "description": "PDF 可提取坐标边界和欧氏距离模型", "target": "attachments/坐标约定.pdf.text", "expected": ["0 ≤ x ≤ 6", "0 ≤ y ≤ 8", "欧氏距离"], "blocking": true }
+    ]
+  },
+  "understanding": {
+    "roles": [
+      { "quote": "请在二维欧氏距离模型下估计讲解器坐标。", "role": "objective" },
+      { "quote": "至少使用三个不共线信标，并报告每个信标的预测距离、残差以及总体 RMSE。", "role": "constraint" },
+      { "quote": "附件“信标测距.csv”给出信标编号、横坐标、纵坐标和测得距离。", "role": "given" }
+    ],
+    "requiredPoints": ["信标位置为已知量", "待估计量是二维坐标", "使用欧氏距离约束", "回算残差并检查边界"]
+  },
+  "evidence": [
+    { "problemQuote": "附件“信标测距.csv”给出信标编号、横坐标、纵坐标和测得距离", "file": "attachments/信标测距.csv", "fields": ["信标", "横坐标", "纵坐标", "测得距离"] },
+    { "problemQuote": "附件“坐标约定.pdf”说明坐标系、距离单位和测距模型", "file": "attachments/坐标约定.pdf", "fields": ["坐标边界", "距离单位", "欧氏距离模型"] }
+  ],
+  "modeling": {
+    "requiredConcepts": ["圆方程", "不共线条件", "线性化或非线性最小二乘", "距离残差", "RMSE", "边界检查"],
+    "acceptableAlternatives": ["可直接联立圆方程、使用线性最小二乘或非线性最小二乘，满足容差即可"],
+    "forbiddenClaims": ["把信标坐标当作未知点", "忽略坐标单位或展厅边界", "只给坐标而不回算残差"],
+    "risks": ["近共线布局会放大误差", "真实测距可能含系统偏差或异常值"]
+  },
+  "execution": {
+    "assertions": [
+      { "id": "position", "kind": "equals", "description": "估计坐标为 (3,4)", "target": "baseline.position", "expected": { "x": 3, "y": 4 }, "blocking": true },
+      { "id": "rmse", "kind": "equals", "description": "无噪声合成数据 RMSE 为 0", "target": "baseline.rmse", "expected": 0, "blocking": true },
+      { "id": "inside", "kind": "equals", "description": "估计位置位于展厅边界内", "target": "baseline.insideBoundary", "expected": true, "blocking": true }
+    ],
+    "requiredOutputs": ["text", "table", "plot", "saved-workspace"],
+    "tolerances": { "coordinate": 0.000001, "distance": 0.000001 }
+  },
+  "blockers": ["无法读取 PDF 或 CSV", "信标几何退化但未提示", "估计点超界却未说明", "图表坐标与计算结果不一致"]
+}

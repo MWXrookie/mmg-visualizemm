@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "caseId": "G07",
+  "source": {
+    "pageUrl": "https://archive.ics.uci.edu/dataset/186/wine+quality",
+    "doi": "10.24432/C56S3T",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "citation": "Cortez, P., Cerdeira, A., Almeida, F., Matos, T., & Reis, J. (2009). Wine Quality [Dataset]. UCI Machine Learning Repository. https://doi.org/10.24432/C56S3T.",
+    "accessedAt": "2026-09-28",
+    "licenseEvidence": "UCI 官方数据页明确标注 Creative Commons Attribution 4.0 International，并允许在正确署名下共享与改编。"
+  },
+  "rawSnapshots": [
+    {
+      "path": "source/winequality-red.csv",
+      "sha256": "4a402cf041b025d4566d954c3b9ba8635a3a8a01e039005d97d6a710278cf05e",
+      "officialDownloadUrl": "https://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-red.csv",
+      "originalFilename": "winequality-red.csv"
+    }
+  ],
+  "transformation": {
+    "script": "scripts/generate/golden-open-data-fixtures.mjs",
+    "outputs": ["attachments/红酒质量分类.csv"],
+    "steps": ["读取分号分隔的红葡萄酒数据", "把字段名空格替换为下划线", "增加稳定 sample_id", "保留原 quality 为 source_quality 审计字段", "按 source_quality >= 6 生成 high_quality 二元目标"],
+    "changes": "未删除或缩放 11 项理化指标；新增样本 ID 和派生二元标签，并保留原评分用于审计但明确禁止作为特征。",
+    "retainedFields": ["fixed acidity", "volatile acidity", "citric acid", "residual sugar", "chlorides", "free sulfur dioxide", "total sulfur dioxide", "density", "pH", "sulphates", "alcohol", "quality"],
+    "droppedFields": []
+  }
+}

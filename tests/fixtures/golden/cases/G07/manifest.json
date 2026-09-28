@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "id": "G07",
+  "version": "1.0.0",
+  "title": "红葡萄酒质量二分类",
+  "category": "classification",
+  "difficulty": "intermediate",
+  "language": "zh-CN",
+  "source": {
+    "kind": "open-data-adaptation",
+    "title": "Wine Quality",
+    "provider": "UCI Machine Learning Repository",
+    "url": "https://archive.ics.uci.edu/dataset/186/wine+quality",
+    "doi": "10.24432/C56S3T",
+    "accessedAt": "2026-09-28",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "attribution": "Cortez, P., Cerdeira, A., Almeida, F., Matos, T., & Reis, J. (2009). Wine Quality [Dataset]. UCI Machine Learning Repository. DOI 10.24432/C56S3T.",
+    "redistributable": true,
+    "modifications": "保留红葡萄酒理化指标与原评分，增加样本 ID，并以原评分 >= 6 派生二元目标；题目划分和评价要求由 MMG 添加。",
+    "reviewedAt": "2026-09-28"
+  },
+  "files": {
+    "problem": {
+      "path": "problem.md",
+      "sha256": "e20d7e4ff8aef98f372cb52059c34d35c8104390ee8335141a94debc33105c4d",
+      "mediaType": "text/markdown"
+    },
+    "expected": {
+      "path": "expected.json",
+      "sha256": "7fc914a67c597688c1797e6f3ac079f0eccdad48ddb087f603dc928a709cc485",
+      "mediaType": "application/json"
+    },
+    "baseline": {
+      "path": "baseline.mjs",
+      "sha256": "9d7a355dccf80c8829b9d3e7deee5c47bf8b3b069d5dc2ee1137f49edeab603a",
+      "mediaType": "text/javascript"
+    },
+    "provenance": {
+      "path": "provenance.json",
+      "sha256": "45c9bdc1e6ec7a6345085f61f2dcc02e818ed854a37e426ce1b0e25e47cf0879",
+      "mediaType": "application/json"
+    },
+    "attachments": [
+      {
+        "path": "attachments/红酒质量分类.csv",
+        "sha256": "40d191cebdce856533a90bcd621d6dbd042e5933adb64097e48ff420cb8905e6",
+        "mediaType": "text/csv"
+      }
+    ],
+    "sources": [
+      {
+        "path": "source/winequality-red.csv",
+        "sha256": "4a402cf041b025d4566d954c3b9ba8635a3a8a01e039005d97d6a710278cf05e",
+        "mediaType": "text/csv"
+      }
+    ]
+  },
+  "coverage": {
+    "stages": [
+      "import",
+      "interpret",
+      "evidence",
+      "model",
+      "code",
+      "execute",
+      "persist"
+    ],
+    "formats": [
+      "md",
+      "csv"
+    ]
+  },
+  "tags": [
+    "开放数据",
+    "分类",
+    "目标泄漏",
+    "分层划分",
+    "CC BY 4.0"
+  ]
+}

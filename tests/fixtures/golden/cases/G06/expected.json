@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "caseId": "G06",
+  "input": {
+    "requiredFiles": ["problem.txt", "attachments/决策规则.pdf", "attachments/候选方案.csv"],
+    "assertions": [
+      { "id": "plan-count", "kind": "equals", "description": "CSV 包含 8 个候选方案", "target": "attachments/候选方案.csv.rows", "expected": 8, "blocking": true },
+      { "id": "pdf-rule", "kind": "contains", "description": "PDF 可提取两类决策规则", "target": "attachments/决策规则.pdf.text", "expected": ["同权归一化加权规则", "字典序规则"], "blocking": true }
+    ]
+  },
+  "understanding": {
+    "roles": [
+      { "quote": "请先按三个目标均越小越好的原则识别 Pareto 非支配方案", "role": "objective" },
+      { "quote": "归一化必须在全部 8 个可行方案上按极差进行", "role": "constraint" },
+      { "quote": "附件“决策规则.pdf”给出三项目标的含义、方向和最终决策规则", "role": "given" }
+    ],
+    "requiredPoints": ["三个指标均为成本型", "先识别非支配集", "两种决策规则分别计算", "推荐结论依赖偏好规则"]
+  },
+  "evidence": [
+    { "problemQuote": "附件“候选方案.csv”给出方案编号、周成本、未满足需求人次和碳排放量", "file": "attachments/候选方案.csv", "fields": ["方案", "周成本", "未满足需求人次", "碳排放量"] },
+    { "problemQuote": "附件“决策规则.pdf”给出三项目标的含义、方向和最终决策规则", "file": "attachments/决策规则.pdf", "fields": ["目标方向", "同权归一化加权规则", "字典序规则"] }
+  ],
+  "modeling": {
+    "requiredConcepts": ["Pareto 支配", "非支配集", "极差归一化", "同权加权", "字典序决策"],
+    "acceptableAlternatives": ["散点图可选择任意两个目标作坐标并用颜色编码第三目标"],
+    "forbiddenClaims": ["把任一指标当作越大越好", "只在 Pareto 集上重新计算题目规定的归一化", "把偏好规则下的推荐声称为唯一客观最优"],
+    "risks": ["权重和优先级是决策偏好而非数据事实", "候选集以外的方案未被评估"]
+  },
+  "execution": {
+    "assertions": [
+      { "id": "pareto-set", "kind": "equals", "description": "Pareto 集为 P1/P2/P3/P4/P6/P7", "target": "baseline.pareto", "expected": ["P1", "P2", "P3", "P4", "P6", "P7"], "blocking": true },
+      { "id": "weighted-choice", "kind": "equals", "description": "同权归一化推荐 P4", "target": "baseline.weightedRecommendation", "expected": "P4", "blocking": true },
+      { "id": "lexicographic-choice", "kind": "equals", "description": "字典序推荐 P4", "target": "baseline.lexicographicRecommendation", "expected": "P4", "blocking": true }
+    ],
+    "requiredOutputs": ["text", "table", "plot", "saved-workspace"],
+    "tolerances": { "weightedScore": 0.000001 }
+  },
+  "blockers": ["无法读取 PDF 或 CSV", "Pareto 支配方向错误", "归一化样本范围不符合题意", "遗漏偏好依赖性说明"]
+}

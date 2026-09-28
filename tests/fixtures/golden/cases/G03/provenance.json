@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "caseId": "G03",
+  "source": {
+    "pageUrl": "https://archive.ics.uci.edu/dataset/275/bike+sharing+dataset",
+    "doi": "10.24432/C5W894",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "citation": "Fanaee-T, H. (2013). Bike Sharing [Dataset]. UCI Machine Learning Repository. https://doi.org/10.24432/C5W894.",
+    "accessedAt": "2026-09-28",
+    "licenseEvidence": "UCI 官方数据页明确标注 Creative Commons Attribution 4.0 International，并允许在正确署名下共享与改编。"
+  },
+  "rawSnapshots": [
+    {
+      "path": "source/day.csv",
+      "sha256": "a6bcf826782d3c0fbfdcbeead17cd0884185a0dafe8ff10cd48a874ee7ba18be",
+      "officialDownloadUrl": "https://archive.ics.uci.edu/static/public/275/bike+sharing+dataset.zip",
+      "originalFilename": "day.csv"
+    }
+  ],
+  "transformation": {
+    "script": "scripts/generate/golden-open-data-fixtures.mjs",
+    "outputs": ["attachments/月度骑行需求.csv"],
+    "steps": ["读取 UCI 官方压缩包中的 day.csv", "按 dteday 的自然月分组", "分别汇总 casual、registered 和 cnt，并记录每月天数", "按月份升序写出 24 行固定快照"],
+    "changes": "只做月度求和聚合和字段重命名；没有插补、平滑、异常值删除或数值扰动。",
+    "retainedFields": ["dteday", "casual", "registered", "cnt"],
+    "droppedFields": ["instant", "season", "yr", "mnth", "holiday", "weekday", "workingday", "weathersit", "temp", "atemp", "hum", "windspeed"]
+  }
+}

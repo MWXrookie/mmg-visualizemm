@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "id": "G03",
+  "version": "1.0.0",
+  "title": "城市共享单车月需求预测",
+  "category": "forecasting",
+  "difficulty": "intermediate",
+  "language": "zh-CN",
+  "source": {
+    "kind": "open-data-adaptation",
+    "title": "Bike Sharing",
+    "provider": "UCI Machine Learning Repository",
+    "url": "https://archive.ics.uci.edu/dataset/275/bike+sharing+dataset",
+    "doi": "10.24432/C5W894",
+    "accessedAt": "2026-09-28",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "attribution": "Fanaee-T, H. (2013). Bike Sharing [Dataset]. UCI Machine Learning Repository. DOI 10.24432/C5W894.",
+    "redistributable": true,
+    "modifications": "从 day.csv 按自然月汇总天数、非注册、注册和总租赁量；题目留出期和评测要求由 MMG 添加。",
+    "reviewedAt": "2026-09-28"
+  },
+  "files": {
+    "problem": {
+      "path": "problem.md",
+      "sha256": "eea7c6c15f406492d6d21a143de658d577cdb0a2cb89bb5696e0e78cf623f077",
+      "mediaType": "text/markdown"
+    },
+    "expected": {
+      "path": "expected.json",
+      "sha256": "9c3a0a69eb1ac10887fce066335591cfea9661fcf7a1d30d7099ee108c9fe295",
+      "mediaType": "application/json"
+    },
+    "baseline": {
+      "path": "baseline.mjs",
+      "sha256": "8b395342516c44ccb5f3f7c7909755109cfb7d56bf92be1f8ee4cfcc200a6176",
+      "mediaType": "text/javascript"
+    },
+    "provenance": {
+      "path": "provenance.json",
+      "sha256": "33c98738dd7d806e95ce051ba7f5500f96977808d3032a12b92e1348820657c8",
+      "mediaType": "application/json"
+    },
+    "attachments": [
+      {
+        "path": "attachments/月度骑行需求.csv",
+        "sha256": "94d43ab66b1ef5d225248383659215538232673eba534713fe5ec7931758e2fc",
+        "mediaType": "text/csv"
+      }
+    ],
+    "sources": [
+      {
+        "path": "source/day.csv",
+        "sha256": "a6bcf826782d3c0fbfdcbeead17cd0884185a0dafe8ff10cd48a874ee7ba18be",
+        "mediaType": "text/csv"
+      }
+    ]
+  },
+  "coverage": {
+    "stages": [
+      "import",
+      "interpret",
+      "evidence",
+      "model",
+      "code",
+      "execute",
+      "persist"
+    ],
+    "formats": [
+      "md",
+      "csv"
+    ]
+  },
+  "tags": [
+    "开放数据",
+    "预测",
+    "时间序列",
+    "留出验证",
+    "CC BY 4.0"
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "id": "G05",
+  "version": "1.0.0",
+  "title": "社团文创工坊周生产计划",
+  "category": "optimization",
+  "difficulty": "intermediate",
+  "language": "zh-CN",
+  "source": {
+    "kind": "original",
+    "title": "MMG 原创合成题与数据",
+    "provider": "MMG_VisualizeMM",
+    "license": "CC BY 4.0",
+    "attribution": "MMG_VisualizeMM contributors, G05 synthetic fixture",
+    "redistributable": true,
+    "modifications": "原创生成，无真实主体或个人数据",
+    "reviewedAt": "2026-09-28"
+  },
+  "files": {
+    "problem": {
+      "path": "problem.md",
+      "sha256": "e5cc76cc14f75bdcdbce5431055db74b4291710be19ded3bb622e396b3889d5d",
+      "mediaType": "text/markdown"
+    },
+    "expected": {
+      "path": "expected.json",
+      "sha256": "e3a97feb66414b84e2d326a7fbf321f12d9771b737a882ddfe7336ada0a4484d",
+      "mediaType": "application/json"
+    },
+    "baseline": {
+      "path": "baseline.mjs",
+      "sha256": "fe34c132e77520e9236106ba20ae5171dc0e462ead12dbff9d1065403afcf736",
+      "mediaType": "text/javascript"
+    },
+    "attachments": [
+      {
+        "path": "attachments/生产参数.xlsx",
+        "sha256": "6adb6ef9df0c46266fb4394bd8495414848f7beb26e7dc339ee395c14f91f047",
+        "mediaType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      }
+    ]
+  },
+  "coverage": {
+    "stages": [
+      "import",
+      "interpret",
+      "evidence",
+      "model",
+      "code",
+      "execute",
+      "persist"
+    ],
+    "formats": [
+      "md",
+      "xlsx"
+    ]
+  },
+  "tags": [
+    "原创",
+    "整数规划",
+    "生产计划",
+    "敏感性"
+  ]
+}

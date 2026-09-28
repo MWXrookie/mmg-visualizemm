@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "caseId": "G05",
+  "input": {
+    "requiredFiles": ["problem.md", "attachments/生产参数.xlsx"],
+    "assertions": [
+      { "id": "xlsx-sheets", "kind": "contains", "description": "工作簿包含产品参数和资源上限", "target": "attachments/生产参数.xlsx", "expected": ["产品参数", "资源上限"], "blocking": true }
+    ]
+  },
+  "understanding": {
+    "roles": [
+      { "quote": "请建立非负整数规划，在不超过任何资源上限和最大需求的前提下，使本周总收益最大。", "role": "objective" },
+      { "quote": "为评估方案稳健性，请把材料上限减少 10 个单位后重新求解", "role": "constraint" },
+      { "quote": "附件“生产参数.xlsx”的“产品参数”工作表给出每件产品消耗的机器工时、人工工时、材料单位、单位收益和最大需求", "role": "given" }
+    ],
+    "requiredPoints": ["产量是非负整数", "资源和需求均为硬约束", "基准与材料缩减场景分别求解", "报告资源余量与收益变化"]
+  },
+  "evidence": [
+    { "problemQuote": "“资源上限”工作表给出本周可用资源", "file": "attachments/生产参数.xlsx", "sheet": "资源上限", "fields": ["资源", "上限"] }
+  ],
+  "modeling": {
+    "requiredConcepts": ["整数决策变量", "线性资源约束", "需求上界", "收益最大化", "敏感性重求解"],
+    "acceptableAlternatives": ["可用整数规划求解器或完整穷举，结果须通过可行性检查"],
+    "forbiddenClaims": ["输出小数产量作为可执行计划", "超过任一资源上限", "只修改收益而不重新求解敏感性场景"],
+    "risks": ["小规模穷举方法不适合直接扩展到大规模生产计划", "单位收益和资源消耗被假设为线性且确定"]
+  },
+  "execution": {
+    "assertions": [
+      { "id": "base-profit", "kind": "equals", "description": "基准最优收益为 1250", "target": "baseline.baseline.profit", "expected": 1250, "blocking": true },
+      { "id": "base-quantities", "kind": "equals", "description": "基准唯一最优组合为 A/B/C 各 10", "target": "baseline.baseline.quantities", "expected": { "A": 10, "B": 10, "C": 10 }, "blocking": true },
+      { "id": "reduced-profit", "kind": "equals", "description": "材料缩减后最优收益为 1205", "target": "baseline.reducedMaterial.profit", "expected": 1205, "blocking": true },
+      { "id": "profit-change", "kind": "equals", "description": "材料缩减使收益减少 45", "target": "baseline.profitChange", "expected": -45, "blocking": true }
+    ],
+    "requiredOutputs": ["text", "table", "plot", "saved-workspace"],
+    "tolerances": { "profit": 0 }
+  },
+  "blockers": ["无法读取任一工作表", "产生不可行或非整数方案", "目标函数与题目收益字段不一致", "敏感性场景没有重新优化"]
+}

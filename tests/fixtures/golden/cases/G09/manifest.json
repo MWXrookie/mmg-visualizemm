@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "id": "G09",
+  "version": "1.0.0",
+  "title": "展厅信标二维定位",
+  "category": "geometry",
+  "difficulty": "intermediate",
+  "language": "zh-CN",
+  "source": {
+    "kind": "original",
+    "title": "MMG 原创合成题与数据",
+    "provider": "MMG_VisualizeMM",
+    "license": "CC BY 4.0",
+    "attribution": "MMG_VisualizeMM contributors, G09 synthetic fixture",
+    "redistributable": true,
+    "modifications": "原创生成，无真实主体或个人数据",
+    "reviewedAt": "2026-09-28"
+  },
+  "files": {
+    "problem": {
+      "path": "problem.txt",
+      "sha256": "9067af599e4151e636bb1d6496a376d91e8f6b941cbb80946c73cccf02a7599e",
+      "mediaType": "text/plain"
+    },
+    "expected": {
+      "path": "expected.json",
+      "sha256": "93089a169b3e49adab9e2f3ad1a0cf57eb90c9eaa5edf3f35e446e25fce045f1",
+      "mediaType": "application/json"
+    },
+    "baseline": {
+      "path": "baseline.mjs",
+      "sha256": "9f04e1271a704a649cbd97c498c7a66996af36d1c08e649c6d11a4f8be85ce8a",
+      "mediaType": "text/javascript"
+    },
+    "attachments": [
+      {
+        "path": "attachments/坐标约定.pdf",
+        "sha256": "dd425bf76cdb9249a274efe7ff19b9b99bcdcf75548eaa891e13cb0917d6ae59",
+        "mediaType": "application/pdf"
+      },
+      {
+        "path": "attachments/信标测距.csv",
+        "sha256": "b3cd1861d2bb135271e19d862bcdee146dbddf60523f63a77bdd07b3a36c23d7",
+        "mediaType": "text/csv"
+      }
+    ]
+  },
+  "coverage": {
+    "stages": [
+      "import",
+      "interpret",
+      "evidence",
+      "model",
+      "code",
+      "execute",
+      "persist"
+    ],
+    "formats": [
+      "txt",
+      "pdf",
+      "csv"
+    ]
+  },
+  "tags": [
+    "原创",
+    "几何",
+    "定位",
+    "最小二乘",
+    "PDF"
+  ]
+}

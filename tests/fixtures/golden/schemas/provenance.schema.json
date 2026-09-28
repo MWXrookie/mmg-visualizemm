@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mmg.local/schemas/golden/provenance.schema.json",
+  "title": "MMG open-data provenance",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "caseId", "source", "rawSnapshots", "transformation"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "caseId": { "type": "string", "pattern": "^G(0[1-9]|10)$" },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pageUrl", "doi", "license", "licenseUrl", "citation", "accessedAt", "licenseEvidence"],
+      "properties": {
+        "pageUrl": { "type": "string", "format": "uri" },
+        "doi": { "type": "string", "pattern": "^10\\.[0-9]{4,9}/.+" },
+        "license": { "const": "CC BY 4.0" },
+        "licenseUrl": { "type": "string", "format": "uri" },
+        "citation": { "type": "string", "minLength": 1 },
+        "accessedAt": { "type": "string", "format": "date" },
+        "licenseEvidence": { "type": "string", "minLength": 1 }
+      }
+    },
+    "rawSnapshots": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "sha256", "officialDownloadUrl", "originalFilename"],
+        "properties": {
+          "path": { "type": "string", "pattern": "^source/" },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "officialDownloadUrl": { "type": "string", "format": "uri" },
+          "originalFilename": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "transformation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["script", "outputs", "steps", "changes"],
+      "properties": {
+        "script": { "type": "string", "minLength": 1 },
+        "outputs": { "type": "array", "items": { "type": "string", "pattern": "^attachments/" }, "minItems": 1, "uniqueItems": true },
+        "steps": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 },
+        "changes": { "type": "string", "minLength": 1 },
+        "retainedFields": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "droppedFields": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+      }
+    }
+  }
+}

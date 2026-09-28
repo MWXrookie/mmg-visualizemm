@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "id": "G02",
+  "version": "1.0.0",
+  "title": "校园实验耗材供应商综合评价",
+  "category": "evaluation",
+  "difficulty": "intermediate",
+  "language": "zh-CN",
+  "source": {
+    "kind": "original",
+    "title": "MMG 原创合成题与数据",
+    "provider": "MMG_VisualizeMM",
+    "license": "CC BY 4.0",
+    "attribution": "MMG_VisualizeMM contributors, G02 synthetic fixture",
+    "redistributable": true,
+    "modifications": "原创生成，无真实主体或个人数据",
+    "reviewedAt": "2026-09-27"
+  },
+  "files": {
+    "problem": {
+      "path": "problem.txt",
+      "sha256": "1400be05a019edcf080c702ac295a24c149ea8b3bbaa26b8231bcab810d81e77",
+      "mediaType": "text/plain"
+    },
+    "expected": {
+      "path": "expected.json",
+      "sha256": "6451166501a57478b48be1e6cafba7fe528afb70a5ba6300a85dd6681ed08f5e",
+      "mediaType": "application/json"
+    },
+    "baseline": {
+      "path": "baseline.mjs",
+      "sha256": "cee4f61dbdf06d508dfc0247a128d49d7ee77b8fd9faa01cec1d1d8a7bafd989",
+      "mediaType": "text/javascript"
+    },
+    "attachments": [
+      {
+        "path": "attachments/供应商数据.xlsx",
+        "sha256": "8318a3fbf1889341f14b3315ddad411e334196a27fce253b9b740b89527c8a00",
+        "mediaType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      }
+    ]
+  },
+  "coverage": {
+    "stages": [
+      "import",
+      "interpret",
+      "evidence",
+      "model",
+      "code",
+      "execute",
+      "persist"
+    ],
+    "formats": [
+      "txt",
+      "xlsx"
+    ]
+  },
+  "tags": [
+    "原创",
+    "综合评价",
+    "多工作表",
+    "缺失值",
+    "敏感性"
+  ]
+}

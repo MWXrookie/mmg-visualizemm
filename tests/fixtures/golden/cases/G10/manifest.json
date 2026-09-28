@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "id": "G10",
+  "version": "1.0.0",
+  "title": "社区应急物资配送路径",
+  "category": "optimization",
+  "difficulty": "intermediate",
+  "language": "zh-CN",
+  "source": {
+    "kind": "original",
+    "title": "MMG 原创合成题与数据",
+    "provider": "MMG_VisualizeMM",
+    "license": "CC BY 4.0",
+    "attribution": "MMG_VisualizeMM contributors, G10 synthetic fixture",
+    "redistributable": true,
+    "modifications": "原创生成，无真实主体或个人数据",
+    "reviewedAt": "2026-09-28"
+  },
+  "files": {
+    "problem": {
+      "path": "problem.txt",
+      "sha256": "8e0e4c9a839c127ba5c1f0ddc487c1bfe972f2e58ead268b7b2e4e1857b144b6",
+      "mediaType": "text/plain"
+    },
+    "expected": {
+      "path": "expected.json",
+      "sha256": "fd314a220b86a1f251bcae902d32798bb461b8498d7cc95cf54a336d47babfa4",
+      "mediaType": "application/json"
+    },
+    "baseline": {
+      "path": "baseline.mjs",
+      "sha256": "cd65aed41845f267b6c332461522a97758f2648951cf3b3a2b6b6341f9ef923f",
+      "mediaType": "text/javascript"
+    },
+    "attachments": [
+      {
+        "path": "attachments/道路网络.csv",
+        "sha256": "2ce22c19c8609e3a9a1e6f9db3d22fb555ae9cb8ac73335c0453cbf1332ba1eb",
+        "mediaType": "text/csv"
+      }
+    ]
+  },
+  "coverage": {
+    "stages": [
+      "import",
+      "interpret",
+      "evidence",
+      "model",
+      "code",
+      "execute",
+      "persist"
+    ],
+    "formats": [
+      "txt",
+      "csv"
+    ]
+  },
+  "tags": [
+    "原创",
+    "图论",
+    "最短路",
+    "必经点",
+    "并列最优"
+  ]
+}

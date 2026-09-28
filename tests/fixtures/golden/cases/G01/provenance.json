@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "caseId": "G01",
+  "source": {
+    "pageUrl": "https://archive.ics.uci.edu/dataset/242/energy+efficiency",
+    "doi": "10.24432/C51307",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "citation": "Tsanas, A. & Xifara, A. (2012). Energy Efficiency [Dataset]. UCI Machine Learning Repository. https://doi.org/10.24432/C51307.",
+    "accessedAt": "2026-09-28",
+    "licenseEvidence": "UCI 官方数据页明确标注 Creative Commons Attribution 4.0 International，并允许在正确署名下共享与改编。"
+  },
+  "rawSnapshots": [
+    {
+      "path": "source/ENB2012_data.xlsx",
+      "sha256": "0089fcffc1415e41e2ff63730cca5280efe54fc43d722dfde1b0aaa808e35dc4",
+      "officialDownloadUrl": "https://archive.ics.uci.edu/ml/machine-learning-databases/00242/ENB2012_data.xlsx",
+      "originalFilename": "ENB2012_data.xlsx"
+    }
+  ],
+  "transformation": {
+    "script": "scripts/generate/golden-open-data-fixtures.mjs",
+    "outputs": ["attachments/建筑方案.csv"],
+    "steps": ["按原始数据行 1、65、129 至 705 每隔 64 行固定抽取 12 条记录", "把 X1–X8、Y1、Y2 映射为可读英文列名", "增加 design_id 和 source_row 以支持结果展示和原始行追溯"],
+    "changes": "只做确定性抽样、字段重命名和追溯 ID 增补；数值未缩放、插补或扰动。",
+    "retainedFields": ["X1", "X2", "X3", "X4", "X5", "X6", "X7", "X8", "Y1", "Y2"],
+    "droppedFields": []
+  }
+}

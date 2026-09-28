@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 1,
+  "caseId": "G04",
+  "input": {
+    "requiredFiles": [
+      "problem.txt",
+      "attachments/月度订单.csv"
+    ],
+    "assertions": [
+      {
+        "id": "monthly-row-count",
+        "kind": "equals",
+        "description": "附件包含连续 24 个月的数据",
+        "target": "attachments/月度订单.csv.rows",
+        "expected": 24,
+        "blocking": true
+      },
+      {
+        "id": "monthly-columns",
+        "kind": "equals",
+        "description": "字段为月份和订单量",
+        "target": "attachments/月度订单.csv.header",
+        "expected": ["月份", "订单量"],
+        "blocking": true
+      }
+    ]
+  },
+  "understanding": {
+    "roles": [
+      {
+        "quote": "附件“月度订单.csv”记录了 2024 年 1 月至 2025 年 12 月的月度订单量，字段为“月份”和“订单量”。",
+        "role": "given"
+      },
+      {
+        "quote": "预测 2026 年 1 月至 3 月的订单量。",
+        "role": "objective"
+      },
+      {
+        "quote": "验证阶段不得使用被验证月份及其之后的数据估计模型参数。",
+        "role": "constraint"
+      },
+      {
+        "quote": "预测值不得为负。",
+        "role": "constraint"
+      }
+    ],
+    "requiredPoints": [
+      "识别月份字段的时间顺序",
+      "识别趋势和年度季节性",
+      "使用按时间顺序的留出验证而非随机划分",
+      "报告 MAE 并预测未来三个月",
+      "说明预测非负和外推范围"
+    ],
+    "acceptableAlternatives": [
+      "季节朴素、趋势加季节项回归、ETS 或其他可解释时间序列方法",
+      "更复杂模型必须与简单基线在相同时间切分上比较"
+    ]
+  },
+  "evidence": [
+    {
+      "problemQuote": "字段为“月份”和“订单量”",
+      "file": "attachments/月度订单.csv",
+      "fields": ["月份", "订单量"]
+    },
+    {
+      "problemQuote": "2024 年 1 月至 2025 年 12 月",
+      "file": "attachments/月度订单.csv",
+      "fields": ["2024-01", "2025-12"]
+    }
+  ],
+  "modeling": {
+    "requiredConcepts": [
+      "保持时间顺序",
+      "训练数据和验证数据隔离",
+      "趋势或年度增量",
+      "年度季节性",
+      "MAE",
+      "预测非负"
+    ],
+    "acceptableAlternatives": [
+      "使用 2025 年同期值加年度增量预测 2026 年前三个月",
+      "使用带月份效应的趋势回归并进行滚动或留出验证"
+    ],
+    "forbiddenClaims": [
+      "随机打乱时间序列后划分训练集和验证集",
+      "使用 2025 年 10 至 12 月的实际值估计同一验证阶段的参数",
+      "把合成数据解释为真实校园经营记录",
+      "输出负订单量且不进行约束或解释"
+    ],
+    "risks": [
+      "只有两年数据，不能证明长期趋势稳定",
+      "合成序列没有节假日、价格和突发事件影响",
+      "三个月以外的长期外推不属于本题验证范围"
+    ]
+  },
+  "execution": {
+    "assertions": [
+      {
+        "id": "validation-mae",
+        "kind": "equals",
+        "description": "同比季节基线在最后三个月留出集上的 MAE 为 0",
+        "target": "baseline.validationMae",
+        "expected": 0,
+        "blocking": true
+      },
+      {
+        "id": "annual-increment",
+        "kind": "equals",
+        "description": "两年同期订单量的年度增量中位数为 36",
+        "target": "baseline.annualIncrement",
+        "expected": 36,
+        "blocking": true
+      },
+      {
+        "id": "forecast-values",
+        "kind": "equals",
+        "description": "2026 年 1 至 3 月基线预测为 172、183、193",
+        "target": "baseline.forecastValues",
+        "expected": [172, 183, 193],
+        "blocking": true
+      }
+    ],
+    "requiredOutputs": ["text", "table", "plot", "saved-workspace"],
+    "tolerances": {
+      "mae": 0.000001,
+      "forecast": 0.000001
+    }
+  },
+  "blockers": [
+    "附件月份顺序或数值解析错误",
+    "验证阶段发生未来数据泄漏",
+    "预测结果为负或与输出表、图不一致",
+    "工作区保存或恢复后题干、附件、结果丢失"
+  ]
+}

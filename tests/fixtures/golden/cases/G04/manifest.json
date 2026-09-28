@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "id": "G04",
+  "version": "1.0.0",
+  "title": "校园打印中心月度订单量预测",
+  "category": "forecasting",
+  "difficulty": "intermediate",
+  "language": "zh-CN",
+  "source": {
+    "kind": "original",
+    "title": "MMG 原创合成题与数据",
+    "provider": "MMG_VisualizeMM",
+    "license": "CC BY 4.0",
+    "attribution": "MMG_VisualizeMM contributors, G04 synthetic fixture",
+    "redistributable": true,
+    "modifications": "原创确定性时间序列，无真实主体或个人数据",
+    "reviewedAt": "2026-09-27"
+  },
+  "files": {
+    "problem": {
+      "path": "problem.txt",
+      "sha256": "0bee68baab56dca80319ff3339ce6ae3e65886b0a6072e1b678a5ea28e4d2a5e",
+      "mediaType": "text/plain"
+    },
+    "expected": {
+      "path": "expected.json",
+      "sha256": "fcd3de364ae173ba2a231641b70381e4bad1b215a4cd7e56fd77826ad9cf614f",
+      "mediaType": "application/json"
+    },
+    "baseline": {
+      "path": "baseline.mjs",
+      "sha256": "68462fad4b9b064a2cd83d0625f862c8058c9a34fb1af055ae6c3725a3bc1fb7",
+      "mediaType": "text/javascript"
+    },
+    "attachments": [
+      {
+        "path": "attachments/月度订单.csv",
+        "sha256": "3df79034af2e5b6cd879fffa996bc2a4b5a2810f3d91b278ed2e3833c2a94743",
+        "mediaType": "text/csv"
+      }
+    ]
+  },
+  "coverage": {
+    "stages": [
+      "import",
+      "interpret",
+      "evidence",
+      "model",
+      "code",
+      "execute",
+      "persist"
+    ],
+    "formats": [
+      "txt",
+      "csv"
+    ]
+  },
+  "tags": [
+    "原创",
+    "预测",
+    "时间序列",
+    "无泄漏验证",
+    "季节性"
+  ]
+}

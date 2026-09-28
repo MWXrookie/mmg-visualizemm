@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mmg.local/schemas/golden/rubric-anchors.schema.json",
+  "title": "MMG golden rubric anchors",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "version", "references", "dimensions"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "version": { "type": "string", "pattern": "^[1-9][0-9]*\\.[0-9]+\\.[0-9]+$" },
+    "references": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "url", "scope"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+          "title": { "type": "string", "minLength": 1 },
+          "url": { "type": "string", "format": "uri" },
+          "scope": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "dimensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["formulate", "employ", "interpretEvaluate", "grounding", "communicationAgency"],
+      "properties": {
+        "formulate": { "$ref": "#/$defs/dimension" },
+        "employ": { "$ref": "#/$defs/dimension" },
+        "interpretEvaluate": { "$ref": "#/$defs/dimension" },
+        "grounding": { "$ref": "#/$defs/dimension" },
+        "communicationAgency": { "$ref": "#/$defs/dimension" }
+      }
+    }
+  },
+  "$defs": {
+    "dimension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "referenceIds", "projectDefined", "levels"],
+      "properties": {
+        "label": { "type": "string", "minLength": 1 },
+        "referenceIds": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true },
+        "projectDefined": { "type": "boolean" },
+        "levels": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["score", "descriptor", "evidence"],
+            "properties": {
+              "score": { "type": "integer", "minimum": 0, "maximum": 3 },
+              "descriptor": { "type": "string", "minLength": 1 },
+              "evidence": { "type": "string", "minLength": 1 },
+              "caseExamples": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+            }
+          }
+        }
+      }
+    }
+  }
+}

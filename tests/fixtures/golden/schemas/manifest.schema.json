@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mmg.local/schemas/golden/manifest.schema.json",
+  "title": "MMG golden case manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "version", "title", "category", "source", "files", "coverage"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "id": { "type": "string", "pattern": "^G(0[1-9]|10)$" },
+    "version": { "type": "string", "pattern": "^[1-9][0-9]*\\.[0-9]+\\.[0-9]+$" },
+    "title": { "type": "string", "minLength": 1 },
+    "category": {
+      "type": "string",
+      "enum": ["evaluation", "forecasting", "optimization", "classification", "geometry"]
+    },
+    "difficulty": { "type": "string", "enum": ["basic", "intermediate", "advanced"] },
+    "language": { "type": "string", "default": "zh-CN" },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "title", "redistributable", "reviewedAt"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["original", "open-data-adaptation", "existing-compatibility"] },
+        "title": { "type": "string", "minLength": 1 },
+        "provider": { "type": "string" },
+        "url": { "type": "string", "format": "uri" },
+        "doi": { "type": "string", "pattern": "^10\\.[0-9]{4,9}/.+" },
+        "accessedAt": { "type": "string", "format": "date" },
+        "license": { "type": "string" },
+        "licenseUrl": { "type": "string", "format": "uri" },
+        "attribution": { "type": "string" },
+        "redistributable": { "type": "boolean" },
+        "modifications": { "type": "string" },
+        "reviewedAt": { "type": "string", "format": "date" },
+        "notes": { "type": "string" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "open-data-adaptation" } } },
+          "then": { "required": ["provider", "url", "accessedAt", "license", "licenseUrl", "attribution", "modifications"] }
+        }
+      ]
+    },
+    "files": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["problem", "expected", "attachments"],
+      "properties": {
+        "problem": { "$ref": "#/$defs/file" },
+        "expected": { "$ref": "#/$defs/file" },
+        "baseline": { "$ref": "#/$defs/file" },
+        "provenance": { "$ref": "#/$defs/file" },
+        "attachments": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/file" },
+          "uniqueItems": true
+        },
+        "sources": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/file" },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stages", "formats"],
+      "properties": {
+        "stages": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["import", "interpret", "evidence", "model", "code", "execute", "persist"] },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "formats": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["md", "txt", "pdf", "csv", "xlsx"] },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      }
+    },
+    "tags": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "source": {
+            "type": "object",
+            "properties": {
+              "kind": { "const": "existing-compatibility" },
+              "redistributable": { "const": true }
+            },
+            "required": ["kind", "redistributable"]
+          }
+        },
+        "required": ["source"]
+      },
+      "then": {
+        "properties": {
+          "source": { "type": "object", "required": ["license", "licenseUrl", "attribution"] }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "source": {
+            "type": "object",
+            "properties": { "kind": { "const": "open-data-adaptation" } },
+            "required": ["kind"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "files": { "type": "object", "required": ["provenance", "sources"] }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string", "pattern": "^(?![/\\\\])(?!.*\\.\\.).+" },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "mediaType": { "type": "string" }
+      }
+    }
+  }
+}
