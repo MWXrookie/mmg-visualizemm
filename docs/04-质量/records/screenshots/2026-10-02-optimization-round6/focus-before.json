@@ -1,0 +1,26 @@
+[
+  {
+    "action": "useAI",
+    "focus": "BODY"
+  },
+  {
+    "action": "deleteStep2",
+    "focus": {
+      "tag": "BUTTON",
+      "title": "删除步骤",
+      "text": ""
+    }
+  },
+  {
+    "action": "deleteLastStep",
+    "focus": "BODY"
+  },
+  {
+    "action": "cancelNewPreview",
+    "focus": "BODY"
+  },
+  {
+    "action": "confirmNewPreview",
+    "focus": "BODY"
+  }
+]

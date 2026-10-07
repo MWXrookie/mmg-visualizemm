@@ -1,9 +1,10 @@
 /**
  * 生成原创金标准题的二进制附件，并刷新 manifest 中全部交付文件的 SHA-256。
- * 当前覆盖 G02、G04、G05、G06、G09、G10。
+ * 当前覆盖 G02、G04、G05、G06、G08、G09、G10。
  * 默认保留仓库中已存在的二进制附件，避免 ZIP 内部时间戳造成无意义差异。
  * 用法：npm run generate:golden-fixtures
- * 强制重建：npm run generate:golden-fixtures -- --force
+ * 单题生成：npm run generate:golden-fixtures -- --case G08
+ * 强制重建：npm run generate:golden-fixtures -- --case G08 --force
  */
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
@@ -14,6 +15,9 @@ import { chromium } from 'playwright'
 const projectRoot = process.cwd()
 const casesRoot = path.join(projectRoot, 'tests', 'fixtures', 'golden', 'cases')
 const force = process.argv.includes('--force')
+const caseIndex = process.argv.indexOf('--case')
+const selectedCase = caseIndex === -1 ? null : process.argv[caseIndex + 1]
+if (caseIndex !== -1 && selectedCase !== 'G08') throw new Error('目前 --case 仅支持 G08')
 
 async function generateG02() {
   const caseDir = path.join(casesRoot, 'G02')
@@ -100,6 +104,51 @@ async function generateG05() {
   return true
 }
 
+async function generateG08() {
+  const outputPath = path.join(casesRoot, 'G08', 'attachments', '巡检数据.xlsx')
+  await fs.mkdir(path.dirname(outputPath), { recursive: true })
+  if (!force && await fileExists(outputPath)) return false
+  const workbook = new ExcelJS.Workbook()
+  workbook.creator = 'MMG_VisualizeMM'
+  workbook.created = new Date('2026-09-28T00:00:00.000Z')
+  workbook.modified = new Date('2026-09-28T00:00:00.000Z')
+
+  const known = workbook.addWorksheet('已标注巡检')
+  known.addRow(['设备编号', '巡检次序', '振动(mm/s)', '轴承温度(°C)', '电流(A)', '状态'])
+  const devices = [
+    ['N01', '正常', 1.2, 42, 5.1], ['N02', '正常', 1.5, 45, 5.3],
+    ['N03', '正常', 1.8, 43, 5.0], ['N04', '正常', 2.0, 47, 5.5],
+    ['N05', '正常', 1.4, 49, 5.2], ['N06', '正常', 2.2, 46, 5.6],
+    ['A01', '关注', 3.8, 61, 6.6], ['A02', '关注', 4.2, 64, 6.9],
+    ['A03', '关注', 4.5, 62, 7.0], ['A04', '关注', 3.9, 67, 6.8],
+    ['A05', '关注', 4.8, 65, 7.2], ['A06', '关注', 4.1, 69, 7.1],
+  ]
+  for (const [id, label, vibration, temperature, current] of devices) {
+    known.addRow([id, 1, vibration, temperature, current, label])
+    known.addRow([id, 2, Number((vibration + 0.2).toFixed(1)), temperature + 1, Number((current + 0.1).toFixed(1)), label])
+  }
+  const unknown = workbook.addWorksheet('待判定巡检')
+  unknown.addRow(['设备编号', '振动(mm/s)', '轴承温度(°C)', '电流(A)'])
+  unknown.addRows([['U01', 1.7, 46, 5.4], ['U02', 4.3, 64, 6.9], ['U03', 2.2, 62, 6.7]])
+  const definitions = workbook.addWorksheet('字段说明')
+  definitions.addRow(['字段', '说明'])
+  definitions.addRows([
+    ['设备编号', '同一设备两次巡检共享编号，只用于分组，不进入模型特征'],
+    ['巡检次序', '同一设备内的观测顺序，不进入模型特征'],
+    ['振动(mm/s)', '合成振动速度均方根值，单位 mm/s'],
+    ['轴承温度(°C)', '合成轴承温度，单位摄氏度'],
+    ['电流(A)', '合成电流，单位安培'],
+    ['状态', '教学标签：正常或关注；待判定表不提供真值'],
+  ])
+  for (const sheet of [known, unknown, definitions]) {
+    sheet.views = [{ state: 'frozen', ySplit: 1 }]
+    sheet.getRow(1).font = { bold: true }
+    sheet.columns.forEach((column) => { column.width = 23 })
+  }
+  await workbook.xlsx.writeFile(outputPath)
+  return true
+}
+
 async function generatePdf(caseId, filename, title, sections) {
   const outputPath = path.join(casesRoot, caseId, 'attachments', filename)
   await fs.mkdir(path.dirname(outputPath), { recursive: true })
@@ -134,8 +183,15 @@ async function refreshManifest(caseId) {
 }
 
 const generated = []
+if (selectedCase === 'G08') {
+  generated.push(`${await generateG08() ? '已生成' : '已保留'} G08 XLSX`)
+  await refreshManifest('G08')
+  console.log(`${generated.join('；')}；已刷新 G08 manifest SHA-256。`)
+  process.exit(0)
+}
 generated.push([`${await generateG02() ? '已生成' : '已保留'} G02 XLSX`])
 generated.push([`${await generateG05() ? '已生成' : '已保留'} G05 XLSX`])
+generated.push([`${await generateG08() ? '已生成' : '已保留'} G08 XLSX`])
 generated.push([`${await generatePdf('G06', '决策规则.pdf', '校园夜间接驳方案决策规则', [
   { heading: '目标方向', paragraphs: ['周成本、未满足需求人次和碳排放量三个目标均越小越好。'] },
   { heading: '同权归一化加权规则', paragraphs: ['在全部 8 个可行方案上对每个目标做极差归一化，三个归一化值各占三分之一，选择加权得分最小的方案。若指标极差为 0，该项归一化值记为 0。'] },
@@ -146,5 +202,5 @@ generated.push([`${await generatePdf('G09', '坐标约定.pdf', '展厅坐标与
   { heading: '测距模型', paragraphs: ['CSV 中距离单位为米，采用二维欧氏距离。信标坐标已知且固定，讲解器坐标未知。'] },
   { heading: '结果检查', paragraphs: ['估计点必须接受边界检查；需要回算各信标预测距离、残差和总体 RMSE。'] },
 ]) ? '已生成' : '已保留'} G09 PDF`])
-for (const caseId of ['G02', 'G04', 'G05', 'G06', 'G09', 'G10']) await refreshManifest(caseId)
-console.log(`${generated.flat().join('；')}；已刷新 6 道原创题的 manifest SHA-256。`)
+for (const caseId of ['G02', 'G04', 'G05', 'G06', 'G08', 'G09', 'G10']) await refreshManifest(caseId)
+console.log(`${generated.flat().join('；')}；已刷新 7 道原创题的 manifest SHA-256。`)

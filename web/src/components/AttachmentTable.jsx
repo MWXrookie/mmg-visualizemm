@@ -22,7 +22,7 @@ export default function AttachmentTable({ a, onRemove }) {
           ))}
         </div>
       )}
-      <div className="table-scroll">
+      <div className="table-scroll" tabIndex={0} role="region" aria-label={`${a.name} 表格预览`}>
         <table className="tbl">
           <thead><tr>{t.headers.map((h, i) => <th key={i}>{h}</th>)}</tr></thead>
           <tbody>
@@ -32,6 +32,7 @@ export default function AttachmentTable({ a, onRemove }) {
           </tbody>
         </table>
       </div>
+      <div className="table-preview-caption">预览 {Math.min(t.rows.length, 10)} 行 · 共 {t.rows.length} 行 · {t.headers.length} 列{t.rows.length > 10 && <span>完整数据仍可用于编程</span>}</div>
     </div>
   )
 }

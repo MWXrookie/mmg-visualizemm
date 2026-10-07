@@ -1,27 +1,19 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import Workbench from './pages/Workbench.jsx'
 import Modeling from './pages/Modeling.jsx'
 import Coding from './pages/Coding.jsx'
 import Settings from './pages/Settings.jsx'
+import Examples from './pages/Examples.jsx'
 import { loadSettings, loadTheme, saveTheme, getCurrentWsId, setCurrentWsId } from './store.js'
 import { loadWorkspace, saveWorkspace, listWorkspaces, deleteWorkspace, exportWorkspaceBackup, importWorkspaceBackup } from './api.js'
-import { IconBook, IconCompass, IconCode, IconGear, IconSun, IconMoon, IconEdit, IconTrash, IconLightbulb, IconChevronRight } from './components/Icons.jsx'
+import { IconBook, IconCompass, IconCode, IconLayers, IconGear, IconSun, IconMoon, IconEdit, IconTrash, IconMenu, IconClose } from './components/Icons.jsx'
 
 const VIEWS = [
-  { id: 'workbench', label: '读题工作台', icon: <IconBook size={18} /> },
-  { id: 'modeling', label: '建模思路梳理', icon: <IconCompass size={18} /> },
-  { id: 'coding', label: '编程工作台', icon: <IconCode size={18} /> },
+  { id: 'workbench', label: '读题工作台', compactLabel: '1 读题', icon: <IconBook size={18} /> },
+  { id: 'modeling', label: '建模思路梳理', compactLabel: '2 建模', icon: <IconCompass size={18} /> },
+  { id: 'coding', label: '编程工作台', compactLabel: '3 编程', icon: <IconCode size={18} /> },
+  { id: 'examples', label: '建模范例', compactLabel: '范例', icon: <IconLayers size={18} /> },
 ]
-
-const GUIDE_KEY = 'mmg_onboarding_closed_v1'
-
-function loadGuideClosed() {
-  try {
-    return localStorage.getItem(GUIDE_KEY) === '1'
-  } catch {
-    return false
-  }
-}
 
 function workspacePayload(w) {
   return {
@@ -37,28 +29,38 @@ function workspacePayload(w) {
   }
 }
 
-/** 向后端保存工作区（keepalive 兼容 pagehide 强刷；请求体超 64KB 时降级同步 XHR，保证数据不静默丢失） */
-function persist(w) {
+/** 常规自动保存使用普通请求；仅 pagehide 使用 keepalive 或同步兜底。 */
+function persist(w, unloading = false) {
   if (!w || !w.id) return
   const body = JSON.stringify(workspacePayload(w))
-  try {
-    // keepalive 请求体有 ~64KB 上限（浏览器限制），超限会在调用时同步抛 TypeError
+  if (!unloading) {
+    fetch('/api/workspaces', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    }).then((response) => {
+      if (!response.ok) console.warn('[persist] 保存失败：HTTP', response.status)
+    }).catch((error) => console.warn('[persist] 保存失败：', error))
+    return
+  }
+  // keepalive 请求体有约 64KB 上限，大工作区在 pagehide 时直接走同步兜底。
+  if (new TextEncoder().encode(body).byteLength <= 60 * 1024) {
     fetch('/api/workspaces', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body,
       keepalive: true,
-    }).catch((e) => console.warn('[persist] 保存失败：', e))
-  } catch (e) {
-    // 数据较大：pagehide/卸载场景下 keepalive 不可用，用同步 XHR 兜底避免丢数据
-    try {
-      const xhr = new XMLHttpRequest()
-      xhr.open('POST', '/api/workspaces', false)
-      xhr.setRequestHeader('Content-Type', 'application/json')
-      xhr.send(body)
-    } catch (e2) {
-      console.warn('[persist] 同步兜底保存失败：', e2)
-    }
+    }).catch((error) => console.warn('[persist] 离页保存失败：', error))
+    return
+  }
+  try {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', '/api/workspaces', false)
+    xhr.setRequestHeader('Content-Type', 'application/json')
+    xhr.send(body)
+    if (xhr.status < 200 || xhr.status >= 300) console.warn('[persist] 离页保存失败：HTTP', xhr.status)
+  } catch (error) {
+    console.warn('[persist] 离页保存失败：', error)
   }
 }
 
@@ -67,13 +69,27 @@ export default function App() {
   const [settings, setSettings] = useState(null)
   const [theme, setTheme] = useState(loadTheme)
   const [wsCollapsed, setWsCollapsed] = useState(() => !['settings'].includes(location.hash.replace('#/', '') || 'workbench'))
-  const [guideClosed, setGuideClosed] = useState(loadGuideClosed)
   const [wsId, setWsId] = useState(getCurrentWsId)
   const [ws, setWs] = useState(null) // 三台共享的工作区数据（题目/附件/拆解/代码）
   const [wsList, setWsList] = useState([]) // 工作区列表（侧栏切换/删除用）
   const [toast, setToast] = useState('') // 全局轻提示
   const [wsDialog, setWsDialog] = useState(null) // {mode:'rename'|'delete', id, title, value}
   const [backupBusy, setBackupBusy] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const mobileMenuButton = useRef(null)
+
+  function closeMobileMenu() {
+    if (!mobileMenuOpen) return
+    setMobileMenuOpen(false)
+    mobileMenuButton.current?.focus()
+  }
+
+  useEffect(() => {
+    const wideScreen = matchMedia('(min-width: 769px)')
+    const closeOnDesktop = () => { if (wideScreen.matches) setMobileMenuOpen(false) }
+    wideScreen.addEventListener('change', closeOnDesktop)
+    return () => wideScreen.removeEventListener('change', closeOnDesktop)
+  }, [])
 
   // 全局通知入口（供各页面调用：window.__notify('...')）
   useEffect(() => {
@@ -100,11 +116,6 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', theme)
     saveTheme(theme)
   }, [theme])
-  useEffect(() => {
-    try {
-      localStorage.setItem(GUIDE_KEY, guideClosed ? '1' : '0')
-    } catch { /* ignore */ }
-  }, [guideClosed])
 
   // hash 路由
   useEffect(() => {
@@ -112,12 +123,14 @@ export default function App() {
       const v = location.hash.replace('#/', '') || 'workbench'
       setView(v)
       setWsCollapsed(v !== 'settings')
+      setMobileMenuOpen(false)
     }
     addEventListener('hashchange', onHash)
     return () => removeEventListener('hashchange', onHash)
   }, [])
 
   function go(v) {
+    closeMobileMenu()
     location.hash = `#/${v}`
     setView(v)
     setWsCollapsed(v !== 'settings')
@@ -154,7 +167,7 @@ export default function App() {
 
   // 关闭/刷新页面时强刷保存
   useEffect(() => {
-    const flush = () => persist(wsRef.current)
+    const flush = () => persist(wsRef.current, true)
     addEventListener('pagehide', flush)
     return () => removeEventListener('pagehide', flush)
   }, [])
@@ -171,7 +184,10 @@ export default function App() {
           // 把暂存的函数链应用到当前 ws（合并而非替换，避免覆盖已上传内容）
           const fn = pendingRef.current
           pendingRef.current = null
-          setWs((prev) => ({ ...(prev || {}), id: r.id, ...(fn ? fn(prev || {}) : {}) }))
+          setWs((prev) => {
+            const base = prev?.id === r.id ? prev : { id: r.id }
+            return { ...base, ...(fn ? fn(base) : {}) }
+          })
           return r.id
         })
         .finally(() => { ensurePromiseRef.current = null })
@@ -187,7 +203,7 @@ export default function App() {
       typeof patch === 'function'
         ? (prev) => ({ ...(prev || {}), ...patch(prev || {}) })
         : (prev) => ({ ...(prev || {}), ...patch })
-    if (wsRef.current?.id) {
+    if (wsRef.current?.id && wsRef.current.id === wsIdRef.current) {
       setWs(updater)
       return
     }
@@ -198,7 +214,10 @@ export default function App() {
     ensureWsId().then((id) => {
       const fn = pendingRef.current
       pendingRef.current = null
-      if (fn) setWs((prev) => ({ ...(prev || {}), id, ...fn(prev || {}) }))
+      if (fn) setWs((prev) => {
+        const base = prev?.id === id ? prev : { id }
+        return { ...base, ...fn(base) }
+      })
     })
   }
 
@@ -212,6 +231,7 @@ export default function App() {
   function newWorkspace() {
     saveWorkspace({ title: '未命名题目' }).then((r) => {
       wsIdRef.current = r.id
+      wsRef.current = { id: r.id } // 异步状态提交前先对齐引用，避免紧接着的上传写进旧工作区
       setWsId(r.id)
       setCurrentWsId(r.id)
       pendingRef.current = null
@@ -335,72 +355,6 @@ export default function App() {
     setWs(null) // 清空当前 → wsId effect 检测到 id 变化后从后端加载
   }
 
-  const onboarding = useMemo(() => {
-    const hasKey = !!settings?.apiKey?.trim()
-    const hasProblem = !!ws?.problemText?.trim() || (ws?.attachments || []).length > 0
-    const hasBreakdown = (ws?.breakdown || []).length > 0
-    const hasCode = !!ws?.code?.trim()
-    const steps = [
-      {
-        id: 'settings',
-        no: '1',
-        label: '先配模型',
-        hint: hasKey ? '已配置' : '没有 Key，后面都跑不起来',
-        done: hasKey,
-      },
-      {
-        id: 'workbench',
-        no: '2',
-        label: '放入题目',
-        hint: hasProblem ? '已有题目或附件' : '粘贴题目或上传文件',
-        done: hasProblem,
-      },
-      {
-        id: 'modeling',
-        no: '3',
-        label: '拆解思路',
-        hint: hasBreakdown ? '已有拆解块' : '把题目拆成目标、约束、步骤',
-        done: hasBreakdown,
-      },
-      {
-        id: 'coding',
-        no: '4',
-        label: '生成代码',
-        hint: hasCode ? '已有代码' : '从拆解块生成并运行',
-        done: hasCode,
-      },
-    ]
-    const phase = !hasKey ? 'settings' : !hasProblem ? 'workbench' : !hasBreakdown ? 'modeling' : !hasCode ? 'coding' : 'done'
-    const copy = {
-      settings: {
-        title: '先把模型接上',
-        body: '这个产品的第一步不是聊天，是先把你的 API Key 配好。不配好，后面的读题、梳理、编程都不会真正跑起来。',
-        action: '去模型设置',
-      },
-      workbench: {
-        title: '先从题目开始',
-        body: '把题干和附件放进读题工作台，先让 AI 告诉你这题在问什么，再往下走。',
-        action: '去读题工作台',
-      },
-      modeling: {
-        title: '下一步是拆思路',
-        body: '读懂题以后，把问题拆成几个可执行块。这里不是复述题目，是把建模路径理顺。',
-        action: '去建模思路梳理',
-      },
-      coding: {
-        title: '最后生成代码',
-        body: '把拆解块带到编程台，先生成，再运行，再看结果和调参。',
-        action: '去编程工作台',
-      },
-      done: {
-        title: '流程已经接上了',
-        body: '你现在可以继续细化模型、换工作区，或者回头再补读题和思路。',
-        action: '去编程工作台',
-      },
-    }
-    return { phase, steps, ...copy[phase] }
-  }, [settings, ws])
-
   if (!settings) {
     return <div className="app-shell"><div style={{ padding: 40, color: 'var(--muted)' }}>加载本地设置…</div></div>
   }
@@ -415,112 +369,86 @@ export default function App() {
 
   return (
     <div className={`app-shell ${wsCollapsed && view !== 'settings' ? 'rail-only' : ''}`}>
-      <aside className="sidebar">
+      <aside className={`sidebar ${mobileMenuOpen ? 'mobile-menu-open' : ''}`} onKeyDown={(event) => {
+        if (event.key === 'Escape' && mobileMenuOpen) {
+          event.preventDefault()
+          closeMobileMenu()
+        }
+      }}>
+        <button ref={mobileMenuButton} type="button" className="mobile-menu-toggle" aria-expanded={mobileMenuOpen} aria-controls="sidebar-tools" onClick={() => setMobileMenuOpen((open) => !open)}>
+          {mobileMenuOpen ? <IconClose size={18} /> : <IconMenu size={18} />}
+          <span>工作区与设置</span>
+          <span className="mobile-workspace-title">{ws?.title || '未命名题目'}</span>
+        </button>
         <div className="sb-brand">
           <div className="sb-logo">M</div>
           {!wsCollapsed && <span className="sb-name">MMG_VisualizeMM</span>}
         </div>
-        {!wsCollapsed && <div className="sb-section">功 能</div>}
-        <nav className="sb-nav">
+        {!wsCollapsed && <div className="sb-section sb-function-label">功 能</div>}
+        <nav className="sb-nav" aria-label="主要功能">
           {VIEWS.map((v) => (
-            <button key={v.id} className={`nav-item ${view === v.id ? 'active' : ''}`} onClick={() => go(v.id)} title={v.label}>
+            <button key={v.id} className={`nav-item ${view === v.id ? 'active' : ''}`} onClick={() => go(v.id)} title={v.label} aria-label={v.label} aria-current={view === v.id ? 'page' : undefined}>
               <span className="ic">{v.icon}</span>
-              {!wsCollapsed && v.label}
+              {!wsCollapsed && <span className="nav-full-label">{v.label}</span>}
+              {wsCollapsed && <span className="nav-rail-label" aria-hidden="true">{v.compactLabel.replace(/^\d\s/, '')}</span>}
+              <span className="nav-compact-label">{v.compactLabel}</span>
             </button>
           ))}
         </nav>
-        {!wsCollapsed && <div className="sb-section">工作区</div>}
-        {!wsCollapsed && (
-          <div className="sb-ws-list">
-            {wsList.length === 0 && <div className="sb-ws-empty">暂无工作区</div>}
-            {wsList.map((w) => (
-              <div key={w.id} className={`sb-ws-item ${wsId === w.id ? 'active' : ''}`}>
-                <button className="sb-ws-main" onClick={() => switchWs(w.id)} title={w.title || '未命名题目'}>
-                  <span className="sb-ws-title">{w.title || '未命名题目'}</span>
-                </button>
-                <div className="sb-ws-actions">
-                  <button className="sb-ws-act" onClick={() => openRenameWs(w)} title="重命名工作区"><IconEdit size={13} /></button>
-                  <button className="sb-ws-act danger" onClick={() => openDeleteWs(w)} title="删除工作区"><IconTrash size={13} /></button>
+        <div id="sidebar-tools" className="sidebar-tools">
+          {(!wsCollapsed || mobileMenuOpen) && <div className="sb-section">工作区</div>}
+          {(!wsCollapsed || mobileMenuOpen) && (
+            <div className="sb-ws-list">
+              {wsList.length === 0 && <div className="sb-ws-empty">暂无工作区</div>}
+              {wsList.map((w) => (
+                <div key={w.id} className={`sb-ws-item ${wsId === w.id ? 'active' : ''}`}>
+                  <button className="sb-ws-main" onClick={() => { switchWs(w.id); closeMobileMenu() }} title={w.title || '未命名题目'} aria-current={wsId === w.id ? 'true' : undefined}>
+                    <span className="sb-ws-title">{w.title || '未命名题目'}</span>
+                  </button>
+                  <div className="sb-ws-actions">
+                    <button className="sb-ws-act" onClick={() => openRenameWs(w)} title="重命名工作区"><IconEdit size={13} /></button>
+                    <button className="sb-ws-act danger" onClick={() => openDeleteWs(w)} title="删除工作区"><IconTrash size={13} /></button>
+                  </div>
                 </div>
+              ))}
+              <button className="sb-ws-new" onClick={() => { newWorkspace(); closeMobileMenu() }}>＋ 新建工作区</button>
+              <div className="sb-ws-backup">
+                <button className="sb-ws-tool" onClick={exportCurrentWorkspace} disabled={backupBusy || !wsId}>
+                  导出当前
+                </button>
+                <button className="sb-ws-tool" onClick={() => backupInputRef.current?.click()} disabled={backupBusy}>
+                  {backupBusy ? '处理中…' : '导入备份'}
+                </button>
+                <input
+                  ref={backupInputRef}
+                  type="file"
+                  accept="application/json,.json"
+                  onChange={importWorkspaceFile}
+                  hidden
+                />
               </div>
-            ))}
-            <button className="sb-ws-new" onClick={newWorkspace}>＋ 新建工作区</button>
-            <div className="sb-ws-backup">
-              <button className="sb-ws-tool" onClick={exportCurrentWorkspace} disabled={backupBusy || !wsId}>
-                导出当前
-              </button>
-              <button className="sb-ws-tool" onClick={() => backupInputRef.current?.click()} disabled={backupBusy}>
-                {backupBusy ? '处理中…' : '导入备份'}
-              </button>
-              <input
-                ref={backupInputRef}
-                type="file"
-                accept="application/json,.json"
-                onChange={importWorkspaceFile}
-                hidden
-              />
             </div>
+          )}
+          <div className="sb-foot">
+            <button className={`nav-item ${view === 'settings' ? 'active' : ''}`} onClick={() => go('settings')} title="模型设置" aria-current={view === 'settings' ? 'page' : undefined}>
+              <span className="ic"><IconGear size={18} /></span>
+              {wsCollapsed && !mobileMenuOpen && <span className="nav-rail-label" aria-hidden="true">设置</span>}
+              {(!wsCollapsed || mobileMenuOpen) && '模型设置'}
+            </button>
+            <button
+              className="nav-item"
+              onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+              title={theme === 'dark' ? '切换浅色' : '切换深色'}
+            >
+              <span className="ic">{theme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}</span>
+              {wsCollapsed && !mobileMenuOpen && <span className="nav-rail-label" aria-hidden="true">外观</span>}
+              {(!wsCollapsed || mobileMenuOpen) && (theme === 'dark' ? '浅色模式' : '深色模式')}
+            </button>
           </div>
-        )}
-        <div className="sb-foot">
-          <button
-            className="nav-item"
-            onClick={() => setGuideClosed(false)}
-            title="重新打开使用引导"
-          >
-            <span className="ic"><IconLightbulb size={18} /></span>
-            {!wsCollapsed && '使用引导'}
-          </button>
-          <button className={`nav-item ${view === 'settings' ? 'active' : ''}`} onClick={() => go('settings')} title="模型设置">
-            <span className="ic"><IconGear size={18} /></span>
-            {!wsCollapsed && '模型设置'}
-          </button>
-          <button
-            className="nav-item"
-            onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-            title={theme === 'dark' ? '切换浅色' : '切换深色'}
-          >
-            <span className="ic">{theme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}</span>
-            {!wsCollapsed && (theme === 'dark' ? '浅色模式' : '深色模式')}
-          </button>
         </div>
       </aside>
 
       <main className="content" style={{ minWidth: 0, overflow: 'hidden' }}>
-        {!guideClosed && view !== 'modeling' && (
-          <div className="onboard-strip">
-            <div className="onboard-main">
-              <div className="onboard-title">
-                <IconLightbulb size={14} />
-                <span>{onboarding.title}</span>
-              </div>
-              <div className="onboard-body">{onboarding.body}</div>
-            </div>
-            <div className="onboard-track" aria-label="建模流程">
-              {onboarding.steps.map((step) => (
-                <button
-                  type="button"
-                  key={step.id}
-                  className={`onboard-step ${step.done ? 'done' : step.id === onboarding.phase ? 'active' : ''}`}
-                  onClick={() => go(step.id)}
-                  aria-current={step.id === onboarding.phase ? 'step' : undefined}
-                >
-                  <span className="onboard-step-no">{step.no}</span>
-                  <span className="onboard-step-copy">
-                    <b>{step.label}</b>
-                    <span>{step.hint}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
-            <div className="onboard-actions">
-              <button className="btn btn-primary btn-sm" onClick={() => go(onboarding.phase === 'done' ? 'coding' : onboarding.phase)}>
-                {onboarding.action} <IconChevronRight size={13} />
-              </button>
-              <button className="btn btn-ghost btn-sm" onClick={() => setGuideClosed(true)}>我先自己试试</button>
-            </div>
-          </div>
-        )}
         <div className={`page-view ${view === 'workbench' ? 'active' : ''}`}>
           <Workbench {...pageProps} onNewWorkspace={newWorkspace} />
         </div>
@@ -528,6 +456,7 @@ export default function App() {
           <Modeling {...pageProps} />
         </div>
         {view === 'coding' && <Coding {...pageProps} />}
+        {view === 'examples' && <Examples />}
         {view === 'settings' && <Settings settings={settings} setSettings={setSettings} />}
       </main>
       {toast && <div className="toast" role="status">{toast}</div>}

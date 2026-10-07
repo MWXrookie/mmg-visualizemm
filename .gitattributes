@@ -1,2 +1,6 @@
-# Preserve byte-exact upstream snapshots for provenance SHA-256 checks.
+# Every golden case file is SHA-256 checked; Git must not rewrite text line endings on checkout.
+tests/fixtures/golden/cases/** -text
+# Raw upstream snapshots remain opaque in diffs.
 tests/fixtures/golden/cases/*/source/* -text -diff
+# Public copies are compared byte-for-byte with the protected golden cases.
+web/public/examples/** -text

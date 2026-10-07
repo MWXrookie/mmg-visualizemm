@@ -1,0 +1,30 @@
+[
+  {
+    "width": 1280,
+    "theme": "light",
+    "visibleStepInputs": 2,
+    "savedSteps": 7,
+    "preserved": true
+  },
+  {
+    "width": 1280,
+    "theme": "dark",
+    "visibleStepInputs": 2,
+    "savedSteps": 7,
+    "preserved": true
+  },
+  {
+    "width": 1440,
+    "theme": "light",
+    "visibleStepInputs": 2,
+    "savedSteps": 7,
+    "preserved": true
+  },
+  {
+    "width": 1440,
+    "theme": "dark",
+    "visibleStepInputs": 2,
+    "savedSteps": 7,
+    "preserved": true
+  }
+]

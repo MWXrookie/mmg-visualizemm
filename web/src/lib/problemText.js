@@ -247,5 +247,8 @@ export function analyzeProblemText(text, sourceKind = 'text', pages = []) {
 }
 
 export function normalizeProblemText(text, sourceKind = 'text') {
-  return analyzeProblemText(text, sourceKind).body
+  // 工作区题干是模型和用户共用的原始依据，不能因展示用的标题/导语识别而丢掉前段约束。
+  // 仅移除 PDF 解析器的分页标记并统一换行；展示层仍可用 analyzeProblemText 分段。
+  const normalized = String(text || '').replace(/\r/g, '')
+  return splitLines(normalized).filter((line) => !isPdfPageMarker(line)).join('\n').trim()
 }

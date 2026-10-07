@@ -1,0 +1,390 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "id": "G01",
+      "title": "建筑节能方案综合评价",
+      "category": "evaluation",
+      "difficulty": "intermediate",
+      "tags": [
+        "开放数据",
+        "综合评价",
+        "建筑节能",
+        "敏感性",
+        "CC BY 4.0"
+      ],
+      "problemText": "# 建筑节能方案综合评价\n\n某教学建筑改造项目需要从 12 个候选建筑方案中选出三个优先开展详细设计。附件“建筑方案.csv”改编自 UCI Energy Efficiency 数据集，保留了建筑参数、采暖负荷和制冷负荷；`source_row` 用于追溯原始快照，不是评价指标。\n\n请按以下透明规则评价：相对紧凑度是效益型指标，权重 0.20；采暖负荷和制冷负荷是成本型指标，权重各 0.40。三个指标均在 12 个候选方案上做极差标准化后加权，综合得分越高越优。\n\n若某指标极差为 0，则该项标准化值统一记为 1。请报告完整排名、前三名及各指标标准化值，并检查权重和、指标方向和原始行追溯关系。\n\n再做一个敏感性场景：移除相对紧凑度指标，只对采暖负荷和制冷负荷等权评价。比较前三名是否变化，并说明固定权重、确定性负荷和小规模候选集带来的局限。请用表格和至少一张图展示结果。\n",
+      "problem": {
+        "name": "problem.md",
+        "url": "/examples/G01/problem.md",
+        "sha256": "adc7868be50beeef8df32ae7c751600dbfddbc08c8c7fd867c2a04f063824fff"
+      },
+      "attachments": [
+        {
+          "name": "建筑方案.csv",
+          "url": "/examples/G01/attachments/%E5%BB%BA%E7%AD%91%E6%96%B9%E6%A1%88.csv",
+          "mediaType": "text/csv",
+          "sha256": "013853a5f14786bff14c8be36af6fa82762d283dbbbf24821331db4a03d90808"
+        }
+      ],
+      "source": {
+        "kind": "open-data-adaptation",
+        "title": "Energy Efficiency",
+        "provider": "UCI Machine Learning Repository",
+        "url": "https://archive.ics.uci.edu/dataset/242/energy+efficiency",
+        "doi": "10.24432/C51307",
+        "license": "CC BY 4.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+        "attribution": "Tsanas, A. & Xifara, A. (2012). Energy Efficiency [Dataset]. UCI Machine Learning Repository. DOI 10.24432/C51307.",
+        "modifications": "固定抽取 12 行，重命名字段，增加方案 ID 和原始行号；题目情境、权重和敏感性场景由 MMG 添加。"
+      }
+    },
+    {
+      "id": "G02",
+      "title": "校园实验耗材供应商综合评价",
+      "category": "evaluation",
+      "difficulty": "intermediate",
+      "tags": [
+        "原创",
+        "综合评价",
+        "多工作表",
+        "缺失值",
+        "敏感性"
+      ],
+      "problemText": "校园实验耗材供应商综合评价\n\n某高校计划为下一学年的实验课程选择两家主要耗材供应商。采购部门已经汇总候选供应商的单价、准时交付率、缺陷率、服务评分和年供货上限。\n\n各指标方向和初始权重见附件“供应商数据.xlsx”的“指标说明”工作表，候选供应商数据位于“供应商指标”工作表。\n\n请在保证方法透明且可复核的前提下，综合评价各供应商并推荐排名前两位的供应商。\n\n若某项服务评分缺失，应采用全体已有服务评分的中位数填补，并说明理由。所有指标使用极差标准化；成本型指标按数值越小得分越高处理，效益型指标按数值越大得分越高处理。\n\n请进一步把“单价”的权重从 0.25 提高到 0.35，其余四项权重按原比例缩放并保持权重和为 1，比较前两名是否变化。输出原始权重和敏感性场景下的得分表、排序结果及至少一张对比图。\n",
+      "problem": {
+        "name": "problem.txt",
+        "url": "/examples/G02/problem.txt",
+        "sha256": "1400be05a019edcf080c702ac295a24c149ea8b3bbaa26b8231bcab810d81e77"
+      },
+      "attachments": [
+        {
+          "name": "供应商数据.xlsx",
+          "url": "/examples/G02/attachments/%E4%BE%9B%E5%BA%94%E5%95%86%E6%95%B0%E6%8D%AE.xlsx",
+          "mediaType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "sha256": "8318a3fbf1889341f14b3315ddad411e334196a27fce253b9b740b89527c8a00"
+        }
+      ],
+      "source": {
+        "kind": "original",
+        "title": "MMG 原创合成题与数据",
+        "provider": "MMG_VisualizeMM",
+        "url": "",
+        "doi": "",
+        "license": "CC BY 4.0",
+        "attribution": "MMG_VisualizeMM contributors, G02 synthetic fixture",
+        "modifications": "原创生成，无真实主体或个人数据"
+      }
+    },
+    {
+      "id": "G03",
+      "title": "城市共享单车月需求预测",
+      "category": "forecasting",
+      "difficulty": "intermediate",
+      "tags": [
+        "开放数据",
+        "预测",
+        "时间序列",
+        "留出验证",
+        "CC BY 4.0"
+      ],
+      "problemText": "# 城市共享单车月需求预测\n\n附件“月度骑行需求.csv”由 UCI Bike Sharing 数据集的 `day.csv` 按自然月聚合得到，覆盖 2011 年 1 月至 2012 年 12 月。`total_rentals` 是 `casual_rentals` 与 `registered_rentals` 之和，不能把三个字段当作相互独立的观测重复计数。\n\n请把 2012 年 10 月至 12 月作为最终留出集，其余月份作为训练数据。任何模型选择、参数估计或标准化都不得使用留出期的实际需求。\n\n首先建立可复核的同比季节朴素基线：以 2011 年同月总租赁量预测 2012 年 10 月至 12 月，并报告逐月误差、MAE 和 MAPE。MAPE 的分母使用实际值；若实际值为 0，应单独说明而不是直接相除。\n\n可在不泄漏留出数据的前提下补充更复杂模型，但必须与季节基线使用相同留出期比较。请展示完整月度序列、训练/验证边界、预测表和折线图，并讨论两年数据、天气与运营变化带来的外推局限。\n",
+      "problem": {
+        "name": "problem.md",
+        "url": "/examples/G03/problem.md",
+        "sha256": "eea7c6c15f406492d6d21a143de658d577cdb0a2cb89bb5696e0e78cf623f077"
+      },
+      "attachments": [
+        {
+          "name": "月度骑行需求.csv",
+          "url": "/examples/G03/attachments/%E6%9C%88%E5%BA%A6%E9%AA%91%E8%A1%8C%E9%9C%80%E6%B1%82.csv",
+          "mediaType": "text/csv",
+          "sha256": "94d43ab66b1ef5d225248383659215538232673eba534713fe5ec7931758e2fc"
+        }
+      ],
+      "source": {
+        "kind": "open-data-adaptation",
+        "title": "Bike Sharing",
+        "provider": "UCI Machine Learning Repository",
+        "url": "https://archive.ics.uci.edu/dataset/275/bike+sharing+dataset",
+        "doi": "10.24432/C5W894",
+        "license": "CC BY 4.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+        "attribution": "Fanaee-T, H. (2013). Bike Sharing [Dataset]. UCI Machine Learning Repository. DOI 10.24432/C5W894.",
+        "modifications": "从 day.csv 按自然月汇总天数、非注册、注册和总租赁量；题目留出期和评测要求由 MMG 添加。"
+      }
+    },
+    {
+      "id": "G04",
+      "title": "校园打印中心月度订单量预测",
+      "category": "forecasting",
+      "difficulty": "intermediate",
+      "tags": [
+        "原创",
+        "预测",
+        "时间序列",
+        "无泄漏验证",
+        "季节性"
+      ],
+      "problemText": "校园打印中心月度订单量预测\n\n某高校打印中心希望提前准备纸张和设备维护计划。附件“月度订单.csv”记录了 2024 年 1 月至 2025 年 12 月的月度订单量，字段为“月份”和“订单量”。\n\n请识别序列中的趋势和季节性，在不打乱时间顺序的前提下建立一个透明、可复现的基线模型，预测 2026 年 1 月至 3 月的订单量。\n\n验证阶段不得使用被验证月份及其之后的数据估计模型参数。请至少使用最后三个月进行按时间顺序的留出验证并报告 MAE。预测值不得为负。\n\n请输出历史数据与预测值表、验证误差、模型假设和至少一张包含历史与预测区间的折线图。若采用更复杂模型，应同时保留简单基线用于比较。\n",
+      "problem": {
+        "name": "problem.txt",
+        "url": "/examples/G04/problem.txt",
+        "sha256": "0bee68baab56dca80319ff3339ce6ae3e65886b0a6072e1b678a5ea28e4d2a5e"
+      },
+      "attachments": [
+        {
+          "name": "月度订单.csv",
+          "url": "/examples/G04/attachments/%E6%9C%88%E5%BA%A6%E8%AE%A2%E5%8D%95.csv",
+          "mediaType": "text/csv",
+          "sha256": "3df79034af2e5b6cd879fffa996bc2a4b5a2810f3d91b278ed2e3833c2a94743"
+        }
+      ],
+      "source": {
+        "kind": "original",
+        "title": "MMG 原创合成题与数据",
+        "provider": "MMG_VisualizeMM",
+        "url": "",
+        "doi": "",
+        "license": "CC BY 4.0",
+        "attribution": "MMG_VisualizeMM contributors, G04 synthetic fixture",
+        "modifications": "原创确定性时间序列，无真实主体或个人数据"
+      }
+    },
+    {
+      "id": "G05",
+      "title": "社团文创工坊周生产计划",
+      "category": "optimization",
+      "difficulty": "intermediate",
+      "tags": [
+        "原创",
+        "整数规划",
+        "生产计划",
+        "敏感性"
+      ],
+      "problemText": "# 社团文创工坊周生产计划\n\n社团文创工坊使用 A、B、C 三种产品筹集活动经费。附件“生产参数.xlsx”的“产品参数”工作表给出每件产品消耗的机器工时、人工工时、材料单位、单位收益和最大需求；“资源上限”工作表给出本周可用资源。\n\n请建立非负整数规划，在不超过任何资源上限和最大需求的前提下，使本周总收益最大。必须报告每种产品产量、资源使用量、剩余量和总收益。\n\n为评估方案稳健性，请把材料上限减少 10 个单位后重新求解，并比较最优收益和产品组合变化。不得把整数产量放松成小数后直接作为生产方案。\n\n请说明模型假设、约束表达式、求解方法和可能存在的并列最优方案，并用表格或图形展示基准方案与敏感性方案。\n",
+      "problem": {
+        "name": "problem.md",
+        "url": "/examples/G05/problem.md",
+        "sha256": "e5cc76cc14f75bdcdbce5431055db74b4291710be19ded3bb622e396b3889d5d"
+      },
+      "attachments": [
+        {
+          "name": "生产参数.xlsx",
+          "url": "/examples/G05/attachments/%E7%94%9F%E4%BA%A7%E5%8F%82%E6%95%B0.xlsx",
+          "mediaType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "sha256": "6adb6ef9df0c46266fb4394bd8495414848f7beb26e7dc339ee395c14f91f047"
+        }
+      ],
+      "source": {
+        "kind": "original",
+        "title": "MMG 原创合成题与数据",
+        "provider": "MMG_VisualizeMM",
+        "url": "",
+        "doi": "",
+        "license": "CC BY 4.0",
+        "attribution": "MMG_VisualizeMM contributors, G05 synthetic fixture",
+        "modifications": "原创生成，无真实主体或个人数据"
+      }
+    },
+    {
+      "id": "G06",
+      "title": "校园夜间接驳方案多目标选择",
+      "category": "optimization",
+      "difficulty": "intermediate",
+      "tags": [
+        "原创",
+        "多目标决策",
+        "Pareto",
+        "PDF"
+      ],
+      "problemText": "校园夜间接驳方案多目标选择\n\n学生服务中心需要从 8 个可行的夜间接驳方案中选择一个试运行。附件“决策规则.pdf”给出三项目标的含义、方向和最终决策规则；附件“候选方案.csv”给出方案编号、周成本、未满足需求人次和碳排放量。\n\n请先按三个目标均越小越好的原则识别 Pareto 非支配方案，并明确指出被支配方案及至少一个支配它的方案。\n\n再分别应用附件规定的“同权归一化加权规则”和“字典序规则”推荐方案。归一化必须在全部 8 个可行方案上按极差进行；若某指标极差为 0，则该指标归一化值按 0 处理。\n\n请比较两种规则的推荐结果，解释权衡含义，并用表格和至少一张散点图展示成本、未满足需求与 Pareto 前沿。不得把加权推荐表述为唯一客观最优。\n",
+      "problem": {
+        "name": "problem.txt",
+        "url": "/examples/G06/problem.txt",
+        "sha256": "8a43f90c35ed603a9d8343a1725498e5f4ff4ae5bb865e365b6875d38ee2f4c7"
+      },
+      "attachments": [
+        {
+          "name": "决策规则.pdf",
+          "url": "/examples/G06/attachments/%E5%86%B3%E7%AD%96%E8%A7%84%E5%88%99.pdf",
+          "mediaType": "application/pdf",
+          "sha256": "f2db9a6d2795a8bbb730878f5f101e13f10edc505cdc9b6fd4d8dde4bac688b6"
+        },
+        {
+          "name": "候选方案.csv",
+          "url": "/examples/G06/attachments/%E5%80%99%E9%80%89%E6%96%B9%E6%A1%88.csv",
+          "mediaType": "text/csv",
+          "sha256": "e206a63b2fd96cdca3dd212cafa9d8832018e0a20cfa2f22e30fcb822b369abe"
+        }
+      ],
+      "source": {
+        "kind": "original",
+        "title": "MMG 原创合成题与数据",
+        "provider": "MMG_VisualizeMM",
+        "url": "",
+        "doi": "",
+        "license": "CC BY 4.0",
+        "attribution": "MMG_VisualizeMM contributors, G06 synthetic fixture",
+        "modifications": "原创生成，无真实主体或个人数据"
+      }
+    },
+    {
+      "id": "G07",
+      "title": "红葡萄酒质量二分类",
+      "category": "classification",
+      "difficulty": "intermediate",
+      "tags": [
+        "开放数据",
+        "分类",
+        "目标泄漏",
+        "分层划分",
+        "CC BY 4.0"
+      ],
+      "problemText": "# 红葡萄酒质量二分类\n\n附件“红酒质量分类.csv”改编自 UCI Wine Quality 红葡萄酒数据。目标 `high_quality` 定义为原始感官评分不低于 6 时取 1，否则取 0。\n\n`source_quality` 直接决定目标，只用于追溯和审计，严禁作为特征；`sample_id` 只是行标识，也不得作为特征。可用特征仅为 11 项理化检测指标。\n\n请按 `high_quality` 分层，并在每一类按 `sample_id` 升序排列后，把第 1、6、11……条记录划入测试集，其余划入训练集。所有标准化参数和模型参数只能从训练集估计。\n\n请建立一个透明、可复现的分类基线，报告训练/测试类分布、混淆矩阵、准确率、精确率、召回率、F1 和平衡准确率。必须说明类别不平衡、评分阈值和感官标签带来的限制，不得把预测解释为健康、安全或价格结论。\n\n可以补充其他分类器，但必须保持相同划分并明确排除泄漏字段。请用表格和至少一张图展示结果。\n",
+      "problem": {
+        "name": "problem.md",
+        "url": "/examples/G07/problem.md",
+        "sha256": "e20d7e4ff8aef98f372cb52059c34d35c8104390ee8335141a94debc33105c4d"
+      },
+      "attachments": [
+        {
+          "name": "红酒质量分类.csv",
+          "url": "/examples/G07/attachments/%E7%BA%A2%E9%85%92%E8%B4%A8%E9%87%8F%E5%88%86%E7%B1%BB.csv",
+          "mediaType": "text/csv",
+          "sha256": "40d191cebdce856533a90bcd621d6dbd042e5933adb64097e48ff420cb8905e6"
+        }
+      ],
+      "source": {
+        "kind": "open-data-adaptation",
+        "title": "Wine Quality",
+        "provider": "UCI Machine Learning Repository",
+        "url": "https://archive.ics.uci.edu/dataset/186/wine+quality",
+        "doi": "10.24432/C56S3T",
+        "license": "CC BY 4.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+        "attribution": "Cortez, P., Cerdeira, A., Almeida, F., Matos, T., & Reis, J. (2009). Wine Quality [Dataset]. UCI Machine Learning Repository. DOI 10.24432/C56S3T.",
+        "modifications": "保留红葡萄酒理化指标与原评分，增加样本 ID，并以原评分 >= 6 派生二元目标；题目划分和评价要求由 MMG 添加。"
+      }
+    },
+    {
+      "id": "G08",
+      "title": "循环泵巡检状态分类",
+      "category": "classification",
+      "difficulty": "intermediate",
+      "tags": [
+        "原创",
+        "合成数据",
+        "分类",
+        "多表 XLSX",
+        "分组留出",
+        "无泄漏验证"
+      ],
+      "problemText": "# 循环泵巡检状态分类（原创合成题）\n\n某教学实验台记录了循环泵的振动、轴承温度和电流。附件“巡检数据.xlsx”的“已标注巡检”表给出 12 台设备各 2 次巡检，状态仅分为“正常”和“关注”；“待判定巡检”表给出 3 台新设备的观测；“字段说明”表给出单位与取值含义。所有设备编号和数值均为合成教学数据，不对应真实设备或故障。\n\n请建立透明、可复现的二分类参考方法，并给出待判定设备的参考类别。模型只使用振动、轴承温度和电流三个测量字段；设备编号仅用于分组，状态标签不得进入特征。验证时必须以设备为组逐台留出，同一台设备的两次巡检不得同时出现在训练与验证集中；每一折的标准化参数只能由训练数据拟合。\n\n请报告逐设备留出验证的混淆矩阵、准确率和平衡准确率，并比较分别删除一个测量字段时，待判定设备的参考类别是否改变。待判定设备没有真实状态标签，不能计入验证分母。说明分类仅服务于教学数据分析，不能据此宣称真实设备安全或诊断故障。\n\n请给出可复算的表格和至少一张展示观测分布的图，并保存题目、附件、建模说明和代码到工作区。\n",
+      "problem": {
+        "name": "problem.md",
+        "url": "/examples/G08/problem.md",
+        "sha256": "ab7943153871a61ae9a6e8eae9901302f5bcb10bcc3b2e8506b6ff9e3baa4458"
+      },
+      "attachments": [
+        {
+          "name": "巡检数据.xlsx",
+          "url": "/examples/G08/attachments/%E5%B7%A1%E6%A3%80%E6%95%B0%E6%8D%AE.xlsx",
+          "mediaType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "sha256": "276e676ec401a364f961a2760291bf794a2c5937480126bb80b359874a7c6a86"
+        }
+      ],
+      "source": {
+        "kind": "original",
+        "title": "MMG 原创循环泵巡检合成题与数据",
+        "provider": "MMG_VisualizeMM",
+        "url": "",
+        "doi": "",
+        "license": "CC BY 4.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+        "attribution": "MMG_VisualizeMM contributors, G08 synthetic fixture",
+        "modifications": "原创生成，无竞赛真题内容、真实设备数据或个人数据"
+      }
+    },
+    {
+      "id": "G09",
+      "title": "展厅信标二维定位",
+      "category": "geometry",
+      "difficulty": "intermediate",
+      "tags": [
+        "原创",
+        "几何",
+        "定位",
+        "最小二乘",
+        "PDF"
+      ],
+      "problemText": "展厅信标二维定位\n\n展厅要根据固定信标与移动讲解器之间的测距结果估计讲解器位置。附件“坐标约定.pdf”说明坐标系、距离单位和测距模型；附件“信标测距.csv”给出信标编号、横坐标、纵坐标和测得距离。\n\n请在二维欧氏距离模型下估计讲解器坐标。至少使用三个不共线信标，并报告每个信标的预测距离、残差以及总体 RMSE。\n\n请检查解是否位于附件规定的展厅边界内，并说明共线信标、测距噪声或异常值可能造成的影响。不得把信标坐标误当成待估计点坐标。\n\n请输出计算过程、结果表和一张等比例坐标图；图中应标出信标、估计位置及展厅边界。\n",
+      "problem": {
+        "name": "problem.txt",
+        "url": "/examples/G09/problem.txt",
+        "sha256": "9067af599e4151e636bb1d6496a376d91e8f6b941cbb80946c73cccf02a7599e"
+      },
+      "attachments": [
+        {
+          "name": "坐标约定.pdf",
+          "url": "/examples/G09/attachments/%E5%9D%90%E6%A0%87%E7%BA%A6%E5%AE%9A.pdf",
+          "mediaType": "application/pdf",
+          "sha256": "dd425bf76cdb9249a274efe7ff19b9b99bcdcf75548eaa891e13cb0917d6ae59"
+        },
+        {
+          "name": "信标测距.csv",
+          "url": "/examples/G09/attachments/%E4%BF%A1%E6%A0%87%E6%B5%8B%E8%B7%9D.csv",
+          "mediaType": "text/csv",
+          "sha256": "b3cd1861d2bb135271e19d862bcdee146dbddf60523f63a77bdd07b3a36c23d7"
+        }
+      ],
+      "source": {
+        "kind": "original",
+        "title": "MMG 原创合成题与数据",
+        "provider": "MMG_VisualizeMM",
+        "url": "",
+        "doi": "",
+        "license": "CC BY 4.0",
+        "attribution": "MMG_VisualizeMM contributors, G09 synthetic fixture",
+        "modifications": "原创生成，无真实主体或个人数据"
+      }
+    },
+    {
+      "id": "G10",
+      "title": "社区应急物资配送路径",
+      "category": "optimization",
+      "difficulty": "intermediate",
+      "tags": [
+        "原创",
+        "图论",
+        "最短路",
+        "必经点",
+        "并列最优"
+      ],
+      "problemText": "社区应急物资配送路径\n\n社区服务站 S 需要把应急物资送到安置点 T。附件“道路网络.csv”给出无向道路两端节点、节点坐标和道路长度；同一节点在各行中的坐标保持一致。\n\n配送车必须经过医疗点 C，且单段道路长度不得超过 3.0 千米。道路 B-D 临时关闭，不得使用。请在满足约束的路径中最小化总里程。\n\n请报告最短总里程、完整节点序列、使用的道路，并检查是否存在等长最优路径。若有并列方案，应全部列出，并选择节点序列字典序最小者作为默认展示方案。\n\n请用等比例坐标图展示道路网络、关闭道路、必经点和默认最短路径，并说明道路长度被视为确定值这一假设的局限。\n",
+      "problem": {
+        "name": "problem.txt",
+        "url": "/examples/G10/problem.txt",
+        "sha256": "8e0e4c9a839c127ba5c1f0ddc487c1bfe972f2e58ead268b7b2e4e1857b144b6"
+      },
+      "attachments": [
+        {
+          "name": "道路网络.csv",
+          "url": "/examples/G10/attachments/%E9%81%93%E8%B7%AF%E7%BD%91%E7%BB%9C.csv",
+          "mediaType": "text/csv",
+          "sha256": "2ce22c19c8609e3a9a1e6f9db3d22fb555ae9cb8ac73335c0453cbf1332ba1eb"
+        }
+      ],
+      "source": {
+        "kind": "original",
+        "title": "MMG 原创合成题与数据",
+        "provider": "MMG_VisualizeMM",
+        "url": "",
+        "doi": "",
+        "license": "CC BY 4.0",
+        "attribution": "MMG_VisualizeMM contributors, G10 synthetic fixture",
+        "modifications": "原创生成，无真实主体或个人数据"
+      }
+    }
+  ]
+}

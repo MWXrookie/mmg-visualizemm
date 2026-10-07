@@ -6,6 +6,7 @@
 本目录用于保存稳定的交互说明、用户流程和设计决策。当前视觉规范的唯一来源仍是项目根目录的：
 
 - `design-systems/mmg_visualizemm/DESIGN.md`
+- [窄屏导航与工作区入口](flows/responsive-navigation.md)：2026-09-30 首轮已实现的导航、键盘与断点规则。
 
 `docs/prototypes/` 中的 HTML 和生成记录属于设计探索与参考，不代表当前实现，也不能覆盖运行时架构或代码事实。
 

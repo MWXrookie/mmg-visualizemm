@@ -1,6 +1,6 @@
 # Golden fixtures
 
-本目录保存 MMG 金标准评测集的机器可读契约与正式样本。G2–G4 已完成 6 道原创合成题和 3 道 CC BY 4.0 开放数据改编题，共 9/10 道。
+本目录保存 MMG 金标准评测集的机器可读契约与 10 道正式样本：7 道原创合成题和 3 道 CC BY 4.0 开放数据改编题。正式 `cases/G08` 是原创循环泵巡检题；`compatibility/G08.sources.json` 仅为另一个已有赛题的本地兼容入口，不进入发布集。
 
 - `schemas/manifest.schema.json`：样本身份、来源、许可、文件和覆盖范围。
 - `schemas/expected.schema.json`：人工标注、允许替代、禁止错误和确定性断言。

@@ -3,6 +3,7 @@ import { getPyodide, runPython, onPyodideState } from '../lib/pyodide.js'
 import { streamChat, chat, attachSummary, retrieveKnowledge, formatKnowledgeContext } from '../api.js'
 import { IconMenu, IconDownload, IconArrowLeft, IconSparkles, IconPlay, IconGear, IconChart, IconTable, IconFile, IconLightbulb, IconZoomIn, IconBookmark, IconClip, IconInfo, IconClock, IconClose } from '../components/Icons.jsx'
 import { SANITY_CHECK } from '../lib/modelingExpert.js'
+import { codeQualityIssues, pythonCommentIndex } from '../lib/codeQuality.js'
 
 const GEN_SYSTEM =
   '你是数学建模编程助手。用户在浏览器内 Pyodide 环境运行 Python，已预装 numpy / pandas / matplotlib / scipy / sklearn。\n' +
@@ -18,11 +19,13 @@ const GEN_SYSTEM =
   '9. 如果涉及多个拆解块或多个表格，不要把所有东西混成一段：用函数或清晰中文注释分块，每块 print 段落标题。\n' +
   '10. 如果需要多张图，请合成到一个 matplotlib figure 的多个子图里，并统一保存到 /plot.png；如果本题不需要图，也要用 print 输出清楚结果。\n' +
   '11. 代码内自带最小 Sanity：对结果做合理性检查（量纲/数量级/NaN/边界），异常时 print 警告而不是静默输出。\n' +
+  '12. 数值计算、标准化、加权和排序使用未舍入值；只在最终展示时格式化小数。需要核对得分或误差时默认至少输出小数点后 9 位，不要将 round、.round() 或格式化后的值写回参与后续计算的变量。\n' +
   SANITY_CHECK
 
 const IMPROVE_SYSTEM =
   '你是 Python 代码优化助手。用户会给出一段数学建模 Python 代码，请改进它（修复错误、提高可读性与数值稳定性），并保留输出与 plt.savefig(\'/plot.png\')。\n' +
   '改进时重点检查：数值稳定性（除零/溢出/NaN）、量纲与单位、边界情形、结果数量级合理性——发现可疑结果在代码注释中标注"⚠ 检查"。\n' +
+  '检查是否在标准化、加权、误差计算或排序之前提前舍入；计算保持未舍入值，round、.round() 和小数格式化仅用于最终展示，关键数值默认至少输出小数点后 9 位。\n' +
   '代码里的所有解释性注释/批注必须使用简体中文；不要把英文注释原样保留下来。\n' +
   '请尽量整理成这些中文区块：产出说明、可调参数、读取数据、数据检查、建模分析、输出结果、结果自检。\n' +
   '**输出格式铁律**：改进后的完整代码必须放在一个 ```python 代码块中，代码块之外**不要输出任何文字**（不要解释、不要 Markdown 格式、不要"改进后代码如下"之类的话）。\n' +
@@ -91,42 +94,6 @@ function stripMarkdown(t) {
     s = s.replace(/`([^`]*)`/g, '$1')
     return s
   }).join('\n')
-}
-
-function codeQualityIssues(t) {
-  const issues = []
-  const lines = String(t || '').split('\n')
-  lines.forEach((line, i) => {
-    const s = line.trim()
-    if (!s) return
-    if (/^(def|class)[A-Za-z_]\w*\s*\(/.test(s)) issues.push(`第 ${i + 1} 行函数/类定义缺少空格`)
-    if (/^(if|elif|while)\b.*[A-Za-z0-9_\])]\s{2,}[0-9A-Za-z_(]/.test(s)) issues.push(`第 ${i + 1} 行可能缺少运算符`)
-    if (/[\u4e00-\u9fff]/.test(s) && !s.startsWith('#') && !/^(print|raise\s+\w*Error)\s*\(/.test(s)) {
-      issues.push(`第 ${i + 1} 行像是裸中文说明，不是 Python 语句`)
-    }
-  })
-  return issues.slice(0, 5)
-}
-
-function pythonCommentIndex(line) {
-  let quote = null
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i]
-    if (quote) {
-      if (ch === '\\') {
-        i++
-      } else if (ch === quote) {
-        quote = null
-      }
-      continue
-    }
-    if (ch === '"' || ch === "'") {
-      quote = ch
-    } else if (ch === '#') {
-      return i
-    }
-  }
-  return -1
 }
 
 function isToolComment(comment) {
@@ -509,7 +476,7 @@ function replaceTunableParam(c, param, value) {
   return lines.join('\n')
 }
 
-function workflowSteps({ breakdown, genInfo, code, summary, running, error, runTime, runOutput, img }) {
+function workflowSteps({ breakdown, genInfo, code, summary, running, busyAction, error, runTime, runOutput, img }) {
   const hasCode = !!String(code || '').trim()
   const generated = !!genInfo || hasCode
   const hasOutputTarget = !!summary && (summary.hasPrint || summary.hasAnyPlot)
@@ -522,8 +489,8 @@ function workflowSteps({ breakdown, genInfo, code, summary, running, error, runT
     },
     {
       label: '生成代码',
-      state: running ? 'active' : generated ? 'done' : 'idle',
-      hint: hasCode ? `${String(code).split('\n').length} 行` : '等待生成或输入',
+      state: running && busyAction !== '运行' ? 'active' : error && busyAction !== '运行' ? 'err' : generated ? 'done' : 'idle',
+      hint: running && busyAction !== '运行' ? `${busyAction}中` : hasCode ? `${String(code).split('\n').length} 行` : '等待生成或输入',
     },
     {
       label: '检查产出',
@@ -532,8 +499,8 @@ function workflowSteps({ breakdown, genInfo, code, summary, running, error, runT
     },
     {
       label: '运行验证',
-      state: running ? 'active' : error ? 'err' : ran ? 'done' : 'idle',
-      hint: running ? '运行中' : error ? '有错误' : ran ? `完成 ${runTime || ''}` : '点击运行',
+      state: running && busyAction === '运行' ? 'active' : error && busyAction === '运行' ? 'err' : ran ? 'done' : 'idle',
+      hint: running && busyAction === '运行' ? '运行中' : error && busyAction === '运行' ? '有错误' : ran ? `完成 ${runTime || ''}` : '点击运行',
     },
   ]
 }
@@ -709,7 +676,7 @@ function normalizeOutWidthValue(v) {
     const pct = Number.parseFloat(s)
     if (Number.isFinite(pct)) return Math.min(Math.max(pct, 42), 78) + '%'
   }
-  return '62%'
+  return '50%'
 }
 
 export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSidebar }) {
@@ -722,6 +689,7 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
   const [runTime, setRunTime] = useState('') // 最近一次运行完成时间
   const [runOutput, setRunOutput] = useState('') // 最近一次运行的输出（右侧结果区展示）
   const [running, setRunning] = useState(false)
+  const [busyAction, setBusyAction] = useState('')
   const [error, setError] = useState('')
   const [genOpen, setGenOpen] = useState(false)
   const [genText, setGenText] = useState('')
@@ -731,11 +699,26 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
   useEffect(() => onPyodideState(setPyState), [])
   const [params, setParams] = useState({ N: 40, NOISE: 0.2, DEGREE: 3 })
   const [outW, setOutW] = useState(() => {
-    try { return normalizeOutWidthValue(localStorage.getItem('mmg_out_w_v1')) } catch { return '62%' }
-  }) // 右侧栏宽度（可拖拽，默认 62%，历史窄宽度会自动拉回可用范围）
+    try { return normalizeOutWidthValue(localStorage.getItem('mmg_out_w_v1')) } catch { return '50%' }
+  }) // 右侧栏宽度（可拖拽，默认 50%，历史窄宽度会自动拉回可用范围）
   const [outMax, setOutMax] = useState(false) // 产出区最大化
   const [outOpen, setOutOpen] = useState(false) // 运行输出展开
   const [imgModal, setImgModal] = useState(false) // 图表放大查看
+  const chartZoomTrigger = useRef(null)
+  const chartModalClose = useRef(null)
+  useEffect(() => {
+    if (!imgModal) return
+    chartModalClose.current?.focus({ preventScroll: true })
+    const onKey = (event) => {
+      if (event.key === 'Escape') { event.preventDefault(); setImgModal(false) }
+      if (event.key === 'Tab') { event.preventDefault(); chartModalClose.current?.focus() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      if (chartZoomTrigger.current?.isConnected) chartZoomTrigger.current.focus({ preventScroll: true })
+    }
+  }, [imgModal])
   const [genInfo, setGenInfo] = useState(null) // AI 生成/改进详情 {action, source, lines, time}
   const [activeCodeLine, setActiveCodeLine] = useState(null) // 导读定位到代码行时的短暂高亮
   const [chartInfo, setChartInfo] = useState(null) // 最近一次图表摘要
@@ -857,6 +840,7 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
   }
 
   async function doRun(overrides = {}) {
+    setBusyAction('运行')
     if (!code.trim()) {
       setError('先输入代码，再点运行')
       return
@@ -917,7 +901,7 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
   function toggleOutMax() {
     setOutMax((m) => {
       const v = !m
-      const w = v ? '78%' : '62%'
+      const w = v ? '78%' : '50%'
       setOutW(w)
       try { localStorage.setItem('mmg_out_w_v1', w) } catch { /* ignore */ }
       return v
@@ -956,9 +940,10 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
   }
 
   async function generateCode() {
+    setBusyAction('AI生成')
     if (!settings.apiKey) return setError('请先在「模型设置」配置 API Key')
     if (selected.size === 0) return setError('请至少选择一个拆解块')
-    setGenOpen(false); setRunning(true); setError('')
+    setGenOpen(false); setBusyAction('AI生成'); setRunning(true); setError('')
     const chosen = breakdown.filter((_, i) => selected.has(i))
     const blocksDesc = chosen.map((b) => {
       const idea = typeof b.idea === 'string' ? b.idea : (b.body || '')
@@ -1061,6 +1046,7 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
   }
 
   async function improveCode() {
+    setBusyAction('AI改进')
     if (!settings.apiKey) return setError('请先在「模型设置」配置 API Key')
     setRunning(true); setError('')
     setLog((prev) => [...prev, { time: now(), cls: 'core', text: '✨ AI 改进代码中…' }])
@@ -1109,6 +1095,7 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
   }
 
   async function localizeCurrentCodeComments() {
+    setBusyAction('批注中文化')
     if (!code.trim()) return setError('当前没有代码可处理')
     const beforeIssues = codeCommentLanguageIssues(code)
     const local = localizeCurrentKnownComments(code)
@@ -1186,9 +1173,14 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
     [chartInfo, currentCodeSummary, code, dataFiles],
   )
   const steps = useMemo(
-    () => workflowSteps({ breakdown, genInfo, code, summary: currentCodeSummary, running, error, runTime, runOutput, img }),
-    [breakdown, genInfo, code, currentCodeSummary, running, error, runTime, runOutput, img],
+    () => workflowSteps({ breakdown, genInfo, code, summary: currentCodeSummary, running, busyAction, error, runTime, runOutput, img }),
+    [breakdown, genInfo, code, currentCodeSummary, running, busyAction, error, runTime, runOutput, img],
   )
+
+  const loadingPython = pyState === 'loading-script' || pyState === 'loading-pyodide'
+  const activityText = running
+    ? busyAction === '运行' && loadingPython ? '加载 Python 环境中…' : busyAction + '中…'
+    : pyState === 'error' ? 'Python 环境加载失败' : pyState === 'ready' ? 'Python 环境已就绪' : '环境尚未加载'
 
   return (
     <div className="code-split" style={{ '--out-w': outW }}>
@@ -1204,11 +1196,13 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
       <section className="code-pane">
         <div className="code-head">
           <span className="panel-tag" style={{ fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '.12em', color: 'var(--primary)', textTransform: 'uppercase' }}>代码区 · Python</span>
-          <div style={{ flex: 1 }} />
-          <button className="btn btn-primary btn-sm" onClick={() => setGenOpen(true)}><IconSparkles size={13} /> AI生成</button>
+          <div className="code-head-spacer" style={{ flex: 1 }} />
+          <div className="code-actions">
+          <button className="btn btn-primary btn-sm" onClick={() => setGenOpen(true)} disabled={running}><IconSparkles size={13} /> AI生成</button>
           <button className="btn btn-ghost btn-sm" onClick={improveCode} disabled={running}><IconSparkles size={13} /> AI改进</button>
           <button className="btn btn-ghost btn-sm" onClick={localizeCurrentCodeComments} disabled={running || !code.trim()}>中文化批注</button>
-          <button className="btn btn-ghost btn-sm" onClick={doRun} disabled={running}>{running ? '运行中…' : <><IconPlay size={13} /> 运行</>}</button>
+          <button className="btn btn-ghost btn-sm" onClick={doRun} disabled={running}>{running && busyAction === '运行' ? '运行中…' : <><IconPlay size={13} /> 运行</>}</button>
+          </div>
         </div>
 
         <div className="editor-wrap">
@@ -1247,7 +1241,7 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
           <div className="ed-status">
             <span className="ok">●</span> Python · Pyodide
             <span>Ln {lineCount}, Col 1</span>
-            <span style={{ marginLeft: 'auto' }}>{running ? '运行中…' : pyState === 'loading-script' || pyState === 'loading-pyodide' ? '下载 Python 环境中…' : '准备就绪'}</span>
+            <span className={`ed-activity ${running ? 'busy' : pyState === 'error' ? 'failed' : ''}`} aria-live="polite">{activityText}</span>
           </div>
         </div>
 
@@ -1311,7 +1305,7 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
           <div className="gen-info-card guide-card">
             <div className="gen-info-head"><IconSparkles size={13} /> {genInfo ? `AI ${genInfo.action}完成` : '当前代码导读'}</div>
             <div className="gen-info-grid">
-              <div className="gen-info-item"><span className="gi-label">状态</span><b>{genInfo ? genInfo.action : '待运行'}</b></div>
+              <div className="gen-info-item"><span className="gi-label">状态</span><b>{running ? activityText : error ? '需要检查' : runTime ? '已运行' : genInfo ? genInfo.action : '待运行'}</b></div>
               <div className="gen-info-item"><span className="gi-label">代码</span><b>{genInfo?.lines || lineCount} 行</b></div>
               <div className="gen-info-item"><span className="gi-label">结构</span><b>{currentCodeSummary?.hasSections ? '已分区' : '普通代码'}</b></div>
             </div>
@@ -1373,7 +1367,7 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
           )}
         </div>
 
-        {code.trim() && (
+        {code.trim() && tunableParams.length > 0 && (
           <div className="params code-params">
             <div className="params-head">
               <h4>调参看板</h4>
@@ -1414,12 +1408,12 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
           </div>
         )}
 
-        <div className="viz-note" style={{ display: 'flex', gap: 10, fontSize: 13, color: 'var(--muted)', padding: '11px 14px', border: '1px dashed var(--border)', borderRadius: 10, alignItems: 'flex-start' }}>
+        {code.trim() && <div className="viz-note" style={{ display: 'flex', gap: 10, fontSize: 13, color: 'var(--muted)', padding: '11px 14px', border: '1px dashed var(--border)', borderRadius: 10, alignItems: 'flex-start' }}>
           <span><IconLightbulb size={14} /></span>
           <span>
             <>先写代码，再点「<b>运行</b>」。如果代码里有可调参数，下面会直接出现调参看板；上传的表格附件会自动挂载到 <code>/data</code>，代码可直接读取。</>
           </span>
-        </div>
+        </div>}
 
         <div className="chart-card">
           <div className="chart-head">
@@ -1435,7 +1429,7 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
                 <span className="chart-badge idle">○ 等待运行</span>
               )}
             </div>
-            {img && <button className="chart-zoom" onClick={() => setImgModal(true)} title="点击放大查看图表"><IconZoomIn size={13} /> 放大</button>}
+            {img && <button ref={chartZoomTrigger} className="chart-zoom" onClick={() => setImgModal(true)} title="点击放大查看图表"><IconZoomIn size={13} /> 放大</button>}
           </div>
           {img && (
             <div className="chart-params">
@@ -1512,10 +1506,10 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
       {/* 图表放大模态 */}
       {imgModal && img && (
         <div className="scrim" onClick={() => setImgModal(false)}>
-          <div className="img-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="img-modal" role="dialog" aria-modal="true" aria-label="运行结果图表放大" onClick={(e) => e.stopPropagation()}>
             <div className="img-modal-head">
               <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><IconChart size={15} /> {chartTitle || plotSummary?.display || '运行结果图表'}</span>
-              <button className="btn btn-ghost btn-sm" onClick={() => setImgModal(false)}><IconClose size={13} /> 关闭</button>
+              <button ref={chartModalClose} className="btn btn-ghost btn-sm" onClick={() => setImgModal(false)}><IconClose size={13} /> 关闭</button>
             </div>
             <div className="img-modal-body">
               <img src={img} alt="运行结果放大" />

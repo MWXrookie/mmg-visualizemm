@@ -275,7 +275,9 @@ app.post('/api/chat/stream', async (req, res) => {
 
 /* ---------- 文件解析 ---------- */
 
-const MAX_ROWS = 100 // 表格最多解析前 100 行
+const MAX_ROWS = 100 // XLSX 流式解析暂只保留前 100 行
+const MAX_CSV_ROWS = 20_000 // CSV 须全量解析；超限明确拒绝，不能静默截断后参与建模
+const MAX_CSV_BYTES = 5 * 1024 * 1024 // 防止完整表格放大 SQLite 工作区、备份和浏览器内存占用
 
 function looksLikeHeader(row) {
   // 表头通常是短文本且非纯数字；空行不算
@@ -327,7 +329,7 @@ async function parseXlsx(buffer) {
       if (entry.path === 'xl/workbook.xml') {
         const xform = new WorkbookXform()
         await xform.parseStream(iterateStream(entry))
-        sheetMeta = (xform.model.sheets || []).map((s) => ({ id: s.id, name: s.name })).sort((a, b) => a.id - b.id)
+        sheetMeta = (xform.model.sheets || []).map((s) => ({ id: s.id, name: s.name }))
       } else if (entry.path === 'xl/sharedStrings.xml') {
         sharedStrings = []
         for await (const events of parseSax(iterateStream(entry))) {
@@ -380,28 +382,38 @@ async function parseXlsx(buffer) {
         }
         rows = rows.filter((r) => r.some((c) => c.trim() !== ''))
         const meta = sheetMeta.find((s) => s.id === id)
-        sheets.push({ name: meta ? meta.name : `Sheet${id}`, headers, rows })
+        sheets.push({ id, name: meta ? meta.name : `Sheet${id}`, headers, rows })
       } else entry.autodrain()
     }
   }
 
   if (sheets.length === 0) return { ok: false, error: '表格为空' }
+  // ZIP 条目顺序不等于用户看到的工作表顺序；按 workbook.xml 中的 sheet 列表恢复顺序。
+  const sheetOrder = new Map(sheetMeta.map((sheet, index) => [sheet.id, index]))
+  sheets.sort((a, b) => (sheetOrder.get(a.id) ?? Infinity) - (sheetOrder.get(b.id) ?? Infinity))
+  const orderedSheets = sheets.map(({ id, ...sheet }) => sheet)
   // 兼容单表：展开第一个 sheet 字段；多表通过 sheets 提供
   return {
     ok: true,
     type: 'table',
-    sheets,
-    name: sheets[0].name,
-    headers: sheets[0].headers,
-    rows: sheets[0].rows,
+    sheets: orderedSheets,
+    name: orderedSheets[0].name,
+    headers: orderedSheets[0].headers,
+    rows: orderedSheets[0].rows,
   }
 }
 
 function parseCsv(text) {
   // 剥离 UTF-8 BOM（Excel 导出的 CSV 常带，会导致首列表头出现 \uFEFF）
   text = text.replace(/^\uFEFF/, '')
+  if (Buffer.byteLength(text, 'utf8') > MAX_CSV_BYTES) {
+    return { ok: false, error: 'CSV 超过 5MB 全量解析上限；请拆分后上传' }
+  }
   const lines = text.split(/\r?\n/).filter((l) => l.trim() !== '')
   if (lines.length === 0) return { ok: false, error: 'CSV 为空' }
+  if (lines.length - 1 > MAX_CSV_ROWS) {
+    return { ok: false, error: `CSV 超过 ${MAX_CSV_ROWS} 行全量解析上限；请拆分后上传` }
+  }
   const split = (line) => {
     // 简单 CSV 拆分（支持引号包裹的逗号与转义引号 ""）
     const out = []
@@ -422,12 +434,15 @@ function parseCsv(text) {
   let headers, rows
   if (looksLikeHeader(raw[0])) {
     headers = raw[0].map((h, i) => (h === '' ? `列${i + 1}` : h))
-    rows = raw.slice(1).slice(0, MAX_ROWS)
+    rows = raw.slice(1)
   } else {
     headers = raw[0].map((_, i) => `列${i + 1}`)
-    rows = raw.slice(0, MAX_ROWS)
+    rows = raw
   }
-  return { ok: true, type: 'table', headers, rows, totalRows: raw.length }
+  if (rows.length > MAX_CSV_ROWS) {
+    return { ok: false, error: `CSV 超过 ${MAX_CSV_ROWS} 行全量解析上限；请拆分后上传` }
+  }
+  return { ok: true, type: 'table', headers, rows, totalRows: rows.length }
 }
 
 app.post('/api/parse', async (req, res) => {

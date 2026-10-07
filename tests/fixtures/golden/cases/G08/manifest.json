@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "id": "G08",
+  "version": "1.0.0",
+  "title": "循环泵巡检状态分类",
+  "category": "classification",
+  "difficulty": "intermediate",
+  "language": "zh-CN",
+  "source": {
+    "kind": "original",
+    "title": "MMG 原创循环泵巡检合成题与数据",
+    "provider": "MMG_VisualizeMM",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "attribution": "MMG_VisualizeMM contributors, G08 synthetic fixture",
+    "redistributable": true,
+    "modifications": "原创生成，无竞赛真题内容、真实设备数据或个人数据",
+    "reviewedAt": "2026-09-28"
+  },
+  "files": {
+    "problem": {
+      "path": "problem.md",
+      "sha256": "ab7943153871a61ae9a6e8eae9901302f5bcb10bcc3b2e8506b6ff9e3baa4458",
+      "mediaType": "text/markdown"
+    },
+    "expected": {
+      "path": "expected.json",
+      "sha256": "adfd416b399881e31c52d9b84b178ef65759ebdb812063f27c254290bfaa5ca9",
+      "mediaType": "application/json"
+    },
+    "baseline": {
+      "path": "baseline.mjs",
+      "sha256": "12ae21394a283bd0ec069fac74df185b82e0c812ad1e273dada73584d26e6224",
+      "mediaType": "text/javascript"
+    },
+    "attachments": [
+      {
+        "path": "attachments/巡检数据.xlsx",
+        "sha256": "276e676ec401a364f961a2760291bf794a2c5937480126bb80b359874a7c6a86",
+        "mediaType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      }
+    ]
+  },
+  "coverage": {
+    "stages": [
+      "import",
+      "interpret",
+      "evidence",
+      "model",
+      "code",
+      "execute",
+      "persist"
+    ],
+    "formats": [
+      "md",
+      "xlsx"
+    ]
+  },
+  "tags": [
+    "原创",
+    "合成数据",
+    "分类",
+    "多表 XLSX",
+    "分组留出",
+    "无泄漏验证"
+  ]
+}

@@ -1,0 +1,362 @@
+[
+  {
+    "width": 1280,
+    "theme": "light",
+    "name": "reading",
+    "paneWidth": 676,
+    "headHeight": 88,
+    "documentOverflow": false,
+    "buttons": [
+      {
+        "text": "AI 整体解读",
+        "x": 150,
+        "y": 45
+      },
+      {
+        "text": "编辑题干",
+        "x": 272,
+        "y": 45
+      },
+      {
+        "text": "清空",
+        "x": 358,
+        "y": 45
+      },
+      {
+        "text": "上传题干",
+        "x": 418,
+        "y": 45
+      },
+      {
+        "text": "上传附件",
+        "x": 504,
+        "y": 45
+      }
+    ]
+  },
+  {
+    "width": 1280,
+    "theme": "light",
+    "name": "modeling",
+    "paneWidth": 676,
+    "headHeight": 68,
+    "documentOverflow": false,
+    "buttons": [
+      {
+        "text": "问题 1",
+        "x": 155,
+        "y": 17
+      },
+      {
+        "text": "导出思路",
+        "x": 239,
+        "y": 19
+      },
+      {
+        "text": "去编程台",
+        "x": 327,
+        "y": 19
+      }
+    ]
+  },
+  {
+    "width": 1280,
+    "theme": "light",
+    "name": "coding",
+    "paneWidth": 544,
+    "headHeight": 79,
+    "documentOverflow": false,
+    "buttons": [
+      {
+        "text": "AI生成",
+        "x": 142,
+        "y": 38
+      },
+      {
+        "text": "AI改进",
+        "x": 232,
+        "y": 38
+      },
+      {
+        "text": "中文化批注",
+        "x": 321,
+        "y": 38
+      },
+      {
+        "text": "运行",
+        "x": 418,
+        "y": 38
+      }
+    ]
+  },
+  {
+    "width": 1280,
+    "theme": "dark",
+    "name": "reading",
+    "paneWidth": 676,
+    "headHeight": 88,
+    "documentOverflow": false,
+    "buttons": [
+      {
+        "text": "AI 整体解读",
+        "x": 150,
+        "y": 45
+      },
+      {
+        "text": "编辑题干",
+        "x": 272,
+        "y": 45
+      },
+      {
+        "text": "清空",
+        "x": 358,
+        "y": 45
+      },
+      {
+        "text": "上传题干",
+        "x": 418,
+        "y": 45
+      },
+      {
+        "text": "上传附件",
+        "x": 504,
+        "y": 45
+      }
+    ]
+  },
+  {
+    "width": 1280,
+    "theme": "dark",
+    "name": "modeling",
+    "paneWidth": 676,
+    "headHeight": 68,
+    "documentOverflow": false,
+    "buttons": [
+      {
+        "text": "问题 1",
+        "x": 155,
+        "y": 17
+      },
+      {
+        "text": "导出思路",
+        "x": 239,
+        "y": 19
+      },
+      {
+        "text": "去编程台",
+        "x": 327,
+        "y": 19
+      }
+    ]
+  },
+  {
+    "width": 1280,
+    "theme": "dark",
+    "name": "coding",
+    "paneWidth": 544,
+    "headHeight": 79,
+    "documentOverflow": false,
+    "buttons": [
+      {
+        "text": "AI生成",
+        "x": 142,
+        "y": 38
+      },
+      {
+        "text": "AI改进",
+        "x": 232,
+        "y": 38
+      },
+      {
+        "text": "中文化批注",
+        "x": 321,
+        "y": 38
+      },
+      {
+        "text": "运行",
+        "x": 418,
+        "y": 38
+      }
+    ]
+  },
+  {
+    "width": 1440,
+    "theme": "light",
+    "name": "reading",
+    "paneWidth": 778,
+    "headHeight": 88,
+    "documentOverflow": false,
+    "buttons": [
+      {
+        "text": "AI 整体解读",
+        "x": 150,
+        "y": 45
+      },
+      {
+        "text": "编辑题干",
+        "x": 272,
+        "y": 45
+      },
+      {
+        "text": "清空",
+        "x": 358,
+        "y": 45
+      },
+      {
+        "text": "上传题干",
+        "x": 418,
+        "y": 45
+      },
+      {
+        "text": "上传附件",
+        "x": 504,
+        "y": 45
+      }
+    ]
+  },
+  {
+    "width": 1440,
+    "theme": "light",
+    "name": "modeling",
+    "paneWidth": 778,
+    "headHeight": 68,
+    "documentOverflow": false,
+    "buttons": [
+      {
+        "text": "问题 1",
+        "x": 155,
+        "y": 17
+      },
+      {
+        "text": "导出思路",
+        "x": 239,
+        "y": 19
+      },
+      {
+        "text": "去编程台",
+        "x": 327,
+        "y": 19
+      }
+    ]
+  },
+  {
+    "width": 1440,
+    "theme": "light",
+    "name": "coding",
+    "paneWidth": 620,
+    "headHeight": 79,
+    "documentOverflow": false,
+    "buttons": [
+      {
+        "text": "AI生成",
+        "x": 146,
+        "y": 38
+      },
+      {
+        "text": "AI改进",
+        "x": 236,
+        "y": 38
+      },
+      {
+        "text": "中文化批注",
+        "x": 325,
+        "y": 38
+      },
+      {
+        "text": "运行",
+        "x": 422,
+        "y": 38
+      }
+    ]
+  },
+  {
+    "width": 1440,
+    "theme": "dark",
+    "name": "reading",
+    "paneWidth": 778,
+    "headHeight": 88,
+    "documentOverflow": false,
+    "buttons": [
+      {
+        "text": "AI 整体解读",
+        "x": 150,
+        "y": 45
+      },
+      {
+        "text": "编辑题干",
+        "x": 272,
+        "y": 45
+      },
+      {
+        "text": "清空",
+        "x": 358,
+        "y": 45
+      },
+      {
+        "text": "上传题干",
+        "x": 418,
+        "y": 45
+      },
+      {
+        "text": "上传附件",
+        "x": 504,
+        "y": 45
+      }
+    ]
+  },
+  {
+    "width": 1440,
+    "theme": "dark",
+    "name": "modeling",
+    "paneWidth": 778,
+    "headHeight": 68,
+    "documentOverflow": false,
+    "buttons": [
+      {
+        "text": "问题 1",
+        "x": 155,
+        "y": 17
+      },
+      {
+        "text": "导出思路",
+        "x": 239,
+        "y": 19
+      },
+      {
+        "text": "去编程台",
+        "x": 327,
+        "y": 19
+      }
+    ]
+  },
+  {
+    "width": 1440,
+    "theme": "dark",
+    "name": "coding",
+    "paneWidth": 620,
+    "headHeight": 79,
+    "documentOverflow": false,
+    "buttons": [
+      {
+        "text": "AI生成",
+        "x": 146,
+        "y": 38
+      },
+      {
+        "text": "AI改进",
+        "x": 236,
+        "y": 38
+      },
+      {
+        "text": "中文化批注",
+        "x": 325,
+        "y": 38
+      },
+      {
+        "text": "运行",
+        "x": 422,
+        "y": 38
+      }
+    ]
+  }
+]

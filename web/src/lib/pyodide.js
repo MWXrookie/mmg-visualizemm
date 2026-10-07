@@ -73,7 +73,9 @@ const IMPORT_PACKAGES = {
 
 async function ensurePackages(py, code) {
   const imports = [...code.matchAll(/^\s*(?:import|from)\s+([a-zA-Z_]\w*)/gm)].map((m) => m[1])
-  const need = [...new Set(imports)].map((m) => IMPORT_PACKAGES[m]).filter(Boolean)
+  const need = new Set([...new Set(imports)].map((m) => IMPORT_PACKAGES[m]).filter(Boolean))
+  // pandas 的秩相关计算会在函数内部导入 scipy；用户代码不一定显式 import scipy。
+  if (imports.includes('pandas') && /\bmethod\s*=\s*(['"])(?:spearman|kendall)\1/.test(code)) need.add('scipy')
   const loaded = new Set()
   for (const m of need) {
     try {

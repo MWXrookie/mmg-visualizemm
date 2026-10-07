@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="MMG 数模 AI 辅导桌面版使用指南：读题、整理建模思路、生成并运行代码。">
+  <title>使用指南 · MMG 数模 AI 辅导</title>
+  <style>
+    :root { color-scheme: light; --bg:#f5f6f8; --paper:#fff; --ink:#202b40; --muted:#626f83; --line:#dce2eb; --blue:#405fba; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; scroll-padding-top:28px; }
+    body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.85 "Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; }
+    a { color:var(--blue); text-underline-offset:4px; }
+    a:focus-visible { outline:3px solid var(--blue); outline-offset:5px; border-radius:3px; }
+    .wrap { max-width:1120px; margin:auto; padding:0 48px; }
+    header { padding:26px 0; border-bottom:1px solid var(--line); }
+    .header-inner { display:flex; justify-content:space-between; align-items:center; gap:24px; }
+    .brand { font-weight:700; letter-spacing:.04em; }
+    .edition { color:var(--muted); font-size:12px; margin-left:14px; }
+    .hero { padding:64px 0 46px; }
+    .eyebrow { color:var(--blue); font-size:12px; font-weight:700; letter-spacing:.16em; }
+    h1,h2,h3 { font-family:"Songti SC","SimSun","STSong","Noto Serif CJK SC",Georgia,serif; line-height:1.45; }
+    h1 { font-size:42px; font-weight:600; margin:12px 0 18px; }
+    .intro { font-size:17px; color:var(--muted); max-width:680px; margin:0 0 26px; }
+    .button { display:inline-flex; align-items:center; justify-content:center; background:var(--blue); color:white; padding:10px 22px; border-radius:8px; text-decoration:none; font-weight:600; transition:background .14s; }
+    .button:hover { background:#304a99; }
+    .hero-note { margin-left:18px; color:var(--muted); font-size:13px; }
+    .layout { display:grid; grid-template-columns:180px minmax(0,1fr); gap:48px; align-items:start; padding-bottom:64px; }
+    nav { position:sticky; top:28px; }
+    .nav-label { font-size:12px; color:var(--muted); margin-bottom:14px; }
+    nav a { display:block; padding:9px 0; text-decoration:none; color:var(--muted); border-bottom:1px solid var(--line); }
+    nav a:hover { color:var(--blue); }
+    article { background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:10px 32px; }
+    section { padding:28px 0; border-bottom:1px solid var(--line); }
+    section:last-child { border:0; }
+    .step { display:flex; gap:16px; align-items:center; margin-bottom:16px; }
+    .number { flex:none; width:36px; height:36px; display:grid; place-items:center; border-radius:9px; background:#eef1f6; color:var(--blue); font-weight:700; font-size:13px; }
+    h2 { font-size:24px; margin:0; font-weight:600; }
+    h3 { font-size:18px; margin:24px 0 8px; }
+    p { margin:10px 0; }
+    ol,ul { padding-left:22px; margin:12px 0; }
+    li { padding:4px 0; }
+    .note { background:#f5f7fb; border-left:3px solid #a9b9e4; border-radius:0 6px 6px 0; padding:12px 16px; color:var(--muted); font-size:14px; margin-top:18px; }
+    .example { border:1px solid var(--line); border-radius:8px; padding:14px 18px; margin:16px 0; }
+    .example p { margin:4px 0; }
+    .example-label { color:var(--blue); font-size:12px; font-weight:600; }
+    dl { margin:16px 0 0; }
+    dt { font-weight:600; margin-top:18px; }
+    dd { color:var(--muted); margin:5px 0 0; }
+    footer { border-top:1px solid var(--line); color:var(--muted); font-size:13px; padding:24px 0 36px; }
+    @media(prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } .button { transition:none; } }
+    @media print { body { background:white; } header a,.hero .button,.hero-note,nav { display:none; } .wrap { padding:0; } .hero { padding:24px 0; } .layout { display:block; } article { border:0; padding:0; } section { break-inside:avoid; } }
+  </style>
+</head>
+<body>
+  <header><div class="wrap header-inner"><div class="brand">MMG <span class="edition">数模 AI 辅导 · 桌面版</span></div><a href="./#/workbench">进入工作台 →</a></div></header>
+  <main class="wrap">
+    <div class="hero">
+      <div class="eyebrow">GETTING STARTED / 使用指南</div>
+      <h1>从一道题，到一条清晰的建模路径。</h1>
+      <p class="intro">AI 帮你理解题目、讨论方法和编写代码。你负责确认条件、选择思路，以及检查结果是否回答了原问题。</p>
+      <a class="button" href="./#/workbench">开始读题 →</a><span class="hero-note">请在电脑浏览器中使用工作台。</span>
+    </div>
+    <div class="layout">
+      <nav aria-label="指南目录">
+        <div class="nav-label">按需阅读</div>
+        <a href="#problem">01 放入题目</a><a href="#model">02 连接 AI</a><a href="#planning">03 整理思路</a><a href="#coding">04 编程与结果</a><a href="#questions">常见问题</a>
+      </nav>
+      <article aria-label="使用步骤">
+        <section id="problem">
+          <div class="step"><span class="number">01</span><h2>先把题目放进来</h2></div>
+          <ol><li>进入<strong>读题工作台</strong>，粘贴题目正文，点击<strong>使用此题目</strong>；也可以用<strong>上传题干</strong>导入 PDF、Markdown 或 TXT。</li><li>表格与数据文件通过<strong>上传附件</strong>添加。题干说明要解决什么，附件提供分析需要的数据。</li><li>检查题目与附件是否完整。连接模型后，可点击<strong>AI 整体解读</strong>；用鼠标选中一段题目，再点浮动工具栏中的<strong>AI 解读</strong>，逐段确认目标与条件。</li></ol>
+          <div class="note">还没有题目？打开「建模范例」，查看并下载一个例题，再将题干和附件导入工作区。查看范例不会自动导入题目。</div>
+        </section>
+        <section id="model">
+          <div class="step"><span class="number">02</span><h2>需要 AI 时，连接自己的模型</h2></div>
+          <ol><li>从左侧栏打开<strong>模型设置</strong>（齿轮图标），选择服务商，填写 API Key、接口地址和模型名。</li><li>测试当前配置的连接是否正常，再点击<strong>保存设置</strong>。测试成功不会自动保存。</li><li>回到工作台，使用 AI 解读、对话或代码生成。</li></ol>
+          <div class="note">未配置模型也可以导入题目、手动整理拆解块和编辑代码。使用 AI 功能才需要有效的模型配置；调用费用由所选模型服务商计收。</div>
+        </section>
+        <section id="planning">
+          <div class="step"><span class="number">03</span><h2>把想法整理成可执行的拆解块</h2></div>
+          <p>打开<strong>建模思路梳理</strong>。一个拆解块代表一个要完成的任务：说明要解决什么、采用什么思路、按什么步骤执行。</p>
+          <ol><li>点击<strong>新建拆解块</strong>，再点<strong>编辑</strong>，直接在块头部填写标题和一句话思路。</li><li>题目依据和步骤按需展开；每次编辑一个步骤，点击<strong>添加步骤</strong>会直接进入新增输入。点击<strong>保存拆解块</strong>后才应用编辑草稿。</li><li><strong>AI 帮我写思路</strong>会提供待采用建议；只有点击<strong>使用AI建议</strong>才替换思路，点击<strong>忽略建议</strong>保留当前输入。也可以先在右侧与 AI 讨论。</li><li>检查 AI 给出的拆解预览，点击<strong>确认新建</strong>或<strong>确认写入</strong>后才应用；点击取消会保留原内容，并回到对话输入继续讨论。需要的数据附件可以关联到相应块。</li><li>不熟悉某种方法时，切换到<strong>知识卡片</strong>，查看适用条件与演示，再决定是否采用。</li></ol>
+          <div class="example"><div class="example-label">一个拆解块可以这样写</div><p><strong>标题：</strong>在预算内选择项目组合</p><p><strong>思路：</strong>每个项目设为选或不选，以总收益最大为目标，总成本不超过预算。</p><p><strong>步骤：</strong>读取项目成本与收益 → 检查缺失值 → 求可行组合 → 输出入选项目及总成本、总收益。</p></div>
+          <div class="note">进入编程前，确认拆解块有明确的输入、方法和预期输出。只有标题的空块通常不足以生成可靠代码。</div>
+        </section>
+        <section id="coding">
+          <div class="step"><span class="number">04</span><h2>生成、运行，再核对结果</h2></div><p>代码区与产出区首次默认各占一半；可用分隔手柄拖动或按方向键调宽，已有宽度偏好会保留。</p>
+          <ol><li>点击梳理台的<strong>去编程台</strong>，或从左侧导航进入<strong>编程工作台</strong>。</li><li>点击<strong>AI生成</strong>，选择要解决的拆解块，说明希望得到的结果，再提交生成。没有拆解块时，先回梳理台创建。</li><li>检查生成代码中的文件、字段与参数，点击<strong>运行</strong>。Python 在浏览器中运行，首次加载运行环境可能需要等待。</li><li>查看输出与图表，核对约束是否满足、数值是否合理、结果是否回答了题目。代码有可调参数时才显示调参看板，修改后重新运行。只输出文字的代码没有图表也可以是正常结果。</li></ol>
+          <div class="note">运行成功说明代码执行完成，不能代替模型与结果检查。代码报错时，结合错误信息修正代码或使用 AI 改进。</div>
+        </section>
+        <section id="questions">
+          <h2>遇到问题时</h2>
+          <dl><dt>AI 无法使用？</dt><dd>打开模型设置，检查服务商、接口地址、模型名和 Key；测试连接后记得保存。如果提示额度或网络问题，按错误信息处理。</dd><dt>Python 环境加载失败？</dt><dd>查看编辑器底部状态与右侧错误。先导出代码留备份，检查网络是否能访问运行环境 CDN，再刷新工作台重试。</dd><dt>不想让 AI 一直提问？</dt><dd>模型设置中的「引导模式」控制建模对话方式；它与这份使用指南是两件事。可以按学习需要调整。</dd><dt>如何切换题目、保存一份备份？</dt><dd>展开左侧工作区列表，切换或新建工作区。使用工作区备份导出 JSON；导入备份会创建新工作区。API Key 不包含在备份中。</dd><dt>如何再次查看这份指南？</dt><dd>打开随发布提供的 <strong>guide.html</strong>。这是一份独立文档，不会占用工作台的操作空间。</dd></dl>
+        </section>
+      </article>
+    </div>
+  </main>
+  <footer><div class="wrap">MMG_VisualizeMM · AI 帮你看懂题，建模由你主导。</div></footer>
+</body>
+</html>

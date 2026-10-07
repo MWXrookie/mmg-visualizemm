@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "runId": "2026-10-01-g01-deepseek-repeat-80ded7fd-r02",
+  "suiteVersion": "1.0.0",
+  "runType": "live-model",
+  "startedAt": "2026-10-01T15:03:17.807Z",
+  "completedAt": "2026-10-01T15:04:16.372Z",
+  "gitSha": "50ca781eec806267521bda92cd925455034f1384",
+  "promptVersion": "unsealed-working-tree",
+  "knowledgeVersion": "isolated-local-embedding",
+  "model": { "provider": "DeepSeek", "name": "deepseek-flash", "seed": null },
+  "environment": { "node": "v24.13.0", "browser": "Chromium 153.0.8010.12", "os": "Windows 10.0.26200" },
+  "cases": [
+    {
+      "caseId": "G01",
+      "gates": {
+        "inputIntegrity": "passed",
+        "stateReliability": "passed",
+        "executionCorrectness": "failed",
+        "safetyAndProvenance": "passed"
+      },
+      "rubric": {
+        "formulate": null,
+        "employ": null,
+        "interpretEvaluate": null,
+        "grounding": null,
+        "communicationAgency": null
+      },
+      "rubricTotal": null,
+      "blockers": ["21 of 24 displayed scores exceed the independent 1e-6 score tolerance because normalized values are rounded before weighting"],
+      "status": "failed",
+      "attribution": "model",
+      "evidencePaths": ["docs/04-质量/records/golden-live/2026-10-01-g01-deepseek-repeat-80ded7fd/run-r02.md"],
+      "notes": "One case, one model generation, one human scaffold and one internal reviewer. Both complete rankings match baseline, but numerical score assertion fails. Raw evidence remains in ignored data/eval-runs."
+    }
+  ],
+  "summary": {
+    "planned": 1,
+    "executed": 1,
+    "passed": 0,
+    "blockingFailures": 1,
+    "repeatCount": 1,
+    "rubricMeans": { "formulate": null, "employ": null, "interpretEvaluate": null, "grounding": null, "communicationAgency": null },
+    "citationAccuracy": null,
+    "claimSupportRate": null,
+    "contextRecall": null,
+    "contextPrecision": null,
+    "severeUnsupportedFacts": 0
+  },
+  "review": { "mode": "single-rater-formative", "notes": "Numerical comparison performed; M1-M5 and claims have not received independent second rating." },
+  "decision": "failed",
+  "limitations": ["pre-run account-wide billing snapshot only", "working-tree and prompt bundle not sealed before run", "user-provided breakdown", "one case and one real generation only", "single rater", "streamed usage not captured"]
+}

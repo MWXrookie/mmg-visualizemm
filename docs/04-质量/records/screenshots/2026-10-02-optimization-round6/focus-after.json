@@ -1,0 +1,182 @@
+[
+  {
+    "width": 1280,
+    "theme": "light",
+    "action": "useAI",
+    "focus": "TEXTAREA"
+  },
+  {
+    "width": 1280,
+    "theme": "light",
+    "action": "deleteStep2",
+    "focus": {
+      "tag": "INPUT",
+      "title": "",
+      "text": ""
+    }
+  },
+  {
+    "width": 1280,
+    "theme": "light",
+    "action": "deleteLastStep",
+    "focus": "BUTTON"
+  },
+  {
+    "width": 1280,
+    "theme": "light",
+    "action": "cancelNewPreview",
+    "focus": "TEXTAREA"
+  },
+  {
+    "width": 1280,
+    "theme": "light",
+    "action": "confirmNewPreview",
+    "focus": "TEXTAREA"
+  },
+  {
+    "width": 1280,
+    "theme": "light",
+    "action": "flow",
+    "useScrollDelta": 0,
+    "transitionDuration": "0.22s",
+    "previewConfirmCancel": true,
+    "rapidToggle": true,
+    "multiline": true,
+    "saveFocus": true
+  },
+  {
+    "width": 1280,
+    "theme": "dark",
+    "action": "useAI",
+    "focus": "TEXTAREA"
+  },
+  {
+    "width": 1280,
+    "theme": "dark",
+    "action": "deleteStep2",
+    "focus": {
+      "tag": "INPUT",
+      "title": "",
+      "text": ""
+    }
+  },
+  {
+    "width": 1280,
+    "theme": "dark",
+    "action": "deleteLastStep",
+    "focus": "BUTTON"
+  },
+  {
+    "width": 1280,
+    "theme": "dark",
+    "action": "cancelNewPreview",
+    "focus": "TEXTAREA"
+  },
+  {
+    "width": 1280,
+    "theme": "dark",
+    "action": "confirmNewPreview",
+    "focus": "TEXTAREA"
+  },
+  {
+    "width": 1280,
+    "theme": "dark",
+    "action": "flow",
+    "useScrollDelta": 0,
+    "transitionDuration": "1e-05s",
+    "previewConfirmCancel": true,
+    "rapidToggle": true,
+    "multiline": true,
+    "saveFocus": true
+  },
+  {
+    "width": 1440,
+    "theme": "light",
+    "action": "useAI",
+    "focus": "TEXTAREA"
+  },
+  {
+    "width": 1440,
+    "theme": "light",
+    "action": "deleteStep2",
+    "focus": {
+      "tag": "INPUT",
+      "title": "",
+      "text": ""
+    }
+  },
+  {
+    "width": 1440,
+    "theme": "light",
+    "action": "deleteLastStep",
+    "focus": "BUTTON"
+  },
+  {
+    "width": 1440,
+    "theme": "light",
+    "action": "cancelNewPreview",
+    "focus": "TEXTAREA"
+  },
+  {
+    "width": 1440,
+    "theme": "light",
+    "action": "confirmNewPreview",
+    "focus": "TEXTAREA"
+  },
+  {
+    "width": 1440,
+    "theme": "light",
+    "action": "flow",
+    "useScrollDelta": 0,
+    "transitionDuration": "0.22s",
+    "previewConfirmCancel": true,
+    "rapidToggle": true,
+    "multiline": true,
+    "saveFocus": true
+  },
+  {
+    "width": 1440,
+    "theme": "dark",
+    "action": "useAI",
+    "focus": "TEXTAREA"
+  },
+  {
+    "width": 1440,
+    "theme": "dark",
+    "action": "deleteStep2",
+    "focus": {
+      "tag": "INPUT",
+      "title": "",
+      "text": ""
+    }
+  },
+  {
+    "width": 1440,
+    "theme": "dark",
+    "action": "deleteLastStep",
+    "focus": "BUTTON"
+  },
+  {
+    "width": 1440,
+    "theme": "dark",
+    "action": "cancelNewPreview",
+    "focus": "TEXTAREA"
+  },
+  {
+    "width": 1440,
+    "theme": "dark",
+    "action": "confirmNewPreview",
+    "focus": "TEXTAREA"
+  },
+  {
+    "width": 1440,
+    "theme": "dark",
+    "action": "flow",
+    "useScrollDelta": 0,
+    "transitionDuration": "1e-05s",
+    "previewConfirmCancel": true,
+    "rapidToggle": true,
+    "multiline": true,
+    "saveFocus": true
+  }
+]

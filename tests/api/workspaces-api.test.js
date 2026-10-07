@@ -262,18 +262,23 @@ test('附件解析覆盖 TXT、CSV、XLSX、PDF 与常见错误', async () => {
   const xlsxResult = await upload('附件.xlsx', xlsxBuffer)
   assert.equal(xlsxResult.response.status, 200)
   assert.equal(xlsxResult.body.type, 'table')
-  assert.equal(Array.isArray(xlsxResult.body.sheets), true)
-  assert.equal(xlsxResult.body.sheets.length > 0, true)
-  assert.equal(Array.isArray(xlsxResult.body.headers), true)
+  assert.deepEqual(xlsxResult.body.sheets.map((sheet) => sheet.name), ['表单1', '表单2', '表单3'])
+  assert.deepEqual(xlsxResult.body.sheets.map((sheet) => sheet.rows.length), [58, 69, 8])
+  assert.deepEqual(xlsxResult.body.sheets[0].headers, ['文物编号', '纹饰', '类型', '颜色', '表面风化'])
+  assert.equal(xlsxResult.body.sheets[1].headers[0], '文物采样点')
+  assert.equal(xlsxResult.body.sheets[1].headers[1], '二氧化硅(SiO2)')
+  assert.equal(xlsxResult.body.sheets[2].headers[0], '文物编号')
+  assert.equal(xlsxResult.body.sheets[2].rows[0][0], 'A1')
 
   const pdfBuffer = await readFile(path.join(projectRoot, 'docs', '06-素材', 'C题.pdf'))
   const pdfResult = await upload('C题.pdf', pdfBuffer)
   assert.equal(pdfResult.response.status, 200)
   assert.equal(pdfResult.body.type, 'text')
   assert.equal(pdfResult.body.sourceKind, 'pdf')
-  assert.equal(pdfResult.body.text.length > 100, true)
-  assert.equal(pdfResult.body.totalPages > 0, true)
-  assert.equal(pdfResult.body.pages.length > 0, true)
+  assert.equal(pdfResult.body.totalPages, 2)
+  assert.equal(pdfResult.body.pages.length, 2)
+  assert.match(pdfResult.body.text, /85%\s*~\s*105%/)
+  assert.match(pdfResult.body.text, /问题 4/)
 
   const missing = await request('/api/parse', {
     method: 'POST',
@@ -290,6 +295,32 @@ test('附件解析覆盖 TXT、CSV、XLSX、PDF 与常见错误', async () => {
   const unsupported = await upload('题目.docx', 'not-a-docx')
   assert.equal(unsupported.response.status, 400)
   assert.match(unsupported.body.message, /暂不支持 \.docx 格式/)
+})
+
+test('CSV 全量解析超过预览行数时不截断，超限时明确拒绝', async () => {
+  const upload = (data) => request('/api/parse', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: '红酒质量分类.csv', data: Buffer.from(data).toString('base64') }),
+  })
+  const fixture = await readFile(path.join(projectRoot, 'tests', 'fixtures', 'golden', 'cases', 'G07', 'attachments', '红酒质量分类.csv'))
+  const parsed = await upload(fixture)
+  assert.equal(parsed.response.status, 200)
+  assert.equal(parsed.body.rows.length, 1599)
+  assert.equal(parsed.body.totalRows, 1599)
+  assert.deepEqual(parsed.body.headers.slice(0, 2), ['sample_id', 'fixed_acidity'])
+  assert.equal(parsed.body.rows[0][0], 'R0001')
+  assert.equal(parsed.body.rows.at(-1)[0], 'R1599')
+
+  const tooManyRows = await upload(`id,value\n${Array.from({ length: 20_001 }, (_, index) => `${index},1`).join('\n')}`)
+  assert.equal(tooManyRows.response.status, 400)
+  assert.match(tooManyRows.body.message, /超过 20000 行全量解析上限/)
+  const headerlessRows = await upload(Array.from({ length: 20_001 }, (_, index) => `${index},1`).join('\n'))
+  assert.equal(headerlessRows.response.status, 400)
+  assert.match(headerlessRows.body.message, /超过 20000 行全量解析上限/)
+  const tooManyBytes = await upload(`id,value\n1,${'x'.repeat(5 * 1024 * 1024)}`)
+  assert.equal(tooManyBytes.response.status, 400)
+  assert.match(tooManyBytes.body.message, /超过 5MB 全量解析上限/)
 })
 
 test('RAG 接口在强制本地模式下可构建、检索并报告状态', async () => {

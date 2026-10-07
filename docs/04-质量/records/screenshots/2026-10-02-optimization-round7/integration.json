@@ -1,0 +1,50 @@
+[
+  {
+    "width": 1280,
+    "theme": "light",
+    "tableRows": 24,
+    "steps": 7,
+    "manualSave": true,
+    "previewConfirmCancel": true,
+    "codingMockOutput": true,
+    "refresh": true,
+    "guide": true,
+    "pageErrors": []
+  },
+  {
+    "width": 1280,
+    "theme": "dark",
+    "tableRows": 24,
+    "steps": 7,
+    "manualSave": true,
+    "previewConfirmCancel": true,
+    "codingMockOutput": true,
+    "refresh": true,
+    "guide": true,
+    "pageErrors": []
+  },
+  {
+    "width": 1440,
+    "theme": "light",
+    "tableRows": 24,
+    "steps": 7,
+    "manualSave": true,
+    "previewConfirmCancel": true,
+    "codingMockOutput": true,
+    "refresh": true,
+    "guide": true,
+    "pageErrors": []
+  },
+  {
+    "width": 1440,
+    "theme": "dark",
+    "tableRows": 24,
+    "steps": 7,
+    "manualSave": true,
+    "previewConfirmCancel": true,
+    "codingMockOutput": true,
+    "refresh": true,
+    "guide": true,
+    "pageErrors": []
+  }
+]

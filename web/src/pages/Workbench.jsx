@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { marked } from 'marked'
-import { streamChat, parseFile, attachSummary, retrieveKnowledge, formatKnowledgeContext } from '../api.js'
+import { streamChat, parseFile, attachSummary, retrieveKnowledge, formatKnowledgeContext, saveWorkspace } from '../api.js'
 import { KnowledgeCard, findConcepts, ALL_CARD_IDS, CARD_BY_ID, CARD_STARTER_IDS, getCardWorkflow } from './Cards.jsx'
 import MD, { sanitize } from '../components/MD.jsx'
 import AttachmentList from '../components/AttachmentList.jsx'
@@ -15,7 +15,7 @@ const OVERVIEW_SYSTEM =
   '1) 题目在问什么（一句话+要点）\n' +
   '2) 已知条件与数据（列出题目给出的数据/表格及其含义）\n' +
   '3) 目标（要求优化或回答的目标是什么）\n' +
-  '4) 输出要求（论文/方案要求）\n用简洁中文回答，控制在 400 字内。\n' +
+  '4) 输出要求（论文/方案要求）\n附件表格仅提供表头和少量预览行；不要把预览行数当作全部数据，不要据此声称未展示的行或指标不存在。若数据完整性无法从摘要判断，明确说明需读取完整附件。用简洁中文回答，控制在 400 字内。\n' +
   OVERVIEW_EXPERT + '\n' + EXPERT_CORE
 
 const ROLE_SYSTEM =
@@ -133,6 +133,8 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
   const fileInputRef = useRef(null)
   const problemFileInputRef = useRef(null)
   const wsIdRef = useRef(ws?.id || '')
+  const currentWsRef = useRef(ws)
+  currentWsRef.current = ws
   const restoringPanelStateRef = useRef(false)
 
   const title = ws?.title || ''
@@ -181,6 +183,7 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
     if (!files.length) return
     setError('')
     const sourceWsId = wsIdRef.current
+    let latestAttachments = attachments
     // 上传前先校验体积：base64 放大 ~33%，后端 100mb JSON 上限 ≈ 70MB 原始文件，提前拦截避免白传
     const MAX_FILE = 70 * 1024 * 1024
     for (const file of files) {
@@ -189,12 +192,29 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
         continue
       }
       const id = attId(file.name)
+      latestAttachments = [...latestAttachments, { id, name: file.name, status: 'parsing' }]
       patchWsAt?.(sourceWsId, (prev) => ({ attachments: [...(prev?.attachments || []), { id, name: file.name, status: 'parsing' }] }))
       try {
         const r = await parseFile(file)
+        latestAttachments = latestAttachments.map((a) => (a.id === id ? { ...a, status: 'done', ...r } : a))
+        // 完整表格可能超过 pagehide/keepalive 限额；持久化确认后才在页面标为完成。
+        if (sourceWsId) {
+          const current = currentWsRef.current?.id === sourceWsId ? currentWsRef.current : null
+          await saveWorkspace({
+            id: sourceWsId,
+            ...(current ? {
+              title: current.title,
+              problemText: current.problemText,
+              problemSourceKind: current.problemSourceKind,
+              problemPages: current.problemPages,
+            } : {}),
+            attachments: latestAttachments,
+          })
+        }
         patchWsAt?.(sourceWsId, (prev) => ({ attachments: (prev?.attachments || []).map((a) => (a.id === id ? { ...a, status: 'done', ...r } : a)) }))
       } catch (e) {
         setError(e.message)
+        latestAttachments = latestAttachments.map((a) => (a.id === id ? { ...a, status: 'error', message: e.message } : a))
         patchWsAt?.(sourceWsId, (prev) => ({ attachments: (prev?.attachments || []).map((a) => (a.id === id ? { ...a, status: 'error', message: e.message } : a)) }))
       }
     }
@@ -394,7 +414,7 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
   })
 
   return (
-    <div className="ws" style={{ '--panel-w': panelW }}>
+    <div className="ws reading-workspace" style={{ '--panel-w': panelW }}>
       {/* 左侧收起图标栏 */}
       <aside className="rail">
         <button className="rail-btn" onClick={onExpandSidebar} title="展开侧栏"><IconMenu size={16} /></button>
@@ -424,9 +444,16 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
 
           {!hasContent && attachments.length === 0 ? (
             <div className="empty-state">
-              <div className="empty-title">新建读题会话</div>
+              <div className="reading-welcome">
+                <div className="reading-eyebrow">01 / 理解问题</div>
+                <h1 className="empty-title">从读懂一道题开始。</h1>
+                <p>把题目放在这里，理清目标与条件，再一步步形成自己的建模思路。</p>
+                <span className="reading-mark" aria-hidden="true"><IconBook size={25} /></span>
+              </div>
               <div className="paste-box">
+                <label className="reading-input-label" htmlFor="reading-problem-input">题目正文</label>
                 <textarea
+                  id="reading-problem-input"
                   className="paste-input"
                   placeholder="在此粘贴题目文本（或从下方上传 PDF/MD/TXT 题干）…"
                   value={pasteText}
@@ -439,10 +466,10 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
               </div>
               <div className="empty-divider"><span>或上传文件</span></div>
               <div className="empty-grid">
-                <button className="empty-btn" onClick={() => problemFileInputRef.current?.click()}><span className="ic"><IconFile size={20} /></span>上传题干</button>
-                <button className="empty-btn" onClick={() => fileInputRef.current?.click()}><span className="ic"><IconTable size={20} /></span>上传附件</button>
+                <button className="empty-btn" aria-label="上传题干" onClick={() => problemFileInputRef.current?.click()}><span className="ic"><IconFile size={20} /></span><span className="empty-btn-copy">上传题干<small>PDF · Markdown · TXT</small></span></button>
+                <button className="empty-btn" aria-label="上传附件" onClick={() => fileInputRef.current?.click()}><span className="ic"><IconTable size={20} /></span><span className="empty-btn-copy">上传附件<small>表格、数据与参考资料</small></span></button>
               </div>
-              <span className="hint">支持粘贴题目文本 / 上传 PDF/MD/TXT 题干 · xlsx/csv/pdf 附件</span>
+              <span className="hint">可以先整理题目，使用 AI 解读时再配置模型。</span>
               {error && <div className="alert error">{error}</div>}
             </div>
           ) : (
@@ -503,7 +530,12 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
           )}
           {bookmark === '精读' && (
             <>
-              {selResults.length === 0 && !busy && <div className="hint" style={{ textAlign: 'center', padding: 24 }}>在左侧选中任意一段题干，AI 将判定它的角色（约束/目标/已知/假设/背景）</div>}
+              {selResults.length === 0 && !busy && <div className="reading-empty-guide">
+                <IconLightbulb size={25} />
+                <h2>让每一条条件都有依据</h2>
+                <p>选中题干中的一段文字，让 AI 帮你分辨它的作用。你可以追问、核对，再决定如何使用。</p>
+                <div className="reading-role-tags"><span>目标</span><span>约束</span><span>已知条件</span><span>假设</span><span>背景</span></div>
+              </div>}
               {busy && roleStream && (
                 <div className="card" style={{ padding: 14, marginBottom: 10 }}>
                   <div className="section-label" style={{ marginBottom: 6 }}><IconClock size={13} /> AI 正在判定…</div>

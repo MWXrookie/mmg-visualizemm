@@ -34,7 +34,13 @@
         "id": "workspace-data",
         "label": "工作区数据",
         "focus": ["web_app", "api_relay", "file_parser", "workspace_db"],
-        "note": "题目附件由服务端解析并保存在 SQLite；JSON 备份经浏览器导出，导入校验版本后新建工作区。"
+        "note": "CSV 在 5MB、2 万行内全量解析；附件与题干保存成功后才标记完成，避免立即刷新丢失。XLSX 仍只保留前 100 行，表格由浏览器挂载到 Pyodide。"
+      },
+      {
+        "id": "example-library",
+        "label": "范例目录",
+        "focus": ["web_app", "api_relay", "public_examples", "file_parser"],
+        "note": "十道可再分发题的题干与附件随构建产物静态提供；预览附件时使用现有解析 API。"
       }
     ]
   },
@@ -51,7 +57,7 @@
       "id": "web_app",
       "type": "frontend",
       "label": "React 前端",
-      "sublabel": "读题 / 建模 / 编程 / 卡片",
+      "sublabel": "读题 / 建模 / 编程 / 范例",
       "pos": [200, 280],
       "size": [180, 76],
       "tag": "React 18 + Vite",
@@ -113,7 +119,7 @@
       "id": "file_parser",
       "type": "backend",
       "label": "附件解析",
-      "sublabel": "结构化题目与表格",
+      "sublabel": "CSV 全量 / XLSX 预览",
       "pos": [550, 80],
       "size": [180, 64],
       "tag": "XLSX / CSV / PDF / TXT",
@@ -121,6 +127,15 @@
         { "path": "server/index.js", "line": 275 },
         { "path": "server/index.js", "line": 432 }
       ]
+    },
+    {
+      "id": "public_examples",
+      "type": "database",
+      "label": "公开范例资源",
+      "sublabel": "题干 / 附件 / 署名",
+      "pos": [800, 80],
+      "size": [180, 64],
+      "tag": "10 道静态范例"
     },
     {
       "id": "workspace_db",
@@ -193,7 +208,7 @@
     {
       "kind": "region",
       "label": "单机自托管服务",
-      "wraps": ["api_relay", "file_parser", "workspace_db", "rag_service", "knowledge_cache"]
+      "wraps": ["api_relay", "file_parser", "public_examples", "workspace_db", "rag_service", "knowledge_cache"]
     }
   ],
   "connections": [
@@ -246,6 +261,13 @@
       "label": "上传附件"
     },
     {
+      "id": "api-to-examples",
+      "from": "api_relay",
+      "to": "public_examples",
+      "label": "静态提供目录与附件",
+      "variant": "dashed"
+    },
+    {
       "id": "api-to-workspace",
       "from": "api_relay",
       "to": "workspace_db",
@@ -294,6 +316,7 @@
       "dot": "cyan",
       "title": "浏览器与用户",
       "items": [
+        "用户从范例目录阅读题干并预览、下载附件",
         "题目与附件进入读题工作台",
         "建模思路通过苏格拉底对话沉淀",
         "Python 代码与图表由 Pyodide 在浏览器内完成"
@@ -305,6 +328,7 @@
       "items": [
         "Express 提供 BYOK 中继与 SSE 流式响应",
         "服务端解析 PDF、Excel、CSV 和 TXT，SQLite 保存工作区；备份导入校验版本并新建 ID",
+        "构建时只复制已核许可的正式题题干与附件，评分资产不进入静态目录",
         "RAG 返回论文、方法和卡片片段，由前端组装 prompt"
       ]
     },

@@ -143,7 +143,7 @@ export function attachSummary(attachments) {
       for (const t of tables) {
         const head = t.headers.join(' | ')
         const sample = t.rows.slice(0, 3).map((r) => r.join(' | ')).join('\n    ')
-        parts.push(`【${a.name}｜${t.name}】表头：${head}\n    示例数据：\n    ${sample}`)
+        parts.push(`【${a.name}｜${t.name}】表头：${head}\n    当前保留 ${t.rows.length} 行；以下仅展示前 3 行预览，不代表完整文件。\n    示例数据：\n    ${sample}`)
       }
     } else if (a.type === 'text') {
       parts.push(`【${a.name}】文本摘要：${a.text.slice(0, 500)}`)

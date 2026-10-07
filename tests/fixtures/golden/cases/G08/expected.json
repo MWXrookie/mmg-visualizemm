@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "caseId": "G08",
+  "input": {
+    "requiredFiles": ["problem.md", "attachments/巡检数据.xlsx"],
+    "assertions": [
+      { "id": "known-count", "kind": "equals", "description": "已标注表包含 12 台设备各 2 次巡检", "target": "attachments/巡检数据.xlsx.已标注巡检.rows", "expected": 24, "blocking": true },
+      { "id": "unknown-count", "kind": "equals", "description": "待判定表有 3 台没有真值的设备", "target": "attachments/巡检数据.xlsx.待判定巡检.rows", "expected": 3, "blocking": true }
+    ]
+  },
+  "understanding": {
+    "roles": [
+      { "quote": "请建立透明、可复现的二分类参考方法", "role": "objective" },
+      { "quote": "验证时必须以设备为组逐台留出", "role": "constraint" },
+      { "quote": "“字段说明”表给出单位与取值含义", "role": "given" }
+    ],
+    "requiredPoints": ["区分已标注与待判定样本", "按设备分组验证", "标准化仅拟合训练折", "只使用三个测量字段", "参考预测不是安全诊断"]
+  },
+  "evidence": [
+    { "problemQuote": "“已标注巡检”表给出 12 台设备各 2 次巡检", "file": "attachments/巡检数据.xlsx", "sheet": "已标注巡检", "fields": ["设备编号", "振动(mm/s)", "轴承温度(°C)", "电流(A)", "状态"] },
+    { "problemQuote": "“待判定巡检”表给出 3 台新设备的观测", "file": "attachments/巡检数据.xlsx", "sheet": "待判定巡检", "fields": ["设备编号", "振动(mm/s)", "轴承温度(°C)", "电流(A)"] },
+    { "problemQuote": "“字段说明”表给出单位与取值含义", "file": "attachments/巡检数据.xlsx", "sheet": "字段说明", "fields": ["字段", "说明"] }
+  ],
+  "modeling": {
+    "requiredConcepts": ["分组留出", "训练集标准化", "混淆矩阵", "平衡准确率", "特征删除敏感性"],
+    "acceptableAlternatives": ["可使用其他透明分类器，但必须保留设备分组和无泄漏预处理", "可使用按设备汇总后的特征，但须说明改变了预测单位"],
+    "forbiddenClaims": ["同一设备观测同时进入训练与验证", "把设备编号或状态作为数值特征", "把待判定预测当真值", "宣称真实设备安全或故障诊断"],
+    "risks": ["合成类别差异较清晰，验证表现不能外推", "边界附近的 U03 对建模选择可能敏感", "两次巡检之间并非独立设备"]
+  },
+  "execution": {
+    "assertions": [
+      { "id": "known-rows", "kind": "equals", "description": "24 条已标注观测来自 12 台设备", "target": "baseline.knownRows", "expected": 24, "blocking": true },
+      { "id": "known-groups", "kind": "equals", "description": "逐设备留出共有 12 组", "target": "baseline.knownGroups", "expected": 12, "blocking": true },
+      { "id": "unknown-rows", "kind": "equals", "description": "3 台待判定设备不进入验证", "target": "baseline.unknownRows", "expected": 3, "blocking": true },
+      { "id": "features", "kind": "equals", "description": "只使用三个测量字段", "target": "baseline.featureFields", "expected": ["振动(mm/s)", "轴承温度(°C)", "电流(A)"], "blocking": true },
+      { "id": "confusion", "kind": "equals", "description": "3 近邻逐设备留出混淆矩阵", "target": "baseline.confusion", "expected": { "normalCorrect": 12, "normalAsAttention": 0, "attentionAsNormal": 0, "attentionCorrect": 12 }, "blocking": true },
+      { "id": "accuracy", "kind": "equals", "description": "合成数据上的准确率，不可外推", "target": "baseline.accuracy", "expected": 1, "blocking": true },
+      { "id": "balanced-accuracy", "kind": "equals", "description": "合成数据上的平衡准确率，不可外推", "target": "baseline.balancedAccuracy", "expected": 1, "blocking": true },
+      { "id": "unknown-predictions", "kind": "equals", "description": "三台待判定设备仅有参考预测", "target": "baseline.predictions", "expected": [{ "device": "U01", "label": "正常" }, { "device": "U02", "label": "关注" }, { "device": "U03", "label": "关注" }], "blocking": true },
+      { "id": "drop-temperature", "kind": "equals", "description": "删除温度后边界样本 U03 参考类别变化", "target": "baseline.removedFieldPredictions.轴承温度(°C)", "expected": ["正常", "关注", "正常"], "blocking": true }
+    ],
+    "requiredOutputs": ["text", "table", "plot", "saved-workspace"]
+  },
+  "blockers": ["工作表缺失或字段单位误读", "分组泄漏或标准化泄漏", "指标与混淆矩阵不一致", "把合成预测当真实诊断"]
+}

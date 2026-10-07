@@ -1,0 +1,146 @@
+[
+  {
+    "width": 1280,
+    "theme": "light",
+    "kind": "empty",
+    "height": 387.390625,
+    "saveBottom": 485.875,
+    "visibleInputs": 2,
+    "focusAndCancelAndSaveAndRefresh": true
+  },
+  {
+    "width": 1280,
+    "theme": "light",
+    "kind": "existing",
+    "height": 387.390625,
+    "saveBottom": 485.875,
+    "visibleInputs": 2,
+    "focusAndCancelAndSaveAndRefresh": true
+  },
+  {
+    "width": 1280,
+    "theme": "light",
+    "kind": "long",
+    "height": 387.390625,
+    "saveBottom": 485.875,
+    "visibleInputs": 2,
+    "focusAndCancelAndSaveAndRefresh": true
+  },
+  {
+    "width": 1280,
+    "theme": "light",
+    "kind": "steps",
+    "height": 387.390625,
+    "saveBottom": 485.875,
+    "visibleInputs": 2,
+    "focusAndCancelAndSaveAndRefresh": true
+  },
+  {
+    "width": 1280,
+    "theme": "dark",
+    "kind": "empty",
+    "height": 387.390625,
+    "saveBottom": 485.875,
+    "visibleInputs": 2,
+    "focusAndCancelAndSaveAndRefresh": true
+  },
+  {
+    "width": 1280,
+    "theme": "dark",
+    "kind": "existing",
+    "height": 387.390625,
+    "saveBottom": 485.875,
+    "visibleInputs": 2,
+    "focusAndCancelAndSaveAndRefresh": true
+  },
+  {
+    "width": 1280,
+    "theme": "dark",
+    "kind": "long",
+    "height": 387.390625,
+    "saveBottom": 485.875,
+    "visibleInputs": 2,
+    "focusAndCancelAndSaveAndRefresh": true
+  },
+  {
+    "width": 1280,
+    "theme": "dark",
+    "kind": "steps",
+    "height": 387.390625,
+    "saveBottom": 485.875,
+    "visibleInputs": 2,
+    "focusAndCancelAndSaveAndRefresh": true
+  },
+  {
+    "width": 1440,
+    "theme": "light",
+    "kind": "empty",
+    "height": 387.390625,
+    "saveBottom": 485.875,
+    "visibleInputs": 2,
+    "focusAndCancelAndSaveAndRefresh": true
+  },
+  {
+    "width": 1440,
+    "theme": "light",
+    "kind": "existing",
+    "height": 387.390625,
+    "saveBottom": 485.875,
+    "visibleInputs": 2,
+    "focusAndCancelAndSaveAndRefresh": true
+  },
+  {
+    "width": 1440,
+    "theme": "light",
+    "kind": "long",
+    "height": 387.390625,
+    "saveBottom": 485.875,
+    "visibleInputs": 2,
+    "focusAndCancelAndSaveAndRefresh": true
+  },
+  {
+    "width": 1440,
+    "theme": "light",
+    "kind": "steps",
+    "height": 387.390625,
+    "saveBottom": 485.875,
+    "visibleInputs": 2,
+    "focusAndCancelAndSaveAndRefresh": true
+  },
+  {
+    "width": 1440,
+    "theme": "dark",
+    "kind": "empty",
+    "height": 387.390625,
+    "saveBottom": 485.875,
+    "visibleInputs": 2,
+    "focusAndCancelAndSaveAndRefresh": true
+  },
+  {
+    "width": 1440,
+    "theme": "dark",
+    "kind": "existing",
+    "height": 387.390625,
+    "saveBottom": 485.875,
+    "visibleInputs": 2,
+    "focusAndCancelAndSaveAndRefresh": true
+  },
+  {
+    "width": 1440,
+    "theme": "dark",
+    "kind": "long",
+    "height": 387.390625,
+    "saveBottom": 485.875,
+    "visibleInputs": 2,
+    "focusAndCancelAndSaveAndRefresh": true
+  },
+  {
+    "width": 1440,
+    "theme": "dark",
+    "kind": "steps",
+    "height": 387.390625,
+    "saveBottom": 485.875,
+    "visibleInputs": 2,
+    "focusAndCancelAndSaveAndRefresh": true
+  }
+]

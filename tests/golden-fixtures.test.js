@@ -42,13 +42,41 @@ function assertBaselineExpectations(goldenCase, result) {
 
 test('金标准加载器执行 Schema、路径、哈希与原文引用校验', async () => {
   const { cases, rubricAnchors } = await loadGoldenSuite()
-  assert.deepEqual(cases.map((item) => item.id), ['G01', 'G02', 'G03', 'G04', 'G05', 'G06', 'G07', 'G09', 'G10'])
-  assert.deepEqual(cases.map((item) => item.manifest.category), ['evaluation', 'evaluation', 'forecasting', 'forecasting', 'optimization', 'optimization', 'classification', 'geometry', 'optimization'])
-  assert.equal(cases.filter((item) => item.manifest.source.kind === 'original').length, 6)
+  assert.deepEqual(cases.map((item) => item.id), ['G01', 'G02', 'G03', 'G04', 'G05', 'G06', 'G07', 'G08', 'G09', 'G10'])
+  assert.deepEqual(cases.map((item) => item.manifest.category), ['evaluation', 'evaluation', 'forecasting', 'forecasting', 'optimization', 'optimization', 'classification', 'classification', 'geometry', 'optimization'])
+  assert.equal(cases.filter((item) => item.manifest.source.kind === 'original').length, 7)
   assert.equal(cases.filter((item) => item.manifest.source.kind === 'open-data-adaptation').length, 3)
   assert.ok(cases.every((item) => item.manifest.source.redistributable === true))
   assert.deepEqual(Object.keys(rubricAnchors.dimensions), ['formulate', 'employ', 'interpretEvaluate', 'grounding', 'communicationAgency'])
   assert.equal(rubricAnchors.dimensions.communicationAgency.projectDefined, true)
+})
+
+test('G08 原创多表分类题按设备留出并标明边界预测的敏感性', async () => {
+  const goldenCase = (await loadGoldenSuite()).cases.find((item) => item.id === 'G08')
+  assert.equal(goldenCase.manifest.source.kind, 'original')
+  assert.equal(goldenCase.manifest.source.redistributable, true)
+  const workbook = new ExcelJS.Workbook()
+  await workbook.xlsx.readFile(path.join(goldenCase.caseDir, goldenCase.manifest.files.attachments[0].path))
+  assert.deepEqual(workbook.worksheets.map((sheet) => sheet.name), ['已标注巡检', '待判定巡检', '字段说明'])
+  const known = workbook.getWorksheet('已标注巡检')
+  const unknown = workbook.getWorksheet('待判定巡检')
+  assert.equal(known.actualRowCount, 25)
+  assert.equal(unknown.actualRowCount, 4)
+  const deviceCounts = new Map()
+  known.eachRow((row, rowIndex) => {
+    if (rowIndex === 1) return
+    const id = row.getCell(1).value
+    deviceCounts.set(id, (deviceCounts.get(id) ?? 0) + 1)
+  })
+  assert.equal(deviceCounts.size, 12)
+  assert.ok([...deviceCounts.values()].every((count) => count === 2))
+  assert.deepEqual(unknown.getRow(1).values.slice(1), ['设备编号', '振动(mm/s)', '轴承温度(°C)', '电流(A)'])
+
+  const result = await runBaseline(goldenCase)
+  assertBaselineExpectations(goldenCase, result)
+  assert.equal(result.k, 3)
+  assert.deepEqual(result.removedFieldPredictions['振动(mm/s)'], ['正常', '关注', '关注'])
+  assert.deepEqual(result.removedFieldPredictions['电流(A)'], ['正常', '关注', '关注'])
 })
 
 test('Manifest Schema 会拒绝缺少来源信息的样本', () => {

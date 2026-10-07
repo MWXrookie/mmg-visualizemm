@@ -11,6 +11,8 @@
     "dev:web": "vite --config web/vite.config.js",
     "dev:server": "node --use-system-ca server/index.js",
     "build": "vite build --config web/vite.config.js",
+    "prebuild": "node scripts/generate/public-examples.mjs",
+    "generate:examples": "node scripts/generate/public-examples.mjs",
     "test": "node --test \"tests/**/*.test.js\"",
     "test:unit": "node --test tests/problem-text.test.js",
     "test:api": "node --test tests/api/workspaces-api.test.js",

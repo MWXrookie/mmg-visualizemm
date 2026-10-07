@@ -60,16 +60,17 @@ test('PDF 解析器提供的页码与内容优先于文本中的分页推断', (
   assert.match(result.body, /敏感性分析/)
 })
 
-test('normalizeProblemText 只返回可供后续处理的正文', () => {
+test('normalizeProblemText 保留题干开头的标题和条件，避免导入后丢失建模依据', () => {
   const normalized = normalizeProblemText([
     '测试题',
-    '题目说明',
+    '各指标方向和初始权重见附件中的指标说明工作表。',
     '问题1：建立模型',
     '完成求解。',
   ].join('\n'))
 
   assert.equal(typeof normalized, 'string')
+  assert.match(normalized, /测试题/)
+  assert.match(normalized, /各指标方向和初始权重见附件/)
   assert.match(normalized, /建立模型/)
   assert.match(normalized, /完成求解/)
-  assert.doesNotMatch(normalized, /测试题/)
 })
