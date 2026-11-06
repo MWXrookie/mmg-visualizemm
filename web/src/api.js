@@ -1,4 +1,5 @@
 /** 后端 API 封装 */
+import { buildAttachmentContext } from './lib/attachmentContext.js'
 
 async function post(path, body) {
   const res = await fetch(path, {
@@ -36,10 +37,10 @@ export function chat(settings, messages) {
 }
 
 /**
- * SSE 流式对话：边收边回调 onDelta(累计内容)，返回最终完整内容。
+ * SSE 流式对话：边收边回调 onDelta(累计内容)，结束时回调 onFinish(完成原因)，返回最终完整内容。
  * 失败时抛出 Error（含 provider 的错误信息），调用方可降级为非流式重试。
  */
-export async function streamChat(settings, messages, { onDelta } = {}) {
+export async function streamChat(settings, messages, { onDelta, onFinish } = {}) {
   // 兜底超时：推理模型思考+生成可能较久；服务端 300s，前端多留余量
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 330000)
@@ -94,7 +95,10 @@ export async function streamChat(settings, messages, { onDelta } = {}) {
           acc += obj.delta
           onDelta?.(acc)
         }
-        if (obj.done) return acc
+        if (obj.done) {
+          onFinish?.(typeof obj.finishReason === 'string' ? obj.finishReason : null)
+          return acc
+        }
       }
     }
     return acc
@@ -104,7 +108,7 @@ export async function streamChat(settings, messages, { onDelta } = {}) {
 }
 
 /** 上传文件并解析（返回 {ok,type,headers,rows,text,name}） */
-export async function parseFile(file) {
+export async function parseFile(file, { preserveOriginal = false } = {}) {
   const b64 = await new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(String(reader.result).split(',')[1])
@@ -124,7 +128,7 @@ export async function parseFile(file) {
     if (!res.ok || json.ok === false) {
       throw new Error(json.message || `解析失败（HTTP ${res.status}）`)
     }
-    return json
+    return { ...json, ...(preserveOriginal && json.sourceKind === 'pdf' ? { originalDocument: { name: file.name, data: b64 } } : {}) }
   } catch (e) {
     if (e.name === 'AbortError') throw new Error('解析超时：文件过大或服务器繁忙，请稍后重试')
     throw e
@@ -133,23 +137,9 @@ export async function parseFile(file) {
   }
 }
 
-/** 生成附件摘要（供 AI 读题联动解读，支持多 sheet） */
+/** 默认只发送附件前三行摘要；显式选择仅供读题台本次整体解读使用。 */
 export function attachSummary(attachments) {
-  const parts = []
-  for (const a of attachments) {
-    if (a.status !== 'done') continue
-    if (a.type === 'table') {
-      const tables = a.sheets && a.sheets.length > 0 ? a.sheets : [{ name: a.name, headers: a.headers, rows: a.rows }]
-      for (const t of tables) {
-        const head = t.headers.join(' | ')
-        const sample = t.rows.slice(0, 3).map((r) => r.join(' | ')).join('\n    ')
-        parts.push(`【${a.name}｜${t.name}】表头：${head}\n    当前保留 ${t.rows.length} 行；以下仅展示前 3 行预览，不代表完整文件。\n    示例数据：\n    ${sample}`)
-      }
-    } else if (a.type === 'text') {
-      parts.push(`【${a.name}】文本摘要：${a.text.slice(0, 500)}`)
-    }
-  }
-  return parts.join('\n\n')
+  return buildAttachmentContext(attachments).text
 }
 
 /* ================= 工作区（三台共用，B1/B3） ================= */

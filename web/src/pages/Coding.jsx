@@ -4,11 +4,16 @@ import { streamChat, chat, attachSummary, retrieveKnowledge, formatKnowledgeCont
 import { IconMenu, IconDownload, IconArrowLeft, IconSparkles, IconPlay, IconGear, IconChart, IconTable, IconFile, IconLightbulb, IconZoomIn, IconBookmark, IconClip, IconInfo, IconClock, IconClose } from '../components/Icons.jsx'
 import { SANITY_CHECK } from '../lib/modelingExpert.js'
 import { codeQualityIssues, pythonCommentIndex } from '../lib/codeQuality.js'
+import { CODE_PRESENTATION_PROMPT } from '../lib/codePresentationPrompt.js'
+import { PYTHON_ENVIRONMENT_PROMPT, runtimeRepairContext } from '../lib/pythonEnvironment.js'
+
+// Session-only, workspace-scoped snapshots survive switching between workstations.
+const runSessions = new Map()
 
 const GEN_SYSTEM =
-  '你是数学建模编程助手。用户在浏览器内 Pyodide 环境运行 Python，已预装 numpy / pandas / matplotlib / scipy / sklearn。\n' +
+  '你是数学建模编程助手。用户在浏览器内 Pyodide 环境运行 Python，可按需加载 numpy / pandas / matplotlib / scipy / sklearn / statsmodels。\n' +
   '根据用户选择的建模环节与补充描述，生成一份完整、可直接运行的 Python 代码。要求：\n' +
-  '1. 只用上述已预装的库；不得使用需联网/编译的库。\n' +
+  '1. 只用 Python 标准库和上述可加载库；不安装清单外的库。\n' +
   '2. matplotlib 必须 matplotlib.use(\'Agg\')，图表用 plt.savefig(\'/plot.png\') 保存，画布 figsize=(7,4)。\n' +
   '3. 关键结果用 print 输出（系数、R²、分类结果、统计表等），每个输出段前先 print 清楚中文标题。\n' +
   '4. **输出格式铁律**：完整 Python 代码必须放在一个 ```python 代码块中，代码块之外**不要输出任何文字**（不要解释、不要引导、不要提问、不要 Markdown 标题/列表/引用、不要"以下是代码"之类的话）。这是编程执行场景，用户点击了"生成代码"，请直接给出代码本身。\n' +
@@ -20,7 +25,7 @@ const GEN_SYSTEM =
   '10. 如果需要多张图，请合成到一个 matplotlib figure 的多个子图里，并统一保存到 /plot.png；如果本题不需要图，也要用 print 输出清楚结果。\n' +
   '11. 代码内自带最小 Sanity：对结果做合理性检查（量纲/数量级/NaN/边界），异常时 print 警告而不是静默输出。\n' +
   '12. 数值计算、标准化、加权和排序使用未舍入值；只在最终展示时格式化小数。需要核对得分或误差时默认至少输出小数点后 9 位，不要将 round、.round() 或格式化后的值写回参与后续计算的变量。\n' +
-  SANITY_CHECK
+  SANITY_CHECK + CODE_PRESENTATION_PROMPT + PYTHON_ENVIRONMENT_PROMPT
 
 const IMPROVE_SYSTEM =
   '你是 Python 代码优化助手。用户会给出一段数学建模 Python 代码，请改进它（修复错误、提高可读性与数值稳定性），并保留输出与 plt.savefig(\'/plot.png\')。\n' +
@@ -29,7 +34,7 @@ const IMPROVE_SYSTEM =
   '代码里的所有解释性注释/批注必须使用简体中文；不要把英文注释原样保留下来。\n' +
   '请尽量整理成这些中文区块：产出说明、可调参数、读取数据、数据检查、建模分析、输出结果、结果自检。\n' +
   '**输出格式铁律**：改进后的完整代码必须放在一个 ```python 代码块中，代码块之外**不要输出任何文字**（不要解释、不要 Markdown 格式、不要"改进后代码如下"之类的话）。\n' +
-  SANITY_CHECK
+  SANITY_CHECK + CODE_PRESENTATION_PROMPT + PYTHON_ENVIRONMENT_PROMPT
 
 const COMMENT_LOCALIZE_SYSTEM =
   '你是 Python 代码批注润色助手。你的任务只做一件事：把代码里的解释性注释/批注改成简体中文。\n' +
@@ -45,8 +50,15 @@ const DATA_PROMPT =
   '运行前系统会把已上传的表格附件写入 Pyodide 的 /data 目录，代码可以直接用 pandas.read_csv 读取。\n' +
   '必须优先读取 /data 下的真实 CSV 文件；禁止为了演示自行构造模拟 DataFrame。\n' +
   '如果发现缺少字段或文件，请 print 清楚缺少什么，并继续输出已有的数据检查结果。\n' +
-  '解释性注释/批注必须使用简体中文；任何中文说明都必须写成 Python 注释（以 # 开头），不要把自然语言裸写在代码里。\n' +
-  '图表标题、坐标轴、图例尽量使用英文或拼音，避免浏览器 Python 环境缺少中文字体导致 warning 刷屏。\n'
+  '解释性注释/批注必须使用简体中文；任何中文说明都必须写成 Python 注释（以 # 开头），不要把自然语言裸写在代码里。\n'
+
+const GENERATION_FINISH_HINTS = {
+  length: '达到模型输出长度或上下文上限，代码可能被截断',
+  content_filter: '内容过滤提前终止生成',
+  insufficient_system_resource: '模型服务资源不足，生成提前终止',
+  aborted: '模型服务中断了生成',
+  tool_calls: '模型转向工具调用，未完成代码输出',
+}
 
 /** 从 AI 输出中提取代码。
  * 兼容：标准代码块（```python / ```py / ```python3.11 等）、代码块未闭合（截断）、
@@ -57,8 +69,9 @@ function extractCode(text) {
   let t = text.trim()
 
   // 0) 若整段被 ```markdown / ```text 等非 python 标记整体包裹，先剥掉外层
-  const outer = t.match(/^```[a-zA-Z0-9_.-]*\s*\n([\s\S]*?)\n```\s*$/)
-  if (outer) t = outer[1].trim()
+  const outer = t.match(/^```([a-zA-Z0-9_.-]*)\s*\n([\s\S]*?)\n```\s*$/)
+  if (outer && /^(?:python(?:[0-9.]+)?|py)$/i.test(outer[1])) return stripNoise(outer[2])
+  if (outer) t = outer[2].trim()
 
   // 1) 收集所有代码块（取最长的——模型可能在解释文字后给出主体代码）
   let best = ''
@@ -508,9 +521,7 @@ function workflowSteps({ breakdown, genInfo, code, summary, running, busyAction,
 function resultOutputFromRun(output, error) {
   const text = String(output || '').trim()
   if (!error) return text
-  const idx = text.indexOf('=== 运行错误 ===')
-  const beforeError = idx >= 0 ? text.slice(0, idx).trim() : ''
-  return beforeError || `运行中断：${error}`
+  return text.includes(error) ? text : [text, `运行中断：${error}`].filter(Boolean).join('\n\n')
 }
 
 /** 在（已剥离 Markdown 的）文本里定位 Python 代码：从首个 Python 语句行起，收集到末尾连续代码块 */
@@ -549,111 +560,6 @@ function stripNoise(t) {
   return t.trim()
 }
 
-const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-
-/* ---------- VS Code 风格语法高亮 ---------- */
-const KEYWORDS = new Set([
-  'import', 'from', 'def', 'return', 'if', 'elif', 'else', 'for', 'while', 'in',
-  'and', 'or', 'not', 'with', 'as', 'try', 'except', 'finally', 'lambda', 'class',
-  'break', 'continue', 'pass', 'yield', 'global', 'nonlocal', 'raise', 'assert',
-  'del', 'is', 'None', 'True', 'False',
-])
-// 内置函数/常用方法/库别名（VS Code 中青色）
-const BUILTINS = new Set([
-  'print', 'len', 'range', 'str', 'int', 'float', 'bool', 'list', 'dict', 'set',
-  'tuple', 'sum', 'min', 'max', 'abs', 'round', 'enumerate', 'zip', 'map', 'filter',
-  'sorted', 'reversed', 'type', 'open', 'input', 'format', 'isinstance', 'super',
-  'join', 'append', 'extend', 'keys', 'values', 'items', 'get', 'split', 'strip',
-  'replace', 'lower', 'upper', 'np', 'plt', 'pd', 'sklearn', 'scipy',
-])
-const isIdentStart = (ch) => /[A-Za-z_]/.test(ch)
-const isIdent = (ch) => /[A-Za-z0-9_]/.test(ch)
-const isDigit = (ch) => /[0-9]/.test(ch)
-
-/** 单行高亮：注释(绿斜体)/字符串(橙)/关键字(蓝)/内置(青)/数字(浅绿)/函数名与装饰器(黄) */
-function highlightLine(line) {
-  let html = ''
-  let i = 0
-  const n = line.length
-  while (i < n) {
-    const ch = line[i]
-    // 注释（字符串外的 # 到行尾）
-    if (ch === '#') {
-      html += `<span class="c">${esc(line.slice(i))}</span>`
-      break
-    }
-    // 字符串（单/双引号，支持转义与三引号开头）
-    if (ch === '"' || ch === "'") {
-      const quote = ch
-      // 三引号
-      if (line[i + 1] === quote && line[i + 2] === quote) {
-        let j = i + 3
-        while (j < n && !(line[j] === quote && line[j + 1] === quote && line[j + 2] === quote)) j++
-        html += `<span class="s">${esc(line.slice(i, Math.min(j + 3, n)))}</span>`
-        i = Math.min(j + 3, n)
-        continue
-      }
-      let j = i + 1
-      while (j < n) {
-        if (line[j] === '\\') { j += 2; continue }
-        if (line[j] === quote) { j++; break }
-        j++
-      }
-      html += `<span class="s">${esc(line.slice(i, j))}</span>`
-      i = j
-      continue
-    }
-    // 标识符 / 关键字 / 函数名
-    if (isIdentStart(ch)) {
-      let j = i
-      while (j < n && isIdent(line[j])) j++
-      const word = line.slice(i, j)
-      // def/class 后的函数/类名 → 黄色
-      if (word === 'def' || word === 'class') {
-        html += `<span class="k">${word}</span>`
-        i = j
-        const wsStart = i
-        while (i < n && /\s/.test(line[i])) i++
-        html += esc(line.slice(wsStart, i))
-        let k = i
-        while (k < n && isIdent(line[k])) k++
-        if (k > i) { html += `<span class="f">${esc(line.slice(i, k))}</span>`; i = k }
-        continue
-      }
-      if (KEYWORDS.has(word)) html += `<span class="k">${esc(word)}</span>`
-      else if (BUILTINS.has(word)) html += `<span class="b">${esc(word)}</span>`
-      else html += esc(word)
-      i = j
-      continue
-    }
-    // 数字
-    if (isDigit(ch) || (ch === '.' && isDigit(line[i + 1] || ''))) {
-      let j = i
-      while (j < n && /[0-9._a-fA-FxX]/.test(line[j])) j++
-      // 科学计数法 1e-5
-      if (/[eE]/.test(line[j - 1] || '') === false && (line[j] === 'e' || line[j] === 'E') && /[0-9+-]/.test(line[j + 1] || '')) {
-        j += 2
-        while (j < n && /[0-9]/.test(line[j])) j++
-      }
-      html += `<span class="n">${esc(line.slice(i, j))}</span>`
-      i = j
-      continue
-    }
-    // 装饰器 @
-    if (ch === '@') {
-      let j = i + 1
-      while (j < n && /[A-Za-z0-9_.]/.test(line[j])) j++
-      html += `<span class="d">${esc(line.slice(i, j))}</span>`
-      i = j
-      continue
-    }
-    // 运算符/其他
-    html += esc(ch)
-    i++
-  }
-  return html
-}
-
 const now = () => new Date().toTimeString().slice(0, 5)
 
 function outWidthBounds() {
@@ -679,12 +585,25 @@ function normalizeOutWidthValue(v) {
   return '50%'
 }
 
-export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSidebar }) {
+export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSidebar, saveStatus = 'idle' }) {
   const [code, setCode] = useState('')
-  // 高亮显示层与逻辑层分离：编辑输入只更新 code（hl 不变 → React 不重写 innerHTML → 光标不丢），失焦时刷新高亮
-  const [hl, setHl] = useState('')
+  // TextMate only updates the inert display layer, never the editable DOM.
+  const [highlight, setHighlight] = useState(null)
+  const hl = useMemo(() => highlight ? highlight(code) : code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'), [code, highlight])
+  useEffect(() => {
+    let active = true
+    import('../lib/pythonHighlight.js').then(({ highlightPython }) => {
+      if (active) setHighlight(() => highlightPython)
+    }).catch(() => { /* Keep editable plain text if the local highlighting chunk cannot load. */ })
+    return () => { active = false }
+  }, [])
   const [log, setLog] = useState([])
   const [img, setImg] = useState(null)
+  const [runHistory, setRunHistory] = useState([])
+  const [historyImage, setHistoryImage] = useState(null)
+  const [latestRun, setLatestRun] = useState(null)
+  const [selectedRuns, setSelectedRuns] = useState(new Set())
+  const [deletedRuns, setDeletedRuns] = useState(null)
   const [chartTitle, setChartTitle] = useState('')
   const [runTime, setRunTime] = useState('') // 最近一次运行完成时间
   const [runOutput, setRunOutput] = useState('') // 最近一次运行的输出（右侧结果区展示）
@@ -723,13 +642,33 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
   const [activeCodeLine, setActiveCodeLine] = useState(null) // 导读定位到代码行时的短暂高亮
   const [chartInfo, setChartInfo] = useState(null) // 最近一次图表摘要
   const runTimer = useRef(null)
-  const codeTimer = useRef(null)
   const lineFlashTimer = useRef(null)
   const editRef = useRef(null)
   const logRef = useRef(null) // 输出日志容器（运行后自动滚到底）
   const codeRef = useRef(code)
   codeRef.current = code
   const wsIdRef = useRef(ws?.id || '')
+  wsIdRef.current = ws?.id || ''
+  const aiRequest = useRef(0)
+  const aiPending = useRef(false)
+  const runRequest = useRef(0)
+  function beginAiRequest() {
+    const request = ++aiRequest.current
+    const workspaceId = wsIdRef.current
+    aiPending.current = true
+    return () => request === aiRequest.current && workspaceId === wsIdRef.current
+  }
+  function invalidateAiRequest() {
+    aiRequest.current += 1
+    if (!aiPending.current) return
+    aiPending.current = false
+    setRunning(false); setGenPreview(null)
+  }
+  useEffect(() => () => {
+    aiRequest.current += 1
+    runRequest.current += 1
+    clearTimeout(runTimer.current)
+  }, [])
   // 调参面板最新值引用：setParam 的 500ms 重算必须用最新参数（避免闭包旧值差 1 tick）
   const paramsRef = useRef(params)
   paramsRef.current = params
@@ -740,7 +679,7 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
   function applyCode(t, { persist = true } = {}) {
     codeRef.current = t
     setCode(t)
-    setHl(t.split('\n').map(highlightLine).join('\n'))
+    if (editRef.current) editRef.current.textContent = t
     const sourceWsId = wsIdRef.current
     if (persist && sourceWsId) patchWsAt?.(sourceWsId, { code: t })
   }
@@ -752,44 +691,40 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
     return 300
   }
 
-  /** 用户直接编辑（contenteditable）：只更新逻辑层，保留 DOM 编辑状态与光标 */
+  /** 保留 DOM 光标，同时立即发布输入；innerText 保留原生 Enter 的 br/div 换行。 */
   function onEditInput(e) {
-    const t = e.currentTarget.textContent || ''
+    if (aiPending.current) {
+      invalidateAiRequest()
+      pushLog('core', '已保留手工输入，本次 AI 回复不再应用；可重新生成或改进')
+    }
+    const editor = e.currentTarget
+    let t = editor.innerText ?? editor.textContent ?? ''
+    // Chromium 在末尾换行后附加一个占位 br 供光标落点使用，不属于代码。
+    if (editor.lastChild?.nodeName === 'BR' && t.endsWith('\n')) t = t.slice(0, -1)
     codeRef.current = t
     setCode(t)
+    if (wsIdRef.current) patchWsAt?.(wsIdRef.current, { code: t })
   }
 
-  /** 失焦时刷新语法高亮（此时光标已离开，重置 DOM 无妨） */
-  function onBlurCode() {
-    setHl(codeRef.current.split('\n').map(highlightLine).join('\n'))
-  }
-
-  /** Tab 缩进：插入 4 空格并保持光标位置 */
+  /** 纯文本换行与缩进使用浏览器编辑事务，保留光标和原生撤销。 */
   function onKeyDownCode(e) {
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      document.execCommand('insertText', false, '\n')
+    }
     if (e.key === 'Tab') {
       e.preventDefault()
       document.execCommand('insertText', false, '    ')
     }
   }
 
-  /** 粘贴拦截：以纯文本插入并保留换行。
-   *  contenteditable 默认粘贴/插入可能折叠 \n（多行代码变一行 → SyntaxError），
-   *  这里手动插入含换行的 Text 节点（pre 的 white-space:pre 会正确显示换行）。 */
+  /** 纯文本粘贴沿用浏览器编辑事务，保留多行内容和撤销记录。 */
   function onPasteCode(e) {
     e.preventDefault()
     const text = e.clipboardData?.getData('text/plain')
     if (!text) return
-    const sel = window.getSelection()
-    if (!sel.rangeCount) return
-    sel.deleteFromDocument()
-    const textNode = document.createTextNode(text)
-    const range = sel.getRangeAt(0)
-    range.insertNode(textNode)
-    range.setStartAfter(textNode)
-    range.collapse(true)
-    sel.removeAllRanges()
-    sel.addRange(range)
-    onEditInput({ currentTarget: e.currentTarget })
+    document.execCommand('insertText', false, text)
   }
 
   function jumpToCodeLine(line) {
@@ -819,36 +754,54 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
   const gutter = useMemo(() => lines.map((_, i) => i + 1).join('\n'), [lines])
 
   // 工作区切换 → 载入该工作区已保存的代码
-  useEffect(() => { wsIdRef.current = wsIdNow || '' }, [wsIdNow])
+  useEffect(() => {
+    invalidateAiRequest(); setGenOpen(false)
+    runRequest.current += 1
+    setRunning(false)
+    clearTimeout(runTimer.current)
+  }, [wsIdNow])
   useEffect(() => {
     if (!wsIdNow || !ws || ws.id !== wsIdNow) return
     applyCode(ws.code || '', { persist: false })
+    const session = runSessions.get(wsIdNow)
+    const latest = session?.latest || session?.records?.[0] || null
+    setLatestRun(latest); setSelectedRuns(new Set()); setDeletedRuns(null)
+    setRunHistory(session?.records || []); setHistoryImage(null); setImgModal(false)
     setLog([]); setImg(null); setError(''); setChartTitle(''); setChartInfo(null); setRunOutput(''); setRunTime(''); setGenInfo(null); setOutOpen(false); setSelected(new Set())
+    if (latest) { setImg(latest.img || null); setError(latest.error || ''); setRunOutput(resultOutputFromRun(latest.output, latest.error)); setRunTime(new Date(latest.startedAt).toTimeString().slice(0, 8)); setBusyAction('运行'); setOutOpen(Boolean(latest.error)) }
   }, [wsIdNow, ws?.id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // 代码改动 → 自动保存到共享工作区（防抖）
-  useEffect(() => {
-    if (!wsIdNow) return
-    clearTimeout(codeTimer.current)
-    const sourceWsId = wsIdNow
-    codeTimer.current = setTimeout(() => patchWsAt?.(sourceWsId, { code }), 800)
-    return () => clearTimeout(codeTimer.current)
-  }, [wsIdNow, code, patchWsAt]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function pushLog(cls, text) {
     setLog((prev) => [...prev, { time: now(), cls, text }])
   }
 
   async function doRun(overrides = {}) {
+    if (running) return
     setBusyAction('运行')
     if (!code.trim()) {
       setError('先输入代码，再点运行')
       return
     }
     const P = { ...params, ...overrides }
+    const request = ++runRequest.current
+    const sourceWsId = wsIdRef.current
+    const sourceCode = codeRef.current
+    const session = runSessions.get(sourceWsId) || { next: 1, records: [] }
+    runSessions.set(sourceWsId, session)
+    const runNumber = session.next++
+    const startedAt = new Date().toISOString()
+    const recordRun = result => {
+      const record = { number: runNumber, startedAt, code: sourceCode, status: result.error ? 'error' : 'done', ...result }
+      session.latest = record
+      session.records = [record, ...session.records]
+      setLatestRun(record); setRunHistory(session.records)
+    }
+    const ownsRequest = () => request === runRequest.current && sourceWsId === wsIdRef.current
+    const isCurrent = () => ownsRequest() && sourceCode === codeRef.current
     const runSummary = summarizeGeneratedCode(code, [{ title: '当前代码' }], dataFiles)
     const plotSummary = runSummary.plotSummary || inferPlotSummary(code, [])
-    setRunning(true); setError(''); setImg(null)
+    setLatestRun({ number: runNumber, startedAt, code: sourceCode, status: 'running' })
+    setRunning(true); setError(''); setImg(null); setRunOutput('本次运行中，请稍候…'); setRunTime('')
     pushLog('core', '$ python3 main.py')
     // 首次运行需下载 Pyodide 运行时（约 10MB），给用户明确提示
     if (pyState !== 'ready') {
@@ -857,12 +810,15 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
     try {
       // 注入调参变量到 Pyodide 全局命名空间（代码中可直接使用 N / NOISE / DEGREE）
       const py = await getPyodide()
+      if (!isCurrent()) return
       mountDataFiles(py, dataFiles)
       if (dataFiles.length > 0) pushLog('core', `已挂载附件数据：${dataFiles.map((f) => f.path).join('，')}`)
       py.runPython(`N = ${P.N}\nNOISE = ${P.NOISE}\nDEGREE = ${P.DEGREE}`)
-      const r = await runPython(code)
+      const r = await runPython(sourceCode, { isCurrent })
+      if (!isCurrent() || !r) return
+      recordRun({ img: r.img, output: r.output || '', error: r.error || '', title: plotSummary.display || '运行结果图表' })
       setRunOutput(resultOutputFromRun(r.output, r.error))
-      if (r.error) setError(r.error)
+      if (r.error) { setError(r.error); setOutOpen(true) }
       const out = (r.output || '').trim()
       if (out) {
         for (const ln of out.split('\n')) pushLog(ln.startsWith('===') || /错误|Error/i.test(ln) ? 'err' : 'ok', ln)
@@ -874,15 +830,24 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
         pushLog('ok', '✓ 图表已生成 → /plot.png')
       } else {
         setChartInfo(plotSummary)
-        setChartTitle(plotSummary.display || '（代码未保存图表，右侧显示上一次结果）')
+        setChartTitle(plotSummary.display || '本次未生成图像')
       }
       pushLog(r.error ? 'err' : 'ok', (r.error ? '运行结束，但代码有错误 ' : '运行完成 ') + new Date().toTimeString().slice(0, 8))
     } catch (e) {
-      setRunOutput('')
+      if (!isCurrent()) return
+      recordRun({ img: null, output: '', error: e.message, title: '运行失败' })
+      setRunOutput(resultOutputFromRun('', e.message)); setOutOpen(true)
       setError(e.message)
       pushLog('err', '运行失败：' + e.message)
     } finally {
+      if (!ownsRequest()) return
       setRunning(false)
+      if (!isCurrent()) {
+        setLatestRun({ number: runNumber, startedAt, code: sourceCode, status: 'stale' })
+        setRunOutput('代码已修改，本次旧运行结果未应用；请重新运行当前代码')
+        pushLog('core', '代码已修改，旧运行结果不再应用；请运行当前代码')
+        return
+      }
       setRunTime(new Date().toTimeString().slice(0, 8))
       // 日志自动滚到底，让用户看到最新输出
       requestAnimationFrame(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight })
@@ -895,6 +860,24 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
     setParams(next)
     clearTimeout(runTimer.current)
     runTimer.current = setTimeout(() => doRun(next), 500)
+  }
+
+  function deleteSelectedRuns() {
+    const session = runSessions.get(wsIdRef.current)
+    if (!session || !selectedRuns.size) return
+    const removed = session.records.filter(record => selectedRuns.has(record.number))
+    session.records = session.records.filter(record => !selectedRuns.has(record.number))
+    setRunHistory(session.records); setSelectedRuns(new Set())
+    setDeletedRuns({ workspaceId: wsIdRef.current, records: removed })
+    if (historyImage && selectedRuns.has(historyImage.number)) { setImgModal(false); setHistoryImage(null) }
+  }
+  function undoDeletedRuns() {
+    if (!deletedRuns || deletedRuns.workspaceId !== wsIdRef.current) return
+    const session = runSessions.get(wsIdRef.current)
+    const keep = new Map(session.records.map(record => [record.number, record]))
+    for (const record of deletedRuns.records) keep.set(record.number, record)
+    session.records = [...keep.values()].sort((a, b) => b.number - a.number)
+    setRunHistory(session.records); setDeletedRuns(null)
   }
 
   /** 产出区最大化/还原（一键切换宽度，优先看结果时用） */
@@ -944,6 +927,7 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
     if (!settings.apiKey) return setError('请先在「模型设置」配置 API Key')
     if (selected.size === 0) return setError('请至少选择一个拆解块')
     setGenOpen(false); setBusyAction('AI生成'); setRunning(true); setError('')
+    const isCurrent = beginAiRequest()
     const chosen = breakdown.filter((_, i) => selected.has(i))
     const blocksDesc = chosen.map((b) => {
       const idea = typeof b.idea === 'string' ? b.idea : (b.body || '')
@@ -962,35 +946,48 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
     setGenPreview({ title: '✨ AI 生成代码中…（实时输出）', content: '' })
     try {
       let content = ''
+      let finishReason = null
       // RAG：检索与建模环节相关的获奖论文方法知识，注入生成提示
       const hits = await retrieveKnowledge(blocksDesc || genText, settings, 3)
+      if (!isCurrent()) return
       const kbContext = formatKnowledgeContext(hits)
       const msgs = [
         { role: 'system', content: GEN_SYSTEM + DATA_PROMPT + kbContext },
         { role: 'user', content: user },
       ]
       try {
-        await streamChat(settings, msgs, { onDelta: (t) => { content = t; setGenPreview((p) => (p ? { ...p, content: t } : p)) } })
+        await streamChat(settings, msgs, {
+          onDelta: (t) => { content = t; if (isCurrent()) setGenPreview((p) => (p ? { ...p, content: t } : p)) },
+          onFinish: (reason) => { finishReason = reason },
+        })
+        if (!isCurrent()) return
       } catch (e) {
+        if (!isCurrent()) return
         // 流式失败：降级为非流式重试（去掉 RAG 上下文，减小失败面）
         const r = await chat(settings, [
           { role: 'system', content: GEN_SYSTEM + DATA_PROMPT },
           { role: 'user', content: user },
         ])
+        if (!isCurrent()) return
         content = r.content || ''
+        finishReason = r.finishReason || null
       }
-      if (!content.trim()) {
+      if (!content.trim() && (!finishReason || finishReason === 'stop')) {
         // 流式返回空：再次非流式重试
         const r = await chat(settings, [
           { role: 'system', content: GEN_SYSTEM + DATA_PROMPT },
           { role: 'user', content: user },
         ])
+        if (!isCurrent()) return
         content = r.content || ''
+        finishReason = r.finishReason || null
       }
+      const interrupted = Boolean(finishReason && finishReason !== 'stop')
+      const finishHint = interrupted ? (GENERATION_FINISH_HINTS[finishReason] || `模型以 ${finishReason} 结束，代码可能不完整`) : ''
       let c = extractCode(content)
       if (c) {
         let issues = codeQualityIssues(c)
-        if (issues.length > 0) {
+        if (!interrupted && issues.length > 0) {
           setLog((prev) => [...prev, { time: now(), cls: 'core', text: `生成代码有语法风险，正在自动修复：${issues.join('；')}` }])
           try {
             const repaired = await chat(settings, [
@@ -1003,44 +1000,57 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
                 content: `下面代码疑似不能直接运行，请修复这些问题：\n${issues.join('\n')}\n\n代码：\n\`\`\`python\n${c}\n\`\`\``,
               },
             ])
+            if (!isCurrent()) return
             const fixed = extractCode(repaired.content || '')
             if (fixed && codeQualityIssues(fixed).length <= issues.length) {
               c = fixed
               issues = codeQualityIssues(c)
             }
           } catch (repairError) {
+            if (!isCurrent()) return
             setLog((prev) => [...prev, { time: now(), cls: 'err', text: `自动修复失败：${repairError.message}` }])
           }
         }
         const commentIssues = codeCommentLanguageIssues(c)
-        if (commentIssues.length > 0) {
+        if (!interrupted && commentIssues.length > 0) {
           setLog((prev) => [...prev, { time: now(), cls: 'core', text: '检测到英文代码批注，正在自动改成中文…' }])
           try {
             const localized = await localizeCodeComments(c, settings)
+            if (!isCurrent()) return
             c = localized.code
             issues = codeQualityIssues(c)
             if (localized.issues.length > 0) {
               setLog((prev) => [...prev, { time: now(), cls: 'err', text: `仍有少量批注建议人工检查：${localized.issues.join('；')}` }])
             }
           } catch (localizeError) {
+            if (!isCurrent()) return
             setLog((prev) => [...prev, { time: now(), cls: 'err', text: `批注中文化失败：${localizeError.message}` }])
           }
         }
         applyCode(c)
         setGenInfo({ action: '生成', source: chosen.map((b) => b.title).join('、') || '未选拆解块', lines: c.split('\n').length, time: now(), summary: summarizeGeneratedCode(c, chosen, dataFiles) })
         setSelected(new Set()); setGenText('')
-        setLog((prev) => [...prev, { time: now(), cls: issues.length ? 'err' : 'ok', text: issues.length ? `代码已生成，但仍建议先检查：${issues.join('；')}` : '✓ 代码已生成，点击「运行」执行' }])
+        if (interrupted) {
+          setError(`生成未完成：${finishHint}。已保留当前代码供检查，请勿将其视为可运行结果。`)
+          setLog((prev) => [...prev, { time: now(), cls: 'err', text: `生成未完成（${finishReason}）：${finishHint}${issues.length ? `；${issues.join('；')}` : ''}` }])
+        } else {
+          setLog((prev) => [...prev, { time: now(), cls: issues.length ? 'err' : 'ok', text: issues.length ? `代码已生成，但仍建议先检查：${issues.join('；')}` : '✓ 代码已生成，点击「运行」执行' }])
+        }
       } else {
+        if (interrupted) setError(`生成未完成：${finishHint}。模型没有返回可保存的代码。`)
         // 诊断：AI 返回内容长度 + 前 200 字符，帮助区分"空返回"与"格式不符"
         const preview = (content || '').trim()
         const snippet = preview ? preview.slice(0, 200).replace(/\n/g, '⏎') : '（空）'
-        setLog((prev) => [...prev, { time: now(), cls: 'err', text: `AI 未返回有效代码。返回内容 ${preview.length} 字符，开头：${snippet}` }])
+        setLog((prev) => [...prev, { time: now(), cls: 'err', text: `${interrupted ? `生成未完成（${finishReason}）。` : ''}AI 未返回有效代码。返回内容 ${preview.length} 字符，开头：${snippet}` }])
         if (preview) setGenPreview({ title: '⚠️ AI 返回内容（未解析为代码）', content: preview })
       }
     } catch (e) {
+      if (!isCurrent()) return
       setError(e.message)
       setLog((prev) => [...prev, { time: now(), cls: 'err', text: '生成失败：' + e.message }])
     }
+    if (!isCurrent()) return
+    aiPending.current = false
     setGenPreview(null)
     setRunning(false)
   }
@@ -1048,6 +1058,7 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
   async function improveCode() {
     setBusyAction('AI改进')
     if (!settings.apiKey) return setError('请先在「模型设置」配置 API Key')
+    const isCurrent = beginAiRequest()
     setRunning(true); setError('')
     setLog((prev) => [...prev, { time: now(), cls: 'core', text: '✨ AI 改进代码中…' }])
     setGenPreview({ title: '✨ AI 改进代码中…（实时输出）', content: '' })
@@ -1055,17 +1066,21 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
       let content = ''
       const msgs = [
         { role: 'system', content: IMPROVE_SYSTEM },
-        { role: 'user', content: `当前代码：\n\`\`\`python\n${code}\n\`\`\`` },
+        { role: 'user', content: `${runtimeRepairContext(latestRun, code, dataFiles)}\n\n当前代码：\n\`\`\`python\n${code}\n\`\`\`` },
       ]
       try {
-        await streamChat(settings, msgs, { onDelta: (t) => { content = t; setGenPreview((p) => (p ? { ...p, content: t } : p)) } })
+        await streamChat(settings, msgs, { onDelta: (t) => { content = t; if (isCurrent()) setGenPreview((p) => (p ? { ...p, content: t } : p)) } })
+        if (!isCurrent()) return
       } catch (e) {
+        if (!isCurrent()) return
         // 流式失败：降级为非流式重试
         const r = await chat(settings, msgs)
+        if (!isCurrent()) return
         content = r.content || ''
       }
       if (!content.trim()) {
         const r = await chat(settings, msgs)
+        if (!isCurrent()) return
         content = r.content || ''
       }
       const c = extractCode(content)
@@ -1076,7 +1091,9 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
           setLog((prev) => [...prev, { time: now(), cls: 'core', text: '检测到英文代码批注，正在自动改成中文…' }])
           try {
             nextCode = (await localizeCodeComments(nextCode, settings)).code
+            if (!isCurrent()) return
           } catch (localizeError) {
+            if (!isCurrent()) return
             setLog((prev) => [...prev, { time: now(), cls: 'err', text: `批注中文化失败：${localizeError.message}` }])
           }
         }
@@ -1087,9 +1104,12 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
         setLog((prev) => [...prev, { time: now(), cls: 'err', text: 'AI 未返回有效代码（输出不是可识别的 Python 代码块）' }])
       }
     } catch (e) {
+      if (!isCurrent()) return
       setError(e.message)
       setLog((prev) => [...prev, { time: now(), cls: 'err', text: '改进失败：' + e.message }])
     }
+    if (!isCurrent()) return
+    aiPending.current = false
     setGenPreview(null)
     setRunning(false)
   }
@@ -1108,10 +1128,12 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
       setError('已中文化常见批注；仍有少量英文批注需要配置 API Key 后再自动处理')
       return
     }
+    const isCurrent = beginAiRequest()
     setRunning(true); setError('')
     pushLog('core', '正在中文化代码批注…')
     try {
       const localized = await localizeCodeComments(code, settings)
+      if (!isCurrent()) return
       applyCode(localized.code)
       const left = localized.issues.length
       if (left > 0) {
@@ -1121,11 +1143,12 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
         pushLog('ok', '✓ 代码批注已中文化')
       }
     } catch (e) {
+      if (!isCurrent()) return
       applyCode(local)
       setError('批注中文化失败：' + e.message)
       pushLog('err', '批注中文化失败：' + e.message)
     } finally {
-      setRunning(false)
+      if (isCurrent()) { aiPending.current = false; setRunning(false) }
     }
   }
 
@@ -1195,19 +1218,19 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
       {/* 左 50%：代码区 */}
       <section className="code-pane">
         <div className="code-head">
-          <span className="panel-tag" style={{ fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '.12em', color: 'var(--primary)', textTransform: 'uppercase' }}>代码区 · Python</span>
+          <span className="panel-tag" style={{ fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '.12em', color: 'var(--coding)', textTransform: 'uppercase' }}>代码区 · Python</span>
           <div className="code-head-spacer" style={{ flex: 1 }} />
           <div className="code-actions">
           <button className="btn btn-primary btn-sm" onClick={() => setGenOpen(true)} disabled={running}><IconSparkles size={13} /> AI生成</button>
           <button className="btn btn-ghost btn-sm" onClick={improveCode} disabled={running}><IconSparkles size={13} /> AI改进</button>
           <button className="btn btn-ghost btn-sm" onClick={localizeCurrentCodeComments} disabled={running || !code.trim()}>中文化批注</button>
-          <button className="btn btn-ghost btn-sm" onClick={doRun} disabled={running}>{running && busyAction === '运行' ? '运行中…' : <><IconPlay size={13} /> 运行</>}</button>
+          <button className="btn btn-ghost btn-sm btn-run" onClick={doRun} disabled={running}>{running && busyAction === '运行' ? '运行中…' : <><IconPlay size={13} /> 运行</>}</button>
           </div>
         </div>
 
         <div className="editor-wrap">
           <div className="ed-tabs">
-            <div className="ed-tab active"><span className="ed-dot" />main.py</div>
+            <div className="ed-tab active"><span className={`ed-dot save-${saveStatus}`} title={{pending:'修改待保存',saving:'正在保存',saved:'已保存到工作区',error:'保存失败'}[saveStatus] || 'main.py'} />main.py</div>
           </div>
           <div className="editor">
             <div className="gutter">{gutter}</div>
@@ -1217,18 +1240,22 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
                   这里先是空白的。直接输入代码，或者点右上角「AI生成」。
                 </div>
               )}
+              <div className="code-layers">
+              <pre className="code-highlight" aria-hidden="true" dangerouslySetInnerHTML={{ __html: hl + '\n' }} />
               <pre
                 ref={editRef}
                 className="code"
-                contentEditable
+                contentEditable="plaintext-only"
+                role="textbox"
+                aria-label="Python 代码"
+                aria-multiline="true"
                 suppressContentEditableWarning
                 spellCheck={false}
                 onInput={onEditInput}
-                onBlur={onBlurCode}
                 onKeyDown={onKeyDownCode}
                 onPaste={onPasteCode}
-                dangerouslySetInnerHTML={{ __html: hl }}
               />
+              </div>
               {activeCodeLine && (
                 <div
                   className="code-line-flash"
@@ -1239,7 +1266,7 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
             </div>
           </div>
           <div className="ed-status">
-            <span className="ok">●</span> Python · Pyodide
+            <span className={`save-indicator save-${saveStatus}`}>●</span><span className="ed-save-state" role="status">Python · {{pending:'待保存',saving:'保存中…',saved:'已保存',error:'保存失败'}[saveStatus] || 'Pyodide'}</span>
             <span>Ln {lineCount}, Col 1</span>
             <span className={`ed-activity ${running ? 'busy' : pyState === 'error' ? 'failed' : ''}`} aria-live="polite">{activityText}</span>
           </div>
@@ -1264,7 +1291,7 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
         {/* AI 生成/改进流式预览（覆盖编辑器，实时显示输出） */}
         {genPreview && (
           <div className="gen-preview">
-            <div className="gen-preview-head">{genPreview.title}</div>
+            <div className="gen-preview-head">{genPreview.title}<span className="gen-preview-phase" role="status">{genPreview.content ? '正在接收代码…' : '等待模型响应…'}</span></div>
             <pre className="gen-preview-body">{genPreview.content || '等待 AI 输出…'}</pre>
           </div>
         )}
@@ -1284,12 +1311,13 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
       {/* 右 50%：可视化 */}
       <section className="out-pane">
         <div className="out-pane-head">
-          <span className="panel-tag" style={{ fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '.12em', color: 'var(--primary)', textTransform: 'uppercase' }}>产出区 · 运行结果</span>
+          <span className="panel-tag" style={{ fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '.12em', color: 'var(--teal)', textTransform: 'uppercase' }}>产出区 · 运行结果</span>
           <button className="out-max-btn" onClick={toggleOutMax} title={outMax ? '还原分栏宽度' : '最大化产出区（看结果更方便）'}>
             {outMax ? '⇥ 还原' : '⇤ 最大化'}
           </button>
         </div>
-        {error && <div className="alert error">{error}</div>}
+        {error && <div className="alert error" role="alert">{error}{latestRun?.error && <button type="button" className="btn btn-ghost btn-sm" onClick={improveCode} disabled={running} title="将当前代码及最近一次运行的错误和输出发送给已配置模型">用本次错误修复代码</button>}</div>}
+        {latestRun && <div className="latest-run-status" role="status">第 {latestRun.number} 次运行 · {new Date(latestRun.startedAt).toLocaleString('zh-CN', { hour12: false })} · {latestRun.status === 'running' ? '运行中' : latestRun.status === 'stale' ? '结果未应用' : latestRun.error ? '运行失败' : '运行完成'}{latestRun.code !== code && ' · 代码已修改，请重新运行'}</div>}
 
         <div className="flow-card">
           {steps.map((s, i) => (
@@ -1302,8 +1330,8 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
 
         {/* AI 生成/改进详情 */}
         {(genInfo || currentCodeSummary) && (
-          <div className="gen-info-card guide-card">
-            <div className="gen-info-head"><IconSparkles size={13} /> {genInfo ? `AI ${genInfo.action}完成` : '当前代码导读'}</div>
+          <details className="gen-info-card guide-card" open={!runTime}>
+            <summary className="gen-info-head"><IconSparkles size={13} /> {genInfo ? `AI ${genInfo.action}完成 · 代码导读` : '当前代码导读'}<span className="guide-disclosure hint">展开 / 收起</span></summary>
             <div className="gen-info-grid">
               <div className="gen-info-item"><span className="gi-label">状态</span><b>{running ? activityText : error ? '需要检查' : runTime ? '已运行' : genInfo ? genInfo.action : '待运行'}</b></div>
               <div className="gen-info-item"><span className="gi-label">代码</span><b>{genInfo?.lines || lineCount} 行</b></div>
@@ -1351,7 +1379,7 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
                 )}
               </div>
             )}
-          </div>
+          </details>
         )}
 
         {/* 运行输出（print 结果，醒目展示，可展开） */}
@@ -1419,7 +1447,7 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
           <div className="chart-head">
             <div className="chart-title-left">
               <h3 style={{ display: 'flex', alignItems: 'center', gap: 6 }}><IconChart size={15} /> 运行结果图表</h3>
-              {img && error ? (
+              {latestRun?.status === 'running' ? <span className="chart-badge idle">运行中</span> : latestRun?.error && !img ? <span className="chart-badge warn">本次运行失败</span> : img && error ? (
                 <span className="chart-badge warn">有图但中断</span>
               ) : img ? (
                 <span className="chart-badge ok">● 已生成</span>
@@ -1429,7 +1457,7 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
                 <span className="chart-badge idle">○ 等待运行</span>
               )}
             </div>
-            {img && <button ref={chartZoomTrigger} className="chart-zoom" onClick={() => setImgModal(true)} title="点击放大查看图表"><IconZoomIn size={13} /> 放大</button>}
+            {img && <button ref={chartZoomTrigger} className="chart-zoom" onClick={() => { setHistoryImage(null); setImgModal(true) }} title="点击放大查看图表"><IconZoomIn size={13} /> 放大</button>}
           </div>
           {img && (
             <div className="chart-params">
@@ -1444,7 +1472,7 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
             ) : (
               <div className="chart-empty">
                 <div className="chart-empty-ic"><IconChart size={36} /></div>
-                {currentCodeSummary?.hasPrint && !currentCodeSummary.hasPlotTarget ? (
+                {latestRun?.error ? <><div className="chart-empty-text">本次运行失败，未生成图像</div><div className="chart-empty-hint">请查看上方错误和运行输出；历史成功图不代表本次运行成功。</div></> : currentCodeSummary?.hasPrint && !currentCodeSummary.hasPlotTarget ? (
                   <>
                     <div className="chart-empty-text">这段代码主要输出文字或表格</div>
                     <div className="chart-empty-hint">运行后先看上方「运行输出」；这里没有图不代表失败</div>
@@ -1460,14 +1488,27 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
           </div>
         </div>
 
+        {(runHistory.length > 0 || deletedRuns) && <section className="run-history" aria-label="历次运行对比">
+          <h3>历次运行 <span className="hint">本次打开期间 · 按工作区保留</span></h3>
+          <div className="history-actions"><span>已选 {selectedRuns.size} 条</span><button type="button" className="btn btn-ghost btn-sm" disabled={!selectedRuns.size} onClick={deleteSelectedRuns}>删除所选记录</button></div>
+          {deletedRuns && <div role="status">已删除 {deletedRuns.records.length} 条历史记录，当前结果与代码保留。<button type="button" className="btn btn-ghost btn-sm" onClick={undoDeletedRuns}>撤销删除</button></div>}
+          {runHistory.map(record => <div className="run-history-entry" key={record.number}><input type="checkbox" aria-label={'选择第 ' + record.number + ' 次运行'} checked={selectedRuns.has(record.number)} onChange={event => setSelectedRuns(previous => { const next = new Set(previous); event.target.checked ? next.add(record.number) : next.delete(record.number); return next })} /><details className="run-history-item">
+            <summary>第 {record.number} 次运行 <time dateTime={record.startedAt}>{new Date(record.startedAt).toLocaleString('zh-CN', { hour12: false })}</time><span>{record.error ? '运行失败' : record.img ? '已生成图像' : '无图像输出'}</span></summary>
+            {record.img && <><button type="button" className="btn btn-ghost btn-sm" onClick={() => { setHistoryImage(record); setImgModal(true) }}>放大第 {record.number} 次图像</button><img src={record.img} alt={'第 ' + record.number + ' 次运行图像'} loading="lazy" /></>}
+            {record.error && <p className="alert error">{record.error}</p>}
+            {!record.img && !record.error && <p className="hint">本次没有生成图像。</p>}
+          </details></div>)}
+        </section>}
+
       </section>
 
       {/* AI 生成弹窗 */}
       {genOpen && (
         <div className="scrim" onClick={() => setGenOpen(false)}>
-          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+          <div className="sheet generation-sheet" role="dialog" aria-modal="true" aria-label="生成代码" onClick={(e) => e.stopPropagation()}>
             <h2>生成代码</h2>
             <p className="sub">先选要解决的拆解块，再说明希望运行后看到什么结果。</p>
+            <div className="generation-sheet-body">
             <div className="fgroup-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
               <span>① 选择拆解块 <span style={{ color: 'var(--primary)', fontFamily: 'var(--mono)' }}>已选 {selected.size} / {breakdown.length || 0}</span></span>
               <span style={{ display: 'flex', gap: 6 }}>
@@ -1495,6 +1536,7 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
             </div>
             <div className="fgroup-title">② 希望代码产出什么</div>
             <textarea className="nlp-input" value={genText} onChange={(e) => setGenText(e.target.value)} placeholder="例如：分别读取三个表，输出风化前后统计表和分类结果；如果画图，把关键对比合成到一张图里。" />
+            </div>
             <div className="sheet-actions">
               <button className="btn btn-ghost" onClick={() => setGenOpen(false)}>取消</button>
               <button className="btn btn-primary" onClick={generateCode} disabled={running || selected.size === 0}>生成</button>
@@ -1504,15 +1546,15 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
       )}
 
       {/* 图表放大模态 */}
-      {imgModal && img && (
+      {imgModal && (historyImage?.img || img) && (
         <div className="scrim" onClick={() => setImgModal(false)}>
           <div className="img-modal" role="dialog" aria-modal="true" aria-label="运行结果图表放大" onClick={(e) => e.stopPropagation()}>
             <div className="img-modal-head">
-              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><IconChart size={15} /> {chartTitle || plotSummary?.display || '运行结果图表'}</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><IconChart size={15} /> {historyImage ? '第 ' + historyImage.number + ' 次运行 · ' + new Date(historyImage.startedAt).toLocaleString('zh-CN') : chartTitle || plotSummary?.display || '运行结果图表'}</span>
               <button ref={chartModalClose} className="btn btn-ghost btn-sm" onClick={() => setImgModal(false)}><IconClose size={13} /> 关闭</button>
             </div>
             <div className="img-modal-body">
-              <img src={img} alt="运行结果放大" />
+              <img src={historyImage?.img || img} alt="运行结果放大" />
             </div>
           </div>
         </div>

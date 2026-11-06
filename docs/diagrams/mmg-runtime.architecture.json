@@ -16,7 +16,7 @@
         "id": "main-conversation",
         "label": "主对话链路",
         "focus": ["users", "web_app", "api_relay", "llm_provider"],
-        "note": "用户请求从 React 前端进入 Express 中继，再由 BYOK 调用外部模型并流式返回。"
+        "note": "用户请求从 React 前端进入 Express 中继，再由 BYOK 调用外部模型；读题台默认仅送表格前三行，用户可单次选择符合边界的小表保留行。流式内容与结束原因回传浏览器。"
       },
       {
         "id": "knowledge-retrieval",
@@ -34,7 +34,7 @@
         "id": "workspace-data",
         "label": "工作区数据",
         "focus": ["web_app", "api_relay", "file_parser", "workspace_db"],
-        "note": "CSV 在 5MB、2 万行内全量解析；附件与题干保存成功后才标记完成，避免立即刷新丢失。XLSX 仍只保留前 100 行，表格由浏览器挂载到 Pyodide。"
+        "note": "CSV 在 5MB、2 万行内全量解析；附件与题干保存成功后才标记完成。XLSX 仍只保留前 100 行；读题台可单次选择小表的已保留行作为模型上下文，不能称原文件完整。"
       },
       {
         "id": "example-library",
@@ -106,7 +106,7 @@
       "id": "api_relay",
       "type": "backend",
       "label": "Express 服务",
-      "sublabel": "API 中继 + SSE",
+      "sublabel": "API 中继 + 结束原因",
       "pos": [550, 280],
       "size": [180, 76],
       "tag": "Node.js :3088",
@@ -251,7 +251,7 @@
       "id": "web-to-api",
       "from": "web_app",
       "to": "api_relay",
-      "label": "JSON / SSE / 备份 + Key",
+      "label": "JSON / SSE + 单次选表 + Key",
       "variant": "emphasis"
     },
     {
@@ -307,7 +307,7 @@
       "id": "api-to-llm",
       "from": "api_relay",
       "to": "llm_provider",
-      "label": "SSE 中继",
+      "label": "有界表格上下文 / SSE",
       "variant": "security"
     }
   ],
@@ -317,7 +317,7 @@
       "title": "浏览器与用户",
       "items": [
         "用户从范例目录阅读题干并预览、下载附件",
-        "题目与附件进入读题工作台",
+        "题目与附件进入读题工作台；整表保留行需用户本次显式选择",
         "建模思路通过苏格拉底对话沉淀",
         "Python 代码与图表由 Pyodide 在浏览器内完成"
       ]
@@ -326,7 +326,7 @@
       "dot": "emerald",
       "title": "服务端与知识库",
       "items": [
-        "Express 提供 BYOK 中继与 SSE 流式响应",
+        "Express 提供 BYOK 中继，SSE 增量与结束原因",
         "服务端解析 PDF、Excel、CSV 和 TXT，SQLite 保存工作区；备份导入校验版本并新建 ID",
         "构建时只复制已核许可的正式题题干与附件，评分资产不进入静态目录",
         "RAG 返回论文、方法和卡片片段，由前端组装 prompt"
@@ -337,7 +337,7 @@
       "title": "信任边界",
       "items": [
         "安全上下文中 API Key 使用 AES-GCM；局域网 HTTP 会明文降级并告警",
-        "服务端按请求中转，不持久化 Key；工作区备份不包含 Key",
+        "服务端按请求中转，不持久化 Key；未选表格仍只发送前三行，已选小表限制行列和字节数",
         "Pyodide 代码执行不离开浏览器"
       ]
     }

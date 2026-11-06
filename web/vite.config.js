@@ -20,5 +20,13 @@ export default defineConfig({
   build: {
     outDir: path.join(webDir, 'dist'),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        // Keep the math renderer separate from application code. Besides
+        // improving caching, this avoids esbuild's >1 MiB temporary-input path
+        // that fails with Access is denied on this Windows environment.
+        manualChunks: { 'math-renderer': ['katex'] },
+      },
+    },
   },
 })

@@ -18,3 +18,15 @@ test('仍提示未包进注释或字符串的中文说明', () => {
   const issues = codeQualityIssues('value = 1  # 合法注释\n下面是分析：\nresult = 2')
   assert.deepEqual(issues, ['第 2 行像是裸中文说明，不是 Python 语句'])
 })
+
+test('G09 截断字典样本提示未闭合，不把字符串或注释里的括号计入', () => {
+  const cut = [
+    "print('5.5 留一法稳健性检查（去掉单个信标后重估）')",
+    'loo_rows = []',
+    'for i in range(n):',
+    "    loo_rows.append({'剔除信标': names[i], '重估x': np.nan,",
+    "                     'RMSE': np",
+  ].join('\n')
+  assert.deepEqual(codeQualityIssues(cut), ['第 4 行括号或字典/列表未闭合'])
+  assert.deepEqual(codeQualityIssues("values = [1, 2]  # }\nprint('(' + str(values[0]))"), [])
+})

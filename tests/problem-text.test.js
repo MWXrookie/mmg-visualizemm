@@ -3,6 +3,48 @@ import assert from 'node:assert/strict'
 
 import { analyzeProblemText, normalizeProblemText } from '../web/src/lib/problemText.js'
 
+test('PDF附件引用不是标题，短句不是副标题或强调导语，问题编号保持完整', () => {
+  const text = '商品说明\n\n附件 1 给出了某商超经销的6个蔬菜品类的信息；\n附件 4 给出了各商品近期的损耗率数据。\n\n问题 1 请分析各品类销量的分布规律。\n\n附件2：商品明细'
+  const result = analyzeProblemText(text, 'pdf', [{ num: 1, text }])
+  const page = result.sections[0]
+  assert.equal(page.title, '')
+  assert.equal(page.subtitle, '')
+  assert.equal(page.lead, '')
+  assert.deepEqual(page.items.filter((i) => i.type === 'section').map((i) => i.text), ['问题 1', '附件2：商品明细'])
+  assert.ok(page.items.some((i) => i.type === 'body' && i.text.includes('附件 1 给出了') && i.text.includes('附件 4 给出了')))
+  assert.ok(page.items.every((i) => i.type !== 'lead'))
+})
+
+test('PDF位置证据保留缩进段落，续行合并，标题与编号列表不缩进', () => {
+  const lines = [
+    { text: '文档标题', x: 170, y: 760, height: 18 },
+    { text: '背景说明的第一行，', x: 74, y: 720, height: 12 },
+    { text: '这里是同一段的续行。', x: 50, y: 702, height: 12 },
+    { text: '另一个段落，保留首行位置。', x: 74, y: 684, height: 12 },
+    { text: '问题1：分析关系', x: 50, y: 648, height: 12 },
+    { text: '(1) 检查缺失数据。', x: 74, y: 630, height: 12 },
+  ]
+  const text = lines.map((line) => line.text).join('\n')
+  const page = analyzeProblemText(text, 'pdf', [{ num: 1, text, lines }]).sections[0]
+  assert.equal(page.title, '文档标题')
+  const body = page.items.filter((i) => i.type === 'body')
+  assert.equal(body[0].text, '背景说明的第一行，这里是同一段的续行。')
+  assert.equal(body[0].indent, true)
+  assert.equal(body[1].indent, true)
+  assert.equal(body.at(-1).text, '(1) 检查缺失数据。')
+  assert.equal(body.at(-1).indent, false)
+  assert.equal(page.items.filter((i) => i.type === 'section').length, 2)
+})
+
+test('PDF列对齐行保留数字、空单元格与行边界，不误当标题或合并正文', () => {
+  const text = '样本表\n地区\t销量\t备注\n甲\t12\t\n乙\t0\t待核验\n\n问题1：比较销量'
+  const result = analyzeProblemText(text, 'pdf', [{ num: 1, text }])
+  const table = result.sections[0].items.find((item) => item.type === 'table')
+  assert.deepEqual(table.rows, [['地区', '销量', '备注'], ['甲', '12', ''], ['乙', '0', '待核验']])
+  assert.match(result.body, /甲\t12\t/)
+  assert.match(result.body, /比较销量/)
+})
+
 test('空文本返回稳定的空分析结构', () => {
   assert.deepEqual(analyzeProblemText('', 'text'), {
     raw: '',

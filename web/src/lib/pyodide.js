@@ -2,9 +2,25 @@
  * - 动态从 CDN 加载 Pyodide（首次加载较慢；自托管离线场景受限，README 已注明）
  * - 捕获 stdout/stderr；约定：代码末尾 plt.savefig('/plot.png') 可自动回传图片
  */
+import { PYTHON_PACKAGES } from './pythonEnvironment.js'
 const PYODIDE_URL = 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js'
 
 let pyPromise = null
+let chineseFont = null
+async function configureChinesePlotFont(py) {
+  if (!chineseFont) chineseFont = fetch('/fonts/NotoSansSC.ttf').then(async response => {
+    if (!response.ok) throw new Error('本地中文绘图字体加载失败，请检查 fonts/NotoSansSC.ttf')
+    return new Uint8Array(await response.arrayBuffer())
+  }).catch(error => { chineseFont = null; throw error })
+  py.FS.writeFile('/NotoSansSC.ttf', await chineseFont)
+  py.runPython(`
+import matplotlib as _mmg_mpl
+from matplotlib import font_manager as _mmg_fm
+_mmg_fm.fontManager.addfont('/NotoSansSC.ttf')
+_mmg_mpl.rcParams['font.family'] = [_mmg_fm.FontProperties(fname='/NotoSansSC.ttf').get_name(), 'DejaVu Sans']
+_mmg_mpl.rcParams['axes.unicode_minus'] = False
+`)
+}
 
 /* ---------- 加载状态通知（供 UI 提示"正在下载 Python 环境"） ---------- */
 let pyState = 'idle' // idle | loading-script | loading-pyodide | ready | error
@@ -63,15 +79,9 @@ function bytesToBase64(bytes) {
 }
 
 /** 常用包预加载（Pyodide 需显式 loadPackage 才能 import；scikit-learn 的导入名是 sklearn） */
-const IMPORT_PACKAGES = {
-  numpy: 'numpy',
-  pandas: 'pandas',
-  matplotlib: 'matplotlib',
-  scipy: 'scipy',
-  sklearn: 'scikit-learn',
-}
+const IMPORT_PACKAGES = PYTHON_PACKAGES
 
-async function ensurePackages(py, code) {
+async function ensurePackages(py, code, onFailure = () => {}) {
   const imports = [...code.matchAll(/^\s*(?:import|from)\s+([a-zA-Z_]\w*)/gm)].map((m) => m[1])
   const need = new Set([...new Set(imports)].map((m) => IMPORT_PACKAGES[m]).filter(Boolean))
   // pandas 的秩相关计算会在函数内部导入 scipy；用户代码不一定显式 import scipy。
@@ -83,6 +93,7 @@ async function ensurePackages(py, code) {
       loaded.add(m)
     } catch (e) {
       console.warn(`[pyodide] 加载包 ${m} 失败：${e.message}`)
+      onFailure(`[依赖加载失败] ${m}：${e.message}`)
     }
   }
   return loaded
@@ -104,16 +115,20 @@ function extractPythonRuntimeError(output) {
 
 /**
  * 运行 Python 代码
- * @returns {Promise<{output:string, img:string|null, error:string|null}>}
+ * isCurrent 用于加载期间作废已离开的任务；同步 Python 执行开始后不能中断。
+ * @returns {Promise<{output:string, img:string|null, error:string|null}|null>}
  */
-export async function runPython(code) {
+export async function runPython(code, { isCurrent = () => true } = {}) {
   const py = await getPyodide()
-  await ensurePackages(py, code)
-  try { py.FS.unlink('/plot.png') } catch { /* no previous plot */ }
+  if (!isCurrent()) return null
   const out = []
   const pushBatch = (s) => out.push(String(s).endsWith('\n') ? String(s) : `${s}\n`)
   py.setStdout({ batched: pushBatch })
   py.setStderr({ batched: pushBatch })
+  const packages = await ensurePackages(py, code, pushBatch)
+  if (packages.has('matplotlib')) await configureChinesePlotFont(py)
+  if (!isCurrent()) return null
+  try { py.FS.unlink('/plot.png') } catch { /* no previous plot */ }
 
   const wrapped = `
 import sys, traceback, warnings
