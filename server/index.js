@@ -12,6 +12,7 @@ import { Readable } from 'stream'
 import { createRequire } from 'module'
 import { randomUUID } from 'node:crypto'
 import ExcelJS from 'exceljs'
+import { pdfLayoutLines } from './pdf-layout.js'
 import { formatNetworkError, requestUpstream, responseText } from './upstream.js'
 
 // pdf-parse 2.x：导出 { PDFParse } 类（ESM 下用 createRequire 加载）
@@ -30,14 +31,23 @@ const WorksheetReader = require('exceljs/lib/stream/xlsx/worksheet-reader.js')
 async function parsePdfText(buffer) {
   const parser = new PDFParse({ data: buffer })
   try {
-    await parser.load()
+    const document = await parser.load()
     const info = await parser.getInfo({ parsePageInfo: true }).catch(() => null)
     const result = await parser.getText({ lineEnforce: true, pageJoiner: '\n\n-- page_number of total_number --\n\n' })
+    // PDF.js synthetic spaces can swallow column gaps before getText sees them.
+    // Use positioned items for the displayed pages; retain original extracted
+    // text for existing model/context behavior.
+    const layoutPages = []
+    for (const page of (result.pages || []).slice(0, 40)) {
+      const documentPage = await document.getPage(page.num)
+      const content = await documentPage.getTextContent()
+      const lines = pdfLayoutLines(content.items)
+      layoutPages.push({ num: page.num, text: lines.map((line) => line.text).join('\n') || String(page.text || '').trim(), lines })
+      documentPage.cleanup()
+    }
     return {
       text: (result && result.text) || '',
-      pages: Array.isArray(result?.pages)
-        ? result.pages.map((p) => ({ num: p.num, text: String(p.text || '').trim() }))
-        : [],
+      pages: layoutPages,
       total: Number(result?.total || info?.total || 0),
       info: info?.info || null,
     }
@@ -127,6 +137,7 @@ async function callChat({ baseUrl, apiKey, model, messages, maxTokens, proxyUrl 
     content,
     model: json.model,
     usage: json.usage || null,
+    finishReason: typeof json.choices[0].finish_reason === 'string' ? json.choices[0].finish_reason.slice(0, 64) : null,
   }
 }
 
@@ -170,7 +181,7 @@ app.post('/api/chat', async (req, res) => {
   }
   try {
     const r = await callChat({ baseUrl, apiKey, model, messages, proxyUrl })
-    res.json({ ok: true, content: r.content, model: r.model })
+    res.json({ ok: true, content: r.content, model: r.model, finishReason: r.finishReason })
   } catch (e) {
     res.status(400).json({ ok: false, code: e.code, message: e.message })
   }
@@ -224,6 +235,7 @@ app.post('/api/chat/stream', async (req, res) => {
     let buffer = ''
     let sseLen = 0 // 诊断：统计本次流式转发的总字符数
     let reasoningLen = 0 // 推理模型：统计 reasoning_content 字符数（思考过程，不转发给前端）
+    let finishReason = null
     for await (const chunk of upstream) {
       buffer += decoder.decode(chunk, { stream: true })
       let idx
@@ -235,6 +247,8 @@ app.post('/api/chat/stream', async (req, res) => {
         if (!data || data === '[DONE]') continue
         try {
           const obj = JSON.parse(data)
+          const reason = obj.choices?.[0]?.finish_reason
+          if (typeof reason === 'string') finishReason = reason.slice(0, 64)
           // 诊断：首次打印 chunk 结构，确认 delta 字段（content / reasoning_content / delta 等）
           if (process.env.DBG_SSE && !process.env.DBG_SSE_DONE) {
             console.log('[sse] 首个 chunk:', JSON.stringify(obj).slice(0, 400))
@@ -258,7 +272,7 @@ app.post('/api/chat/stream', async (req, res) => {
       res.end()
       return
     }
-    res.write(`data: ${JSON.stringify({ done: true })}\n\n`)
+    res.write(`data: ${JSON.stringify({ done: true, finishReason })}\n\n`)
     res.end()
   } catch (e) {
     const error = e.code === 'MODEL_ERROR' || e.code === 'INVALID_KEY' || e.code === 'QUOTA' || e.code === 'NOT_FOUND' || e.code === 'BAD_CONFIG' || e.code === 'PROXY_BAD_CONFIG'
@@ -472,8 +486,8 @@ app.post('/api/parse', async (req, res) => {
     }
     if (ext === '.pdf') {
       const pdf = await parsePdfText(buf)
-      const text = String(pdf.text || '').trim()
-      if (!text) return res.status(400).json({ ok: false, message: 'PDF 未能提取到文本（可能是扫描件，暂不支持 OCR）' })
+      const extracted = String(pdf.text || '').trim()
+      const text = extracted.replace(/^\s*--\s*\d+\s+of\s+\d+\s*--\s*$/gm, '').trim() ? extracted : ''
       return res.json({
         ok: true,
         type: 'text',
@@ -482,6 +496,7 @@ app.post('/api/parse', async (req, res) => {
         sourceKind: 'pdf',
         pages: Array.isArray(pdf.pages) ? pdf.pages.slice(0, 40) : [],
         totalPages: pdf.total || (Array.isArray(pdf.pages) ? pdf.pages.length : 0),
+        warning: text ? '' : '未提取到文字，可查看PDF原版；扫描件暂不支持OCR，AI尚不能读取其中内容。',
       })
     }
     if (ext === '.txt' || ext === '.md') {
@@ -496,6 +511,24 @@ app.post('/api/parse', async (req, res) => {
 })
 
 /* ---------- 工作区存储（三台共用数据层，SQLite，零依赖 node:sqlite） ---------- */
+// Render one requested page from original bytes, independent of text/table extraction.
+app.post('/api/pdf-preview', async (req, res) => {
+  let parser
+  try {
+    const source = normalizeProblemDocument(req.body?.document)
+    if (!source) return res.status(400).json({ ok: false, message: '缺少PDF原文件' })
+    const page = Number(req.body?.page || 1)
+    if (!Number.isInteger(page) || page < 1) return res.status(400).json({ ok: false, message: '页码无效' })
+    parser = new PDFParse({ data: Buffer.from(source.data, 'base64') })
+    const result = await parser.getScreenshot({ partial: [page], desiredWidth: 1400, imageDataUrl: true, imageBuffer: false })
+    const rendered = result.pages[0]
+    if (!rendered) return res.status(400).json({ ok: false, message: '页码超出原文件范围' })
+    res.json({ ok: true, total: result.total, page, image: rendered.dataUrl })
+  } catch (e) {
+    res.status(400).json({ ok: false, message: `原版预览失败：${e.message}` })
+  } finally { await parser?.destroy().catch(() => {}) }
+})
+
 import { DatabaseSync } from 'node:sqlite'
 
 // 测试和隔离部署可显式指定数据目录；默认行为仍保持为仓库根目录下的 data/。
@@ -535,6 +568,9 @@ if (!wsCols.includes('problem_source_kind')) {
 if (!wsCols.includes('problem_pages')) {
   db.exec(`ALTER TABLE workspaces ADD COLUMN problem_pages TEXT DEFAULT '[]'`)
 }
+if (!wsCols.includes('problem_document')) {
+  db.exec(`ALTER TABLE workspaces ADD COLUMN problem_document TEXT DEFAULT 'null'`)
+}
 if (currentDbSchemaVersion < WORKSPACE_SCHEMA_VERSION) {
   db.exec(`PRAGMA user_version = ${WORKSPACE_SCHEMA_VERSION}`)
 }
@@ -554,6 +590,7 @@ function workspaceFromRow(row) {
     problemText: row.problem_text,
     problemSourceKind: row.problem_source_kind || '',
     problemPages: parseJsonField(row.problem_pages),
+    problemDocument: parseJsonField(row.problem_document || 'null'),
     attachments: parseJsonField(row.attachments),
     breakdown: parseJsonField(row.breakdown),
     code: row.code,
@@ -561,6 +598,16 @@ function workspaceFromRow(row) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
+}
+
+// Store PDF bytes, never arbitrary URLs or executable HTML data URLs.
+function normalizeProblemDocument(value) {
+  if (value == null) return null
+  if (typeof value !== 'object' || typeof value.data !== 'string' || !/^[A-Za-z0-9+/]+={0,2}$/.test(value.data)
+    || !Buffer.from(value.data, 'base64').subarray(0, 1024).includes(Buffer.from('%PDF-'))) {
+    throw new Error('题干原文件必须是有效的PDF数据')
+  }
+  return { name: String(value.name || '题干.pdf').slice(0, 200), data: value.data }
 }
 
 function validateBackup(backup) {
@@ -608,6 +655,7 @@ function validateBackup(backup) {
     problemText: String(source.problemText || ''),
     problemSourceKind: String(source.problemSourceKind || ''),
     problemPages: source.problemPages || [],
+    problemDocument: normalizeProblemDocument(source.problemDocument),
     attachments: source.attachments || [],
     breakdown: source.breakdown || [],
     code: String(source.code || ''),
@@ -637,6 +685,7 @@ app.post('/api/workspaces', (req, res) => {
       title: has('title') ? String(b.title ?? '') : (existing?.title ?? ''),
       problem_text: has('problemText') ? String(b.problemText ?? '') : (existing?.problem_text ?? ''),
       problem_source_kind: has('problemSourceKind') ? String(b.problemSourceKind ?? '') : (existing?.problem_source_kind ?? ''),
+      problem_document: has('problemDocument') ? JSON.stringify(normalizeProblemDocument(b.problemDocument)) : (existing?.problem_document ?? 'null'),
       problem_pages: has('problemPages')
         ? JSON.stringify(Array.isArray(b.problemPages) ? b.problemPages : [])
         : (existing?.problem_pages ?? '[]'),
@@ -649,13 +698,13 @@ app.post('/api/workspaces', (req, res) => {
     }
     const createdAt = existing ? existing.created_at : now
     db.prepare(`
-      INSERT INTO workspaces (id, title, problem_text, problem_source_kind, problem_pages, attachments, breakdown, code, overview, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO workspaces (id, title, problem_text, problem_source_kind, problem_pages, attachments, breakdown, code, overview, created_at, updated_at, problem_document)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         title=excluded.title, problem_text=excluded.problem_text, problem_source_kind=excluded.problem_source_kind, problem_pages=excluded.problem_pages,
         attachments=excluded.attachments, breakdown=excluded.breakdown,
-        code=excluded.code, overview=excluded.overview, updated_at=excluded.updated_at
-    `).run(id, merged.title, merged.problem_text, merged.problem_source_kind, merged.problem_pages, merged.attachments, merged.breakdown, merged.code, merged.overview, createdAt, now)
+        code=excluded.code, overview=excluded.overview, updated_at=excluded.updated_at, problem_document=excluded.problem_document
+    `).run(id, merged.title, merged.problem_text, merged.problem_source_kind, merged.problem_pages, merged.attachments, merged.breakdown, merged.code, merged.overview, createdAt, now, merged.problem_document)
     res.json({ ok: true, id })
   } catch (e) {
     res.status(500).json({ ok: false, message: `保存失败：${e.message}` })
@@ -698,8 +747,8 @@ app.post('/api/workspaces/import', (req, res) => {
     const id = newWorkspaceId()
     const now = Date.now()
     db.prepare(`
-      INSERT INTO workspaces (id, title, problem_text, problem_source_kind, problem_pages, attachments, breakdown, code, overview, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO workspaces (id, title, problem_text, problem_source_kind, problem_pages, attachments, breakdown, code, overview, created_at, updated_at, problem_document)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       data.title,
@@ -712,6 +761,7 @@ app.post('/api/workspaces/import', (req, res) => {
       data.overview,
       now,
       now,
+      JSON.stringify(data.problemDocument),
     )
     const row = db.prepare('SELECT * FROM workspaces WHERE id = ?').get(id)
     res.status(201).json({ ok: true, id, schemaVersion: WORKSPACE_SCHEMA_VERSION, workspace: workspaceFromRow(row) })

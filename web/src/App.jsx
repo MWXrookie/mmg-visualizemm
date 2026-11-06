@@ -22,6 +22,7 @@ function workspacePayload(w) {
     problemText: w.problemText || '',
     problemSourceKind: w.problemSourceKind || '',
     problemPages: w.problemPages || [],
+    problemDocument: w.problemDocument || null,
     attachments: w.attachments || [],
     breakdown: w.breakdown || [],
     overview: w.overview || '',
@@ -34,14 +35,15 @@ function persist(w, unloading = false) {
   if (!w || !w.id) return
   const body = JSON.stringify(workspacePayload(w))
   if (!unloading) {
-    fetch('/api/workspaces', {
+    return fetch('/api/workspaces', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body,
-    }).then((response) => {
-      if (!response.ok) console.warn('[persist] 保存失败：HTTP', response.status)
-    }).catch((error) => console.warn('[persist] 保存失败：', error))
-    return
+    }).then(async (response) => {
+      if (!response.ok) throw new Error(`保存失败：HTTP ${response.status}`)
+      const result = await response.json()
+      if (result.ok === false) throw new Error(result.error || '保存未成功')
+    })
   }
   // keepalive 请求体有约 64KB 上限，大工作区在 pagehide 时直接走同步兜底。
   if (new TextEncoder().encode(body).byteLength <= 60 * 1024) {
@@ -73,8 +75,12 @@ export default function App() {
   const [ws, setWs] = useState(null) // 三台共享的工作区数据（题目/附件/拆解/代码）
   const [wsList, setWsList] = useState([]) // 工作区列表（侧栏切换/删除用）
   const [toast, setToast] = useState('') // 全局轻提示
+  const [saveState, setSaveState] = useState({ id: null, status: 'idle' })
+  const [saveRetry, setSaveRetry] = useState(0)
   const [wsDialog, setWsDialog] = useState(null) // {mode:'rename'|'delete', id, title, value}
   const [backupBusy, setBackupBusy] = useState(false)
+  const [workspaceCreating, setWorkspaceCreating] = useState(false)
+  const workspaceCreatingRef = useRef(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const mobileMenuButton = useRef(null)
 
@@ -161,9 +167,23 @@ export default function App() {
     if (!ws || !ws.id) { hadIdRef.current = false; return }
     const delay = hadIdRef.current ? 800 : 0
     hadIdRef.current = true
-    const t = setTimeout(() => persist(ws), delay)
-    return () => clearTimeout(t)
-  }, [ws])
+    let current = true
+    setSaveState({ id: ws.id, status: 'pending' })
+    const t = setTimeout(async () => {
+      setSaveState({ id: ws.id, status: 'saving' })
+      try {
+        await persist(ws)
+        if (!current) return
+        setSaveState({ id: ws.id, status: 'saved' })
+        setToast((previous) => previous === '拆解块修改已应用，正在保存…' ? '拆解块已保存到工作区' : previous)
+      } catch (error) {
+        console.warn('[persist] 保存失败：', error)
+        if (current) setSaveState({ id: ws.id, status: 'error' })
+      }
+    }, delay)
+    // A late acknowledgement must not describe a newer revision or another workspace.
+    return () => { current = false; clearTimeout(t) }
+  }, [ws, saveRetry])
 
   // 关闭/刷新页面时强刷保存
   useEffect(() => {
@@ -229,6 +249,11 @@ export default function App() {
 
   /** 新建空白工作区 */
   function newWorkspace() {
+    if (workspaceCreatingRef.current) return
+    workspaceCreatingRef.current = true
+    const trigger = document.activeElement
+    setWorkspaceCreating(true)
+    setToast('')
     saveWorkspace({ title: '未命名题目' }).then((r) => {
       wsIdRef.current = r.id
       wsRef.current = { id: r.id } // 异步状态提交前先对齐引用，避免紧接着的上传写进旧工作区
@@ -238,7 +263,14 @@ export default function App() {
       setWs({ id: r.id }) // 立即占位：wsId 效果检测到同 id 后跳过后端加载，避免覆盖后续上传
       refreshWsList()
       window.__notify?.('已新建工作区')
-    })
+    }).catch((error) => window.__notify?.(error.message || '新建失败，请重试'))
+      .finally(() => {
+        workspaceCreatingRef.current = false
+        setWorkspaceCreating(false)
+        requestAnimationFrame(() => {
+          if (document.activeElement === document.body && trigger instanceof HTMLElement && trigger.isConnected) trigger.focus({ preventScroll: true })
+        })
+      })
   }
 
   /** 重命名工作区 */
@@ -347,8 +379,24 @@ export default function App() {
   useEffect(() => { refreshWsList() }, [wsId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   /** 切换工作区 */
-  function switchWs(id) {
+  const switchSeqRef = useRef(0)
+  async function switchWs(id) {
     if (!id || id === wsIdRef.current) return
+    const sequence = ++switchSeqRef.current
+    setToast('正在保存并切换工作区…')
+    try {
+      // 离开前保存防抖窗口中的最新内容；保存期间继续输入则再保存更新后的快照。
+      let snapshot
+      do {
+        snapshot = wsRef.current
+        await persist(snapshot)
+        if (sequence !== switchSeqRef.current) return
+      } while (snapshot !== wsRef.current)
+    } catch (error) {
+      if (sequence === switchSeqRef.current) setToast(`${error.message}，仍留在当前工作区，请重试切换`)
+      return
+    }
+    setToast('')
     wsIdRef.current = id
     setWsId(id)
     setCurrentWsId(id)
@@ -364,6 +412,7 @@ export default function App() {
     ws,
     patchWs,
     patchWsAt,
+    saveStatus: saveState.id === ws?.id ? saveState.status : 'idle',
     onExpandSidebar: () => setWsCollapsed(false),
   }
 
@@ -387,7 +436,7 @@ export default function App() {
         {!wsCollapsed && <div className="sb-section sb-function-label">功 能</div>}
         <nav className="sb-nav" aria-label="主要功能">
           {VIEWS.map((v) => (
-            <button key={v.id} className={`nav-item ${view === v.id ? 'active' : ''}`} onClick={() => go(v.id)} title={v.label} aria-label={v.label} aria-current={view === v.id ? 'page' : undefined}>
+            <button key={v.id} data-view={v.id} className={`nav-item ${view === v.id ? 'active' : ''}`} onClick={() => go(v.id)} title={v.label} aria-label={v.label} aria-current={view === v.id ? 'page' : undefined}>
               <span className="ic">{v.icon}</span>
               {!wsCollapsed && <span className="nav-full-label">{v.label}</span>}
               {wsCollapsed && <span className="nav-rail-label" aria-hidden="true">{v.compactLabel.replace(/^\d\s/, '')}</span>}
@@ -402,7 +451,7 @@ export default function App() {
               {wsList.length === 0 && <div className="sb-ws-empty">暂无工作区</div>}
               {wsList.map((w) => (
                 <div key={w.id} className={`sb-ws-item ${wsId === w.id ? 'active' : ''}`}>
-                  <button className="sb-ws-main" onClick={() => { switchWs(w.id); closeMobileMenu() }} title={w.title || '未命名题目'} aria-current={wsId === w.id ? 'true' : undefined}>
+                  <button className="sb-ws-main" disabled={workspaceCreating} onClick={() => { switchWs(w.id); closeMobileMenu() }} title={w.title || '未命名题目'} aria-current={wsId === w.id ? 'true' : undefined}>
                     <span className="sb-ws-title">{w.title || '未命名题目'}</span>
                   </button>
                   <div className="sb-ws-actions">
@@ -411,7 +460,7 @@ export default function App() {
                   </div>
                 </div>
               ))}
-              <button className="sb-ws-new" onClick={() => { newWorkspace(); closeMobileMenu() }}>＋ 新建工作区</button>
+              <button className="sb-ws-new" disabled={workspaceCreating} onClick={() => { newWorkspace(); closeMobileMenu() }}>＋ 新建工作区</button>
               <div className="sb-ws-backup">
                 <button className="sb-ws-tool" onClick={exportCurrentWorkspace} disabled={backupBusy || !wsId}>
                   导出当前
@@ -448,9 +497,9 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="content" style={{ minWidth: 0, overflow: 'hidden' }}>
+      <main className="content" inert={workspaceCreating ? '' : undefined} aria-busy={workspaceCreating} style={{ minWidth: 0, overflow: 'hidden' }}>
         <div className={`page-view ${view === 'workbench' ? 'active' : ''}`}>
-          <Workbench {...pageProps} onNewWorkspace={newWorkspace} />
+          <Workbench {...pageProps} workspaceCreating={workspaceCreating} onNewWorkspace={newWorkspace} />
         </div>
         <div className={`page-view ${view === 'modeling' ? 'active' : ''}`}>
           <Modeling {...pageProps} />
@@ -459,7 +508,10 @@ export default function App() {
         {view === 'examples' && <Examples />}
         {view === 'settings' && <Settings settings={settings} setSettings={setSettings} />}
       </main>
-      {toast && <div className="toast" role="status">{toast}</div>}
+      {workspaceCreating ? <div className="toast" role="status">正在创建新工作区，请稍候…</div>
+        : saveState.id === ws?.id && saveState.status === 'error'
+          ? <div className="toast save-error" role="status"><span>工作区保存失败，当前修改仍保留</span><button type="button" onClick={() => setSaveRetry((count) => count + 1)}>重试保存</button></div>
+          : toast && <div className="toast" role="status">{toast}</div>}
       {wsDialog && (
         <div className="scrim" onClick={() => setWsDialog(null)}>
           <div className="sheet" onClick={(e) => e.stopPropagation()}>

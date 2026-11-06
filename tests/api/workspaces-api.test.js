@@ -4,8 +4,10 @@ import { spawn } from 'node:child_process'
 import { once } from 'node:events'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { createServer } from 'node:net'
+import { createServer as createHttpServer } from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
+import { pdfTableFixture } from '../support/document-pdf.js'
 
 const projectRoot = path.resolve(import.meta.dirname, '..', '..')
 let baseUrl = ''
@@ -62,6 +64,7 @@ before(async () => {
       PORT: String(port),
       MMG_DATA_DIR: testDataDir,
       MMG_FORCE_LOCAL_EMBEDDING: '1',
+      NO_PROXY: '127.0.0.1,localhost',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
@@ -172,6 +175,22 @@ test('健康检查和不存在的附件返回稳定状态', async () => {
   assert.deepEqual(missingAttachment.body, { ok: false, message: '工作区不存在' })
 })
 
+test('PDF原版按需渲染真实像素，无文字PDF仍可查看且不冒充OCR', async () => {
+  const bytes = pdfTableFixture({ empty: true })
+  const parsed = await request('/api/parse', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '无文字.pdf', data: bytes.toString('base64') }) })
+  assert.equal(parsed.response.status, 200)
+  assert.equal(parsed.body.text, '')
+  assert.match(parsed.body.warning, /不支持OCR/)
+  const rendered = await request('/api/pdf-preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ document: { data: bytes.toString('base64') }, page: 1 }) })
+  assert.equal(rendered.response.status, 200)
+  assert.equal(rendered.body.total, 1)
+  assert.match(rendered.body.image, /^data:image\/png;base64,/)
+  const image = Buffer.from(rendered.body.image.split(',')[1], 'base64')
+  assert.equal(image.readUInt32BE(16), 1400)
+  const invalid = await request('/api/pdf-preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ document: { data: 'https://example.invalid/private.pdf' }, page: 1 }) })
+  assert.equal(invalid.response.status, 400)
+})
+
 test('工作区备份带版本导出，并以新 ID 安全恢复', async () => {
   const sourceId = 'backup-source-workspace'
   const source = {
@@ -179,6 +198,7 @@ test('工作区备份带版本导出，并以新 ID 安全恢复', async () => {
     title: '待迁移工作区',
     problemText: '验证备份恢复。',
     problemSourceKind: 'pdf',
+    problemDocument: { name: '原题.pdf', data: pdfTableFixture().toString('base64') },
     problemPages: [{ no: 2, text: '第二页内容' }],
     attachments: [{ type: 'text', name: '说明.txt', text: '附件内容' }],
     breakdown: [{ title: '第一步', content: '校验数据' }],
@@ -212,6 +232,7 @@ test('工作区备份带版本导出，并以新 ID 安全恢复', async () => {
   assert.equal(imported.body.workspace.title, source.title)
   assert.equal(imported.body.workspace.problemText, source.problemText)
   assert.deepEqual(imported.body.workspace.problemPages, source.problemPages)
+  assert.deepEqual(imported.body.workspace.problemDocument, source.problemDocument)
   assert.deepEqual(imported.body.workspace.attachments, source.attachments)
   assert.deepEqual(imported.body.workspace.breakdown, source.breakdown)
   assert.equal(imported.body.workspace.code, source.code)
@@ -359,4 +380,41 @@ test('RAG 接口在强制本地模式下可构建、检索并报告状态', asyn
   assert.equal(stats.body.byType.method > 0, true)
   assert.equal(stats.body.byType.card > 0, true)
   assert.equal(stats.body.byType.paper > 0, true)
+})
+
+test('本地替身上游的完成原因经流式和整段接口透传', async () => {
+  const provider = createHttpServer(async (req, res) => {
+    const chunks = []
+    for await (const chunk of req) chunks.push(chunk)
+    if (req.url !== '/chat/completions') {
+      res.writeHead(404).end()
+      return
+    }
+    if (req.headers['content-type'] !== 'application/json') {
+      res.writeHead(400).end()
+      return
+    }
+    const body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+    if (body.stream) {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' })
+      res.end('data: {"choices":[{"delta":{"content":"print(1"},"finish_reason":null}]}\n\ndata: {"choices":[{"delta":{},"finish_reason":"length"}]}\n\ndata: [DONE]\n\n')
+    } else {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ model: 'local-mock', choices: [{ message: { content: 'print(1' }, finish_reason: 'length' }] }))
+    }
+  })
+  await new Promise((resolve) => provider.listen(0, '127.0.0.1', resolve))
+  const providerPort = provider.address().port
+  const payload = { baseUrl: `http://127.0.0.1:${providerPort}`, apiKey: 'local-test-only', model: 'local-mock', messages: [{ role: 'user', content: 'test' }] }
+  try {
+    const streamed = await request('/api/chat/stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+    assert.equal(streamed.response.status, 200)
+    assert.match(streamed.body, /"delta":"print\(1"/)
+    assert.match(streamed.body, /"done":true,"finishReason":"length"/)
+    const whole = await request('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+    assert.equal(whole.response.status, 200)
+    assert.equal(whole.body.finishReason, 'length')
+  } finally {
+    await new Promise((resolve) => provider.close(resolve))
+  }
 })

@@ -31,7 +31,13 @@ for (const raw of blocks) {
     title: grab('title'),
     tag: grab('tag'),
     concept: grab('concept'),
+    definition: grab('definition'),
     note: grab('note'),
+    when: grab('when'),
+    cautions: grab('cautions'),
+    demoGuide: grab('demoGuide'),
+    aiContext: grab('aiContext'),
+    sourceBrief: grab('sourceBrief'),
     try: grab('try'),
     freq: grab('freq'),
     src: grab('src'),
@@ -60,7 +66,13 @@ for (const card of cards) {
   lines.push(`### 卡片：${card.title}`)
   lines.push(`- 类型：${card.tag}`)
   lines.push(`- 概念：${card.concept}`)
+  if (card.definition) lines.push(`- 一句话定义：${card.definition}`)
   if (card.note) lines.push(`- 小白批注：${card.note}`)
+  if (card.when) lines.push(`- 什么时候用：${card.when}`)
+  if (card.cautions) lines.push(`- 注意事项：${card.cautions}`)
+  if (card.demoGuide) lines.push(`- 演示说明：${card.demoGuide}`)
+  if (card.aiContext) lines.push(`- 演示解释：${card.aiContext}`)
+  if (card.sourceBrief) lines.push(`- 来源摘要：${card.sourceBrief}`)
   if (card.try) lines.push(`- 试一试：${card.try}`)
   if (card.freq) lines.push(`- 频率：${card.freq}`)
   if (card.src) lines.push(`- 来源：${card.src}`)

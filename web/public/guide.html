@@ -6,7 +6,8 @@
   <meta name="description" content="MMG 数模 AI 辅导桌面版使用指南：读题、整理建模思路、生成并运行代码。">
   <title>使用指南 · MMG 数模 AI 辅导</title>
   <style>
-    :root { color-scheme: light; --bg:#f5f6f8; --paper:#fff; --ink:#202b40; --muted:#626f83; --line:#dce2eb; --blue:#405fba; }
+    :root { color-scheme: light; --bg:#f1f2f5; --paper:#ffffff; --ink:#292b35; --muted:#626674; --line:#d6d8e1; --blue:#6250a0; --on-blue:#ffffff; }
+    :root[data-theme='dark'] { color-scheme:dark; --bg:#15161b; --paper:#1c1d22; --ink:#f0f1f5; --muted:#b0b3c0; --line:#34363e; --blue:#b9a5ff; --on-blue:#201633; }
     * { box-sizing:border-box; }
     html { scroll-behavior:smooth; scroll-padding-top:28px; }
     body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.85 "Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; }
@@ -23,7 +24,7 @@
     h1 { font-size:42px; font-weight:600; margin:12px 0 18px; }
     .intro { font-size:17px; color:var(--muted); max-width:680px; margin:0 0 26px; }
     .button { display:inline-flex; align-items:center; justify-content:center; background:var(--blue); color:white; padding:10px 22px; border-radius:8px; text-decoration:none; font-weight:600; transition:background .14s; }
-    .button:hover { background:#304a99; }
+    .button:hover { filter:brightness(1.08); }
     .hero-note { margin-left:18px; color:var(--muted); font-size:13px; }
     .layout { display:grid; grid-template-columns:180px minmax(0,1fr); gap:48px; align-items:start; padding-bottom:64px; }
     nav { position:sticky; top:28px; }
@@ -50,7 +51,21 @@
     footer { border-top:1px solid var(--line); color:var(--muted); font-size:13px; padding:24px 0 36px; }
     @media(prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } .button { transition:none; } }
     @media print { body { background:white; } header a,.hero .button,.hero-note,nav { display:none; } .wrap { padding:0; } .hero { padding:24px 0; } .layout { display:block; } article { border:0; padding:0; } section { break-inside:avoid; } }
+    /* Guide is an editorial document, distinct from the three workstations. */
+    article { border:0; border-radius:4px; padding-inline:36px; }
+    .number { background:transparent; border-radius:0; font:500 25px Georgia,serif; }
+    .note { background:color-mix(in srgb,var(--blue) 5%,var(--paper)); border-left-color:var(--blue); border-radius:0; }
+    .example { border:0; border-top:1px solid var(--line); border-radius:0; padding:16px 0; }
+    .button { background:var(--blue); color:var(--on-blue); border-radius:6px; box-shadow:none; }
+    @media print { :root { --ink:#29313c; --muted:#626972; --line:#d8d7d1; --paper:white; --blue:#48558e; } }
   </style>
+  <script>
+    // Share the product preference; standalone guide follows OS until chosen.
+    try {
+      const theme = localStorage.getItem('mmg_theme_v1')
+      document.documentElement.dataset.theme = ['light', 'dark'].includes(theme) ? theme : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    } catch { document.documentElement.dataset.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light' }
+  </script>
 </head>
 <body>
   <header><div class="wrap header-inner"><div class="brand">MMG <span class="edition">数模 AI 辅导 · 桌面版</span></div><a href="./#/workbench">进入工作台 →</a></div></header>
@@ -70,6 +85,7 @@
         <section id="problem">
           <div class="step"><span class="number">01</span><h2>先把题目放进来</h2></div>
           <ol><li>进入<strong>读题工作台</strong>，粘贴题目正文，点击<strong>使用此题目</strong>；也可以用<strong>上传题干</strong>导入 PDF、Markdown 或 TXT。</li><li>表格与数据文件通过<strong>上传附件</strong>添加。题干说明要解决什么，附件提供分析需要的数据。</li><li>检查题目与附件是否完整。连接模型后，可点击<strong>AI 整体解读</strong>；用鼠标选中一段题目，再点浮动工具栏中的<strong>AI 解读</strong>，逐段确认目标与条件。</li></ol>
+          <div class="note">PDF 表格或排版难以辨认时，切换「PDF原版」逐页查看，可放大、下载原文件；「提取文本」用于划词与 AI 解读。编辑题干并保存后，「已编辑文本」显示新正文，原 PDF 保持原样。原件会随工作区与备份保留。扫描件可看原版，暂不支持 OCR；旧工作区没有原件时需重新上传。</div>
           <div class="note">还没有题目？打开「建模范例」，查看并下载一个例题，再将题干和附件导入工作区。查看范例不会自动导入题目。</div>
         </section>
         <section id="model">
@@ -80,13 +96,13 @@
         <section id="planning">
           <div class="step"><span class="number">03</span><h2>把想法整理成可执行的拆解块</h2></div>
           <p>打开<strong>建模思路梳理</strong>。一个拆解块代表一个要完成的任务：说明要解决什么、采用什么思路、按什么步骤执行。</p>
-          <ol><li>点击<strong>新建拆解块</strong>，再点<strong>编辑</strong>，直接在块头部填写标题和一句话思路。</li><li>题目依据和步骤按需展开；每次编辑一个步骤，点击<strong>添加步骤</strong>会直接进入新增输入。点击<strong>保存拆解块</strong>后才应用编辑草稿。</li><li><strong>AI 帮我写思路</strong>会提供待采用建议；只有点击<strong>使用AI建议</strong>才替换思路，点击<strong>忽略建议</strong>保留当前输入。也可以先在右侧与 AI 讨论。</li><li>检查 AI 给出的拆解预览，点击<strong>确认新建</strong>或<strong>确认写入</strong>后才应用；点击取消会保留原内容，并回到对话输入继续讨论。需要的数据附件可以关联到相应块。</li><li>不熟悉某种方法时，切换到<strong>知识卡片</strong>，查看适用条件与演示，再决定是否采用。</li></ol>
+          <ol><li>点击<strong>新建拆解块</strong>，再点<strong>编辑</strong>，直接在块头部填写标题和一句话思路。</li><li>题目依据和步骤按需展开；每次编辑一个步骤，点击<strong>添加步骤</strong>会直接进入新增输入。点击<strong>保存拆解块</strong>后才应用编辑草稿。步骤区底部也可点击<strong>保存整个拆解块</strong>或<strong>取消整块编辑</strong>，作用于本块全部草稿。编辑另一块前，如有未保存修改，可选择保存并切换、放弃并切换，或继续编辑。草稿按工作区暂存于当前浏览器标签页，刷新或切换后可继续填写；保存或取消后清除暂存。关闭标签页前请确认保存，暂存草稿不包含在工作区备份中。</li><li><strong>AI 帮我写思路</strong>会提供待采用建议；只有点击<strong>使用AI建议</strong>才替换思路，点击<strong>忽略建议</strong>保留当前输入。也可以先在右侧与 AI 讨论。</li><li>检查 AI 给出的拆解预览，点击<strong>确认新建</strong>或<strong>确认写入</strong>后才应用；点击取消会保留原内容，并回到对话输入继续讨论。需要的数据附件可以关联到相应块。</li><li>不熟悉某种方法时，切换到<strong>知识卡片</strong>，查看适用条件与演示，再决定是否采用。</li></ol>
           <div class="example"><div class="example-label">一个拆解块可以这样写</div><p><strong>标题：</strong>在预算内选择项目组合</p><p><strong>思路：</strong>每个项目设为选或不选，以总收益最大为目标，总成本不超过预算。</p><p><strong>步骤：</strong>读取项目成本与收益 → 检查缺失值 → 求可行组合 → 输出入选项目及总成本、总收益。</p></div>
           <div class="note">进入编程前，确认拆解块有明确的输入、方法和预期输出。只有标题的空块通常不足以生成可靠代码。</div>
         </section>
         <section id="coding">
           <div class="step"><span class="number">04</span><h2>生成、运行，再核对结果</h2></div><p>代码区与产出区首次默认各占一半；可用分隔手柄拖动或按方向键调宽，已有宽度偏好会保留。</p>
-          <ol><li>点击梳理台的<strong>去编程台</strong>，或从左侧导航进入<strong>编程工作台</strong>。</li><li>点击<strong>AI生成</strong>，选择要解决的拆解块，说明希望得到的结果，再提交生成。没有拆解块时，先回梳理台创建。</li><li>检查生成代码中的文件、字段与参数，点击<strong>运行</strong>。Python 在浏览器中运行，首次加载运行环境可能需要等待。</li><li>查看输出与图表，核对约束是否满足、数值是否合理、结果是否回答了题目。代码有可调参数时才显示调参看板，修改后重新运行。只输出文字的代码没有图表也可以是正常结果。</li></ol>
+          <ol><li>点击梳理台的<strong>去编程台</strong>，或从左侧导航进入<strong>编程工作台</strong>。</li><li>点击<strong>AI生成</strong>，选择要解决的拆解块，说明希望得到的结果，再提交生成。长列表可在弹窗内部滚动，底部生成与取消按钮始终可用。没有拆解块时，先回梳理台创建。</li><li>检查生成代码中的文件、字段与参数，点击<strong>运行</strong>。Python 在浏览器中运行，首次加载运行环境可能需要等待。</li><li>查看输出与图表，核对约束是否满足、数值是否合理、结果是否回答了题目。代码有可调参数时才显示调参看板，修改后重新运行。只输出文字的代码没有图表也可以是正常结果。</li></ol>
           <div class="note">运行成功说明代码执行完成，不能代替模型与结果检查。代码报错时，结合错误信息修正代码或使用 AI 改进。</div>
         </section>
         <section id="questions">

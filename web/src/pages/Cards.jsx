@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { loadFavorites, saveFavorites } from '../store.js'
 import { IconLightbulb, IconStar, IconPlay, IconRefresh, IconPlus } from '../components/Icons.jsx'
+import { pearsonCorrelation, spearmanCorrelation } from '../lib/correlation.js'
 
 /* ============ 数学工具 ============ */
 
@@ -891,7 +892,14 @@ function GeneticAlgorithmDemo() {
 /* ============ 相关性分析演示（Pearson vs Spearman） ============ */
 
 function CorrelationDemo() {
-  const [mode, setMode] = useState(0) // 0 线性 1 非线性 2 无关
+  const [mode, setMode] = useState(0)
+  const modes = ['线性关系', '单调弯曲', 'U 形关系', '随机样本']
+  const explanations = [
+    '整体沿直线上升，两种系数都接近 1；相关不能证明 x 导致 y。',
+    'y 随 x 一直增加，但不是直线。Spearman 为 1，Pearson 较低；单调关系可以是弯曲的。',
+    'y 先下降再上升，不是单调关系。两种系数都接近 0，仍有明显 U 形规律；接近 0 不等于没有关系。',
+    'y 由固定种子的随机数生成，不随 x 的公式变化。有限样本仍可能有非零相关，不能仅凭系数断言独立。',
+  ]
   const W = 560, H = 300, pad = 34
   const pts = useMemo(() => {
     const rnd = seededRandom(5)
@@ -900,47 +908,35 @@ function CorrelationDemo() {
       const t = i / 31
       let x = t * 2 - 1, y
       if (mode === 0) y = 0.9 * x + (rnd() - 0.5) * 0.5
-      else if (mode === 1) y = x * x * 1.4 - 0.4 + (rnd() - 0.5) * 0.2
+      else if (mode === 1) y = 2 * t ** 5 - 1
+      else if (mode === 2) y = x * x * 1.4 - 0.4 + (rnd() - 0.5) * 0.2
       else y = (rnd() - 0.5) * 1.6
       arr.push({ x, y })
     }
     return arr
   }, [mode])
-  // Pearson
-  const n = pts.length
-  const mx = pts.reduce((s, p) => s + p.x, 0) / n
-  const my = pts.reduce((s, p) => s + p.y, 0) / n
-  let num = 0, dx = 0, dy = 0
-  for (const p of pts) { num += (p.x - mx) * (p.y - my); dx += (p.x - mx) ** 2; dy += (p.y - my) ** 2 }
-  const rp = num / Math.sqrt(dx * dy)
-  // Spearman（对秩）
-  const rank = (arr) => {
-    const idx = arr.map((v, i) => ({ v, i })).sort((a, b) => a.v - b.v)
-    const r = new Array(n)
-    idx.forEach((o, k) => { r[o.i] = k + 1 })
-    return r
-  }
-  const rx = rank(pts.map((p) => p.x)), ry = rank(pts.map((p) => p.y))
-  let d2 = 0
-  for (let i = 0; i < n; i++) d2 += (rx[i] - ry[i]) ** 2
-  const rs = 1 - (6 * d2) / (n * (n * n - 1))
+  const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y)
+  const rp = pearsonCorrelation(xs, ys)
+  const rs = spearmanCorrelation(xs, ys)
+  const format = (value) => value === null ? '未定义' : value.toFixed(3)
   const sx = (x) => pad + ((x + 1.2) / 2.4) * (W - pad * 2)
   const sy = (y) => H - pad - ((y + 1.2) / 2.4) * (H - pad * 2)
   return (
     <div className="demo">
-      <div className="demo-controls">
-        {['线性关系', '非线性关系', '无关系'].map((m, i) => (
-          <button key={m} className={`btn ${mode === i ? 'btn-primary' : 'btn-ghost'} btn-sm`} onClick={() => setMode(i)}>{m}</button>
+      <div className="demo-controls" role="group" aria-label="相关关系示例">
+        {modes.map((m, i) => (
+          <button type="button" key={m} aria-pressed={mode === i} className={`btn ${mode === i ? 'btn-primary' : 'btn-ghost'} btn-sm`} onClick={() => setMode(i)}>{m}</button>
         ))}
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg">
+      <svg viewBox={`0 0 ${W} ${H}`} className="demo-svg" role="img" aria-label={`${modes[mode]}：32 个合成观测点，横轴 x，纵轴 y。${explanations[mode]}`}>
         {pts.map((p, i) => <circle key={i} cx={sx(p.x)} cy={sy(p.y)} r="4.5" fill="#2563eb" opacity="0.7" />)}
         <line x1={pad} y1={sy(0)} x2={W - pad} y2={sy(0)} stroke="#cbd5e1" strokeWidth="1" />
         <line x1={sx(0)} y1={pad} x2={sx(0)} y2={H - pad} stroke="#cbd5e1" strokeWidth="1" />
       </svg>
-      <div className="demo-note">
-        Pearson r = {rp.toFixed(3)}（衡量<b>线性</b>相关）｜ Spearman ρ = {rs.toFixed(3)}（衡量<b>单调</b>相关）
-        <br />切到"非线性"看：Pearson 接近 0，但 Spearman 仍然很大——<b>先看散点形状再选相关系数</b>（2022 年 C 题用 Spearman 检验定性变量相关性、Pearson 画热力图）。
+      <div className="demo-note" role="status" aria-live="polite" aria-atomic="true">
+        Pearson r = {format(rp)}（衡量<b>线性</b>相关）｜ Spearman ρ = {format(rs)}（衡量<b>单调</b>相关）
+        <br /><b>{modes[mode]}：</b>{explanations[mode]}
+        <br />教学合成数据，n = 32；没有计算 p 值，也不代表真实题目的结论。先看图形，再解释系数。
       </div>
     </div>
   )
@@ -2606,14 +2602,18 @@ const CARDS = [
     id: 'correlation',
     title: '相关性分析',
     tag: '统计 / 相关',
-    concept: '两个变量一起变吗？Pearson 看线性相关（连续数据），Spearman 看秩相关（定性/非正态也行）；热力图一眼看全矩阵。数据分析高频率第一步：找哪些变量相关、相关多强。',
-    note: '"身高越高，体重越大"——两个变量一起变就是相关。Pearson 适合看"直线式"关系；Spearman 不管弯不弯，只要"排名同步"就算相关。热力图=把所有两两关系画成一张彩色格子图。',
+    definition: '用系数描述成对观测的变化关系：Pearson 看线性，Spearman 看单调；系数接近 0 不排除其他规律。',
+    concept: 'Pearson 衡量数值变量的线性关系；Spearman 是平均秩之间的 Pearson 相关，衡量有序数据的单调关系。两者取值从 −1 到 1，正负表示方向，绝对值表示对应关系的强弱。',
+    note: '先把同一对象的两个观测配成一行并画散点图。直线上升和一直上升的弯曲都可能相关；U 形先降后升，两种系数都可能接近 0。热力图汇总两两系数，但会隐藏散点形状。',
+    when: '想探索成对数值观测的线性关系，或有明确顺序的数据的单调关系时使用。先确认观测配对、缺失值处理和异常点。',
+    cautions: '相关不等于因果，接近 0 不等于独立。无序类别不能任意编号后做秩相关；常量列的系数未定义。计算 Pearson 系数不要求正态，但 p 值和区间的推断需另查假设；本演示不做显著性检验。',
+    demoGuide: '依次比较线性关系、单调弯曲、U 形关系与随机样本。32 个点均为教学合成数据；图形、系数和解释同步切换。',
+    sourceBrief: '方法依据：SciPy 官方 pearsonr / spearmanr 文档；论文只作应用案例，不作为通用适用条件。',
+    aiContext: '单调弯曲示例 y=2t⁵−1 的 Spearman 为 1；U 形示例不单调，两种系数都接近 0。不能把所有非线性关系解释为高 Spearman。',
     demo: CorrelationDemo,
-    try: '切到"非线性关系"：为什么 Pearson 接近 0 而 Spearman 仍然很大？',
+    try: '先预测再切换：单调弯曲与 U 形哪个有高 Spearman？如果两个系数接近 0，你还需要查看什么？回到题目时，先写清观测配对和变量含义。',
     related: ['假设检验', '热力图'],
-    freq: '★ 高频率',
-    freqLevel: 'high',
-    src: '2022 国赛 C 题一等奖论文 C229 §6.1.1（Spearman 检验风化与类型关系）+ §6.4.1（Pearson 热力图）；2017 国赛 C 题（相关性初判）',
+    src: 'SciPy 官方文档：https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.pearsonr.html ；https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.spearmanr.html （2026-10-08 核验）。本地应用案例：C229 §6.1.1 / §6.4.1；其定性变量编码不能推广为无序类别可任意排序。',
   },
   {
     id: 'data-cleaning',
@@ -3212,7 +3212,7 @@ const CARD_WORKFLOWS = {
   correlation: {
     signal: '你还不知道哪些变量有关联，或需要先判断变量关系再选模型。',
     firstStep: '先画散点图或相关矩阵，观察关系方向、强弱和是否明显非线性。',
-    method: '连续近似正态时看 Pearson，非正态或只关心排序时看 Spearman，并结合显著性检验。',
+    method: '数值变量的线性关系看 Pearson，有序数据的单调关系看 Spearman；先检查配对、异常点与散点形状，推断显著性时另查假设。',
     idea: '先用相关性分析筛出值得关注的变量关系，再决定后续建模方向。',
   },
   'linear-regression': {
@@ -3392,6 +3392,52 @@ export function KnowledgeCard({ cardId, defaultOpen = false, variant = 'full', l
       )}
     </div>
   )
+}
+
+export function KnowledgeLibrary({ query, onAddToBreakdown, deposited }) {
+  const [scope, setScope] = useState('starter')
+  const [selected, setSelected] = useState(null)
+  const [favorites, setFavorites] = useState(loadFavorites)
+  const ids = scope === 'starter' && !query.trim() ? CARD_STARTER_IDS : ALL_CARD_IDS
+  const matches = ids.filter(id => {
+    const card = CARD_BY_ID.get(id)
+    return (scope !== 'favorites' || favorites.includes(id)) &&
+      [card.title, card.tag, card.definition, card.concept, card.note, card.when, card.cautions].filter(Boolean).join(' ').toLowerCase().includes(query.trim().toLowerCase())
+  })
+  const active = matches.includes(selected) ? selected : null
+  const libraryRoot = useRef(null)
+  const readerHeading = useRef(null)
+  const lastEntry = useRef(null)
+  useEffect(() => { if (active) readerHeading.current?.focus() }, [active])
+  function returnToList() {
+    setSelected(null)
+    requestAnimationFrame(() => libraryRoot.current?.querySelector(`[id="${lastEntry.current}"]`)?.focus())
+  }
+  const card = CARD_BY_ID.get(active)
+  function favorite() {
+    const next = favorites.includes(active) ? favorites.filter(id => id !== active) : [...favorites, active]
+    setFavorites(next)
+    saveFavorites(next)
+  }
+  return <div className="knowledge-library" ref={libraryRoot}>
+    <div className="kl-scopes" aria-label="知识范围">
+      {[['starter', '入门路径'], ['all', '全部方法'], ['favorites', '我的收藏']].map(([value, name]) => <button type="button" key={value} aria-pressed={scope === value} onClick={() => { setScope(value); setSelected(null) }}>{name}</button>)}
+    </div>
+    <div className="kl-layout">
+      {!card && <nav className="kl-directory" aria-label="知识卡片目录">
+        <div className="kl-count">{query.trim() ? '搜索结果' : scope === 'starter' ? '从这里开始' : '方法目录'} · {matches.length}</div>
+        {matches.map((id, index) => { const item = CARD_BY_ID.get(id); return <button type="button" key={id} id={`kl-entry-${id}`} className="kl-entry" onClick={() => { lastEntry.current = `kl-entry-${id}`; setSelected(id) }}>
+          <span className="kl-number">{String(index + 1).padStart(2, '0')}</span><span><strong>{item.title}</strong><small>{item.tag}</small><span className="kl-entry-summary">{buildSummary(item)}</span></span>
+        </button> })}
+      </nav>}
+      {card ? <article className="kl-reader" key={active} aria-label={card.title}>
+        <header className="kl-reader-head"><button type="button" className="kl-back" onClick={returnToList}>← 返回卡片</button><div className="kl-category">{card.tag}</div><h2 ref={readerHeading} tabIndex={-1}>{card.title}</h2>
+          <button type="button" className="kl-favorite" onClick={favorite} aria-pressed={favorites.includes(active)}><IconStar size={14} filled={favorites.includes(active)} />{favorites.includes(active) ? '已收藏' : '收藏方法'}</button>
+        </header>
+        <div className="kl-content"><CardDetail card={card} showDemo showTry showSourceDetails onAddToBreakdown={onAddToBreakdown} added={deposited?.has(`card:${active}`)} /></div>
+      </article> : matches.length === 0 && <div className="kl-empty">{scope === 'favorites' ? '还没有匹配的收藏，阅读方法时可点击收藏。' : '没有匹配的方法，试试其他关键词。'}</div>}
+    </div>
+  </div>
 }
 
 function KnowledgeCardStudy({ card, open, setOpen, isFav, toggleFav, label = '快速摘要', onAddToBreakdown, added }) {

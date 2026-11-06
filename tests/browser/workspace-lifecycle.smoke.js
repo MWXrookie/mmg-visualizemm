@@ -7,6 +7,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { once } from 'node:events'
 import { loadGoldenSuite } from '../support/golden-fixtures.js'
+import { pdfTableFixture } from '../support/document-pdf.js'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const problemText = '浏览器冒烟题：在给定预算约束下，选择方案使总收益最大。'
@@ -64,7 +65,7 @@ const generatedCode = [
 function mockedModelContent(request) {
   const payload = request.postDataJSON?.() || {}
   const system = (payload.messages || []).find((message) => message.role === 'system')?.content || ''
-  if (system.includes('数学建模编程助手')) return `\`\`\`python\n${generatedCode}\n\`\`\``
+  if (system.includes('数学建模编程助手') || system.includes('Python 代码优化助手')) return `\`\`\`python\n${generatedCode}\n\`\`\``
   if (system.includes('角色只从这几种里选')) {
     return JSON.stringify({
       role: '约束条件',
@@ -96,8 +97,8 @@ async function installModelMocks(page) {
   })
 }
 
-async function installFakePyodide(page) {
-  const onePixelPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
+async function installFakePyodide(page, imagePng) {
+  const onePixelPng = imagePng || 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
   await page.route('https://cdn.jsdelivr.net/pyodide/**/pyodide.js', async (route) => {
     await route.fulfill({
       status: 200,
@@ -210,7 +211,7 @@ test('窄屏导航可用键盘操作，设置与工作区备份入口保持可�
     expect(box.x).toBeGreaterThanOrEqual(0)
     expect(box.x + box.width).toBeLessThanOrEqual(375)
     if (name === '编程工作台') {
-      const editor = page.locator('pre.code[contenteditable="true"]')
+      const editor = page.locator('pre.code[contenteditable]')
       expect((await page.locator('.editor').boundingBox()).height).toBeGreaterThan(100)
       await editor.fill('# 窄屏也能审阅与编辑代码\nprint(1 + 1)')
       await page.locator('.out-pane-head').scrollIntoViewIfNeeded()
@@ -287,7 +288,7 @@ test('本地工作区可上传题干、跨工作台持久化并完成备份恢�
 
   await page.getByRole('button', { name: '去编程台', exact: true }).click()
   await expect(page.getByText('代码区 · Python', { exact: true })).toBeVisible()
-  await expect(page.locator('pre.code[contenteditable="true"]')).toBeVisible()
+  await expect(page.locator('pre.code[contenteditable]')).toBeVisible()
 
   await page.locator('.code-split').getByTitle('展开侧栏').click()
   await page.getByRole('button', { name: '模型设置', exact: true }).click()
@@ -369,12 +370,12 @@ test('模拟模型可完成整体解读与代码生成，Pyodide 断网有明确
   await page.getByRole('button', { name: 'AI生成' }).click()
   await page.locator('.check-opt').first().click()
   await page.getByRole('button', { name: '生成', exact: true }).click()
-  const codeEditor = page.locator('pre.code[contenteditable="true"]')
+  const codeEditor = page.locator('pre.code[contenteditable]')
   await expect(codeEditor).toContainText('模拟代码运行结果')
   await expect(page.getByText('代码已生成，点击「运行」执行', { exact: false })).toBeVisible()
 
   await page.getByRole('button', { name: '运行', exact: true }).click()
-  await expect(page.locator('.alert.error')).toContainText('Pyodide 加载失败：请检查网络')
+  await expect(page.locator('.out-pane > .alert.error')).toContainText('Pyodide 加载失败：请检查网络')
 
   await page.waitForTimeout(900)
   await page.locator('.code-split').getByTitle('展开侧栏').click()
@@ -384,6 +385,43 @@ test('模拟模型可完成整体解读与代码生成，Pyodide 断网有明确
   const backup = JSON.parse(await readFile(await (await downloadPromise).path(), 'utf8'))
   expect(backup.workspace.overview).toContain('模拟模型已完成整体解读')
   expect(backup.workspace.code).toBe(generatedCode)
+})
+
+test('G02 小规则表仅经单次显式选择进入整体解读请求', async ({ page }) => {
+  const sent = []
+  await page.route('**/api/chat/stream', async (route) => {
+    sent.push(route.request().postDataJSON())
+    await route.fulfill({ status: 200, contentType: 'text/event-stream; charset=utf-8', body: `data: ${JSON.stringify({ delta: '本地拦截的解读' })}\n\ndata: ${JSON.stringify({ done: true, finish_reason: 'stop' })}\n\n` })
+  })
+  await page.goto(`${baseURL}/#/settings`)
+  await page.locator('#api-key').fill('smoke-key-not-real')
+  await page.getByRole('button', { name: '保存设置' }).click()
+  await page.getByRole('button', { name: '＋ 新建工作区' }).click()
+  await page.getByRole('button', { name: '读题工作台', exact: true }).click()
+  await page.locator('input[type="file"][accept=".pdf,.md,.txt"]').setInputFiles(path.join(repoRoot, 'tests/fixtures/golden/cases/G02/problem.txt'))
+  await page.locator('input[type="file"][accept=".xlsx,.csv,.pdf,.txt,.md"]').setInputFiles(path.join(repoRoot, 'tests/fixtures/golden/cases/G02/attachments/供应商数据.xlsx'))
+  const option = page.locator('.reading-table-context-option').filter({ hasText: '指标说明' })
+  await expect(option).toContainText('当前已保留 5 行')
+  await expect(option.locator('input')).toBeEnabled()
+  const run = page.getByRole('button', { name: 'AI 整体解读', exact: true })
+  await run.click()
+  await expect.poll(() => sent.length).toBe(1)
+  const first = sent[0].messages.find((message) => message.role === 'user').content
+  expect(first).not.toContain('年供货上限(件) | 效益型 | 0.15')
+  await option.locator('input').check()
+  await run.click()
+  await expect.poll(() => sent.length).toBe(2)
+  const second = sent[1].messages.find((message) => message.role === 'user').content
+  expect(second).toContain('年供货上限(件)')
+  expect(second).toContain('效益型')
+  expect(second).toContain('0.15')
+  expect(second).toContain('当前已保留 5 行')
+  expect(Buffer.byteLength(JSON.stringify(sent[1]), 'utf8')).toBeLessThanOrEqual(100000)
+  expect(sent[1].apiKey).toBe('smoke-key-not-real')
+  await expect(option.locator('input')).not.toBeChecked()
+  await run.click()
+  await expect.poll(() => sent.length).toBe(3)
+  expect(sent[2].messages.find((message) => message.role === 'user').content).not.toContain('年供货上限(件) | 效益型 | 0.15')
 })
 
 test('模拟 Pyodide 可回传文本输出与图表', async ({ page }) => {
@@ -412,10 +450,17 @@ test('模拟 Pyodide 可回传文本输出与图表', async ({ page }) => {
   await page.getByRole('button', { name: 'AI生成' }).click()
   await page.locator('.check-opt').first().click()
   await page.getByRole('button', { name: '生成', exact: true }).click()
-  await expect(page.locator('pre.code[contenteditable="true"]')).toContainText('模拟代码运行结果')
+  await expect(page.locator('pre.code[contenteditable]')).toContainText('模拟代码运行结果')
 
   await page.getByRole('button', { name: '运行', exact: true }).click()
   await expect(page.locator('.result-box')).toContainText('模拟运行输出：20')
+  await expect.poll(async () => (await page.locator('.result-box').boundingBox()).y).toBeLessThan(page.viewportSize().height / 2)
+  const guideSummary = page.locator('.guide-card summary')
+  await guideSummary.focus()
+  await page.keyboard.press('Enter')
+  await expect(page.locator('.guide-line-link').first()).toBeVisible()
+  await page.keyboard.press('Enter')
+  await expect(page.locator('.guide-line-link').first()).not.toBeVisible()
   await expect(page.locator('.code-log')).toContainText('运行完成')
   const chart = page.getByRole('img', { name: '运行结果', exact: true })
   await expect(chart).toBeVisible()
@@ -577,7 +622,7 @@ test('正式十题在浏览器中完成导入、人工拆解、替身生成与�
     await page.getByRole('button', { name: 'AI生成' }).click()
     await page.locator('.check-opt').first().click()
     await page.getByRole('button', { name: '生成', exact: true }).click()
-    await expect(page.locator('pre.code[contenteditable="true"]')).toContainText(`case_id = '${id}'`)
+    await expect(page.locator('pre.code[contenteditable]')).toContainText(`case_id = '${id}'`)
     const codePrompt = codeRequests.get(id)?.messages?.find((message) => message.role === 'user')?.content || ''
     expect(codePrompt, `${id} 代码生成缺少题目依据`).toContain(expected.understanding.roles[0].quote)
     expect(codePrompt, `${id} 代码生成缺少拆解思路`).toContain('先核对题干条件与附件字段')
@@ -594,7 +639,7 @@ test('正式十题在浏览器中完成导入、人工拆解、替身生成与�
       return (await response.json()).workspace.code
     }, { message: `${id} 生成代码未保存` }).toBe(mockCode(id))
     await page.reload()
-    await expect(page.locator('pre.code[contenteditable="true"]')).toContainText(`case_id = '${id}'`)
+    await expect(page.locator('pre.code[contenteditable]')).toContainText(`case_id = '${id}'`)
   }
   expect(browserErrors).toEqual([])
 })
@@ -695,11 +740,78 @@ test('编程台区分AI生成与环境失败，等待期间禁止重复生成', 
     const tops = await page.locator('.code-actions .btn').evaluateAll((buttons) => buttons.map((button) => button.getBoundingClientRect().top))
     expect(Math.max(...tops) - Math.min(...tops)).toBeLessThan(1)
     await page.getByRole('button', { name: '运行', exact: true }).click()
-    await expect(page.locator('.alert.error')).toContainText('Pyodide 加载失败')
+    await expect(page.locator('.out-pane > .alert.error')).toContainText('Pyodide 加载失败')
     await expect(page.locator('.ed-activity')).toHaveText('Python 环境加载失败')
     await expect(page.locator('.flow-card .flow-step').nth(3)).toHaveClass(/err/)
   } finally {
     release()
+    await page.request.delete(`${baseURL}/api/workspaces/${id}`)
+  }
+})
+
+test('纯 Python 代码块即使只有 print 也会保存', async ({ page }) => {
+  const id = 'coding-pure-fence-regression'
+  await page.request.post(`${baseURL}/api/workspaces`, { data: {
+    id, title: '纯代码块回归', problemText, attachments: [],
+    breakdown: [{ id: 'fence-block', title: '输出结果', idea: '输出计算结果', steps: [] }], code: '',
+  } })
+  let fallbackRequests = 0
+  await page.route('**/api/chat/stream', (route) => route.fulfill({
+    contentType: 'text/event-stream',
+    body: `data: ${JSON.stringify({ delta: '```python\nprint("ok")\n```' })}\n\ndata: ${JSON.stringify({ done: true, finishReason: 'stop' })}\n\n`,
+  }))
+  await page.route('**/api/chat', (route) => {
+    fallbackRequests++
+    return route.fulfill({ json: { content: 'unexpected fallback' } })
+  })
+  try {
+    await page.addInitScript((workspaceId) => localStorage.setItem('mmg_current_ws_v1', workspaceId), id)
+    await page.goto(`${baseURL}/#/settings`)
+    await page.locator('#api-key').fill('smoke-key-not-real')
+    await page.getByRole('button', { name: '保存设置', exact: true }).click()
+    await page.getByRole('button', { name: '编程工作台', exact: true }).click()
+    await page.getByRole('button', { name: 'AI生成', exact: true }).click()
+    await page.locator('.check-opt').first().click()
+    await page.getByRole('button', { name: '生成', exact: true }).click()
+    await expect(page.locator('pre.code')).toContainText('print("ok")')
+    await expect.poll(async () => {
+      const response = await page.request.get(`${baseURL}/api/workspaces/${id}`)
+      return (await response.json()).workspace.code
+    }).toBe('print("ok")')
+    expect(fallbackRequests).toBe(0)
+  } finally {
+    await page.request.delete(`${baseURL}/api/workspaces/${id}`)
+  }
+})
+
+test('模型报告输出长度终止时保留截断代码并停止自动追加请求', async ({ page }) => {
+  const id = 'coding-finish-length-regression'
+  await page.request.post(`${baseURL}/api/workspaces`, { data: { id, title: '截断代码测试', problemText, attachments: [], breakdown: [{ id: 'length-block', title: '计算收益', idea: '读取预算', steps: [] }], code: '' } })
+  let extraRequests = 0
+  await page.route('**/api/chat/stream', (route) => route.fulfill({
+    contentType: 'text/event-stream',
+    body: `data: ${JSON.stringify({ delta: '```python\nx = (1\n' })}\n\ndata: ${JSON.stringify({ done: true, finishReason: 'length' })}\n\n`,
+  }))
+  await page.route('**/api/chat', (route) => {
+    extraRequests++
+    return route.fulfill({ json: { ok: true, content: 'unexpected extra request' } })
+  })
+  try {
+    await page.addInitScript((workspaceId) => localStorage.setItem('mmg_current_ws_v1', workspaceId), id)
+    await page.goto(`${baseURL}/#/settings`)
+    await page.locator('#api-key').fill('smoke-key-not-real')
+    await page.getByRole('button', { name: '保存设置', exact: true }).click()
+    await page.getByRole('button', { name: '编程工作台', exact: true }).click()
+    await page.getByRole('button', { name: 'AI生成', exact: true }).click()
+    await page.locator('.check-opt').first().click()
+    await page.getByRole('button', { name: '生成', exact: true }).click()
+    await expect(page.locator('pre.code')).toContainText('x = (1')
+    await expect(page.locator('.alert.error')).toContainText('生成未完成')
+    await expect(page.locator('main')).toContainText('生成未完成（length）')
+    expect(extraRequests).toBe(0)
+    await page.reload()
+    await expect(page.locator('pre.code')).toContainText('x = (1')
+  } finally {
     await page.request.delete(`${baseURL}/api/workspaces/${id}`)
   }
 })
@@ -723,7 +835,7 @@ test('建模确认立即跨台同步，草稿和AI预览不会提前写入', asy
     await expect(modeling.locator('.block-title-btn')).toContainText(['原有拆解块'])
     await modeling.getByTitle('编辑', { exact: true }).click()
     await modeling.getByPlaceholder('拆解块标题').fill('已保存标题')
-    await expect(modeling.locator('.block-draft-note')).toContainText('保存后应用')
+    await expect(modeling.locator('.block-head .block-draft-note')).toContainText('有未应用修改')
     await modeling.getByRole('button', { name: '保存拆解块', exact: true }).click()
     await expect(modeling.getByTitle('编辑', { exact: true })).toBeFocused()
     await modeling.getByRole('button', { name: '去编程台', exact: true }).click()
@@ -750,6 +862,564 @@ test('建模确认立即跨台同步，草稿和AI预览不会提前写入', asy
     await page.keyboard.press('Home')
     await expect.poll(async () => (await modeling.locator('.ai-panel').boundingBox()).width).toBeCloseTo(320, 0)
   } finally {
+    await page.request.delete(`${baseURL}/api/workspaces/${id}`)
+  }
+})
+
+test('多步骤底部就近保存取消仍作用于整个拆解块草稿', async ({ page }) => {
+  const id = `step-actions-${Date.now()}`
+  await page.request.post(`${baseURL}/api/workspaces`, { data: { id, title: '步骤操作', problemText,
+    breakdown: [{ id: 'steps', title: '原标题', idea: '原思路', quote: '原依据',
+      steps: Array.from({ length: 6 }, (_, i) => ({ action: `步骤${i + 1}`, method: `方法${i + 1}` })) }],
+  } })
+  try {
+    await page.addInitScript((workspaceId) => localStorage.setItem('mmg_current_ws_v1', workspaceId), id)
+    await page.goto(`${baseURL}/#/modeling`)
+    const block = page.locator('.page-view.active .decomp-block')
+    await block.getByTitle('编辑', { exact: true }).click()
+    await block.getByPlaceholder('拆解块标题').fill('取消的标题')
+    if (await block.locator('details').nth(1).getAttribute('open') === null) await block.locator('details').nth(1).locator('summary').click()
+    await block.getByRole('button', { name: '添加步骤', exact: true }).click()
+    await block.getByRole('button', { name: '取消整块编辑', exact: true }).press('Enter')
+    await expect(block.locator('.block-title')).toHaveText('原标题')
+    await expect(block.getByTitle('编辑', { exact: true })).toBeFocused()
+    await block.getByTitle('编辑', { exact: true }).click()
+    await block.locator('.bk-idea').fill('保存的新思路')
+    if (await block.locator('details').nth(1).getAttribute('open') === null) await block.locator('details').nth(1).locator('summary').click()
+    await expect(block.locator('.step-edit-card')).toHaveCount(6)
+    await block.getByRole('button', { name: '添加步骤', exact: true }).click()
+    await block.getByPlaceholder('要怎么做，例如：读取并检查附件数据').fill('新增验证步骤')
+    await block.getByRole('button', { name: '保存整个拆解块', exact: true }).press('Enter')
+    await expect(block.locator('.block-idea-preview')).toHaveText('保存的新思路')
+    await expect(block.getByTitle('编辑', { exact: true })).toBeFocused()
+    await page.reload()
+    await expect(block.locator('.block-idea-preview')).toHaveText('保存的新思路')
+    const saved = (await (await page.request.get(`${baseURL}/api/workspaces/${id}`)).json()).workspace.breakdown[0]
+    expect(saved.steps).toHaveLength(7)
+    expect(saved.steps[6].action).toBe('新增验证步骤')
+    expect(saved.quote).toBe('原依据')
+  } finally {
+    await page.request.delete(`${baseURL}/api/workspaces/${id}`)
+  }
+})
+
+test('切块编辑先处理未保存草稿，跨台返回保留输入', async ({ page }) => {
+  const id = `draft-switch-${Date.now()}`
+  await page.request.post(`${baseURL}/api/workspaces`, { data: { id, title: '草稿切换', problemText,
+    breakdown: ['a', 'b'].map((key) => ({ id: key, title: `任务${key}`, idea: `原思路${key}`, steps: [{ action: '原步骤', method: '原方法' }] })),
+  } })
+  try {
+    await page.addInitScript((workspaceId) => localStorage.setItem('mmg_current_ws_v1', workspaceId), id)
+    await page.goto(`${baseURL}/#/modeling`)
+    const blocks = page.locator('.page-view.active .decomp-block')
+    const a = blocks.nth(0), b = blocks.nth(1)
+    const dialog = page.getByRole('dialog', { name: '先处理当前草稿' })
+    await a.getByTitle('编辑', { exact: true }).click()
+    await a.locator('.bk-idea').fill('A未保存输入')
+    await page.getByRole('button', { name: '编程工作台', exact: true }).click()
+    await page.getByRole('button', { name: '建模思路梳理', exact: true }).click()
+    await expect(a.locator('.bk-idea')).toHaveValue('A未保存输入')
+    await b.getByTitle('编辑', { exact: true }).click()
+    await expect(dialog).toBeVisible()
+    await dialog.getByRole('button', { name: '保存并切换', exact: true }).focus()
+    await page.keyboard.press('Tab')
+    await expect(dialog.getByRole('button', { name: '继续编辑', exact: true })).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(a.locator('.bk-idea')).toBeFocused()
+    await b.getByTitle('编辑', { exact: true }).click()
+    await dialog.getByRole('button', { name: '保存并切换', exact: true }).click()
+    await expect(a.locator('.block-idea-preview')).toHaveText('A未保存输入')
+    await b.locator('.bk-idea').fill('B放弃输入')
+    await a.getByRole('button', { name: '添加步骤', exact: true }).click()
+    await dialog.getByRole('button', { name: '继续编辑', exact: true }).click()
+    await expect(b.locator('.bk-idea')).toHaveValue('B放弃输入')
+    await a.getByRole('button', { name: '添加步骤', exact: true }).click()
+    await dialog.getByRole('button', { name: '放弃并切换', exact: true }).click()
+    await expect(a.getByPlaceholder('要怎么做，例如：读取并检查附件数据')).toBeFocused()
+    await a.getByRole('button', { name: '取消整块编辑', exact: true }).click()
+    await expect(b.locator('.block-idea-preview')).toHaveText('原思路b')
+    await page.reload()
+    await expect(a.locator('.block-idea-preview')).toHaveText('A未保存输入')
+  } finally {
+    await page.request.delete(`${baseURL}/api/workspaces/${id}`)
+  }
+})
+
+test('未确认草稿按工作区恢复，刷新不应用草稿且取消后不再恢复', async ({ page }) => {
+  const ids = [`restore-a-${Date.now()}`, `restore-b-${Date.now()}`]
+  for (const id of ids) await page.request.post(`${baseURL}/api/workspaces`, { data: { id, title: id, problemText,
+    breakdown: [{ id: 'shared-block-id', title: '原标题', idea: '原思路', steps: [{ action: '原步骤', method: '原方法' }] }],
+  } })
+  try {
+    await page.addInitScript((id) => { if (!localStorage.getItem('mmg_current_ws_v1')) localStorage.setItem('mmg_current_ws_v1', id) }, ids[0])
+    await page.goto(`${baseURL}/#/modeling`)
+    const modeling = page.locator('.page-view.active .mdl')
+    const block = modeling.locator('.decomp-block')
+    await block.getByTitle('编辑', { exact: true }).click()
+    await block.locator('.bk-idea').fill('A未确认思路')
+    await block.locator('details').nth(1).locator('summary').click()
+    await block.getByTitle('编辑步骤 1', { exact: true }).click()
+    await block.locator('.step-method-field').fill('A未确认方法\n保留换行')
+    await modeling.getByTitle('展开侧栏', { exact: true }).click()
+    await page.getByTitle(ids[1], { exact: true }).click()
+    await block.getByTitle('编辑', { exact: true }).click()
+    await block.locator('.bk-idea').fill('B独立草稿')
+    await page.getByTitle(ids[0], { exact: true }).click()
+    await expect(block.locator('.step-method-field')).toHaveValue('A未确认方法\n保留换行')
+    await expect(block.locator('.step-method-field')).toBeFocused()
+    await page.reload()
+    await expect(block.locator('.bk-idea')).toHaveValue('A未确认思路')
+    await expect(block.locator('.step-method-field')).toBeFocused()
+    const saved = (await (await page.request.get(`${baseURL}/api/workspaces/${ids[0]}`)).json()).workspace.breakdown[0]
+    expect(saved.idea).toBe('原思路')
+    expect(saved.steps[0].method).toBe('原方法')
+    await block.getByRole('button', { name: '取消整块编辑', exact: true }).click()
+    await page.reload()
+    await expect(block.locator('.block-idea-preview')).toHaveText('原思路')
+    await expect(block.locator('.bk-idea')).toHaveCount(0)
+    await modeling.getByTitle('展开侧栏', { exact: true }).click()
+    await page.getByTitle(ids[1], { exact: true }).click()
+    await expect(block.locator('.bk-idea')).toHaveValue('B独立草稿')
+    await block.getByRole('button', { name: '保存拆解块', exact: true }).click()
+    await page.reload()
+    await expect(block.locator('.block-idea-preview')).toHaveText('B独立草稿')
+    await expect(block.locator('.bk-idea')).toHaveCount(0)
+  } finally {
+    for (const id of ids) await page.request.delete(`${baseURL}/api/workspaces/${id}`)
+  }
+})
+
+test('删除拆解块后可从相邻编辑或空态新建继续键盘操作', async ({ page }) => {
+  const id = `delete-focus-${Date.now()}`
+  await page.request.post(`${baseURL}/api/workspaces`, { data: { id, title: '删除焦点', problemText,
+    breakdown: ['a', 'b'].map((key) => ({ id: key, title: key, idea: '原思路', steps: [] })),
+  } })
+  try {
+    await page.addInitScript((workspaceId) => localStorage.setItem('mmg_current_ws_v1', workspaceId), id)
+    await page.goto(`${baseURL}/#/modeling`)
+    const modeling = page.locator('.page-view.active .mdl')
+    const block = modeling.locator('.decomp-block').first()
+    async function removeFirst() {
+      if (await block.getByTitle('展开', { exact: true }).count()) await block.getByTitle('展开', { exact: true }).click()
+      await block.getByRole('button', { name: '更多', exact: true }).click()
+      page.once('dialog', (dialog) => dialog.accept())
+      await block.getByRole('button', { name: '删除拆解块', exact: true }).click()
+    }
+    await removeFirst()
+    await expect(block.getByTitle('编辑', { exact: true })).toBeFocused()
+    await page.keyboard.press('Enter')
+    await block.locator('.bk-idea').fill('删除后继续填写')
+    await block.getByRole('button', { name: '保存拆解块', exact: true }).click()
+    await removeFirst()
+    const create = modeling.getByRole('button', { name: '新建拆解块', exact: true })
+    await expect(create).toBeFocused()
+    await page.keyboard.press('Enter')
+    await expect(modeling.locator('.decomp-block')).toHaveCount(1)
+    await block.getByTitle('编辑', { exact: true }).click()
+    await block.locator('.bk-idea').fill('空态继续填写')
+    await block.getByRole('button', { name: '保存拆解块', exact: true }).click()
+    await expect(block.locator('.block-idea-preview')).toHaveText('空态继续填写')
+  } finally {
+    await page.request.delete(`${baseURL}/api/workspaces/${id}`)
+  }
+})
+
+test('长思路与多个拆解块不会把生成弹窗操作挤出屏幕', async ({ page }) => {
+  const id = `long-generation-${Date.now()}`
+  await page.request.post(`${baseURL}/api/workspaces`, { data: {
+    id, title: '长内容生成弹窗', problemText,
+    breakdown: Array.from({ length: 7 }, (_, index) => ({ id: `long-${index}`, title: `分析任务${index + 1}`,
+      idea: '核对每日需求、预算、供应上限与损耗，并比较方案收益及风险。'.repeat(30), steps: [] })),
+  } })
+  try {
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.addInitScript((workspaceId) => localStorage.setItem('mmg_current_ws_v1', workspaceId), id)
+    await page.goto(`${baseURL}/#/coding`)
+    await page.getByRole('button', { name: 'AI生成', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: '生成代码', exact: true })
+    const bounds = await dialog.boundingBox()
+    expect(bounds.y).toBeGreaterThanOrEqual(0)
+    expect(bounds.y + bounds.height).toBeLessThanOrEqual(800)
+    const last = dialog.locator('.check-opt').last()
+    await last.scrollIntoViewIfNeeded()
+    await last.focus()
+    await page.keyboard.press('Enter')
+    await expect(last).toHaveAttribute('aria-pressed', 'true')
+    const generate = dialog.getByRole('button', { name: '生成', exact: true })
+    await expect(generate).toBeInViewport()
+    await expect(generate).toBeEnabled()
+    const output = dialog.getByPlaceholder('例如：分别读取三个表，输出风化前后统计表和分类结果；如果画图，把关键对比合成到一张图里。')
+    await output.fill('输出约束核对表')
+    await expect(output).toHaveValue('输出约束核对表')
+    await expect(generate).toBeInViewport()
+    await dialog.getByRole('button', { name: '取消', exact: true }).click()
+    await expect(dialog).toHaveCount(0)
+  } finally {
+    await page.request.delete(`${baseURL}/api/workspaces/${id}`)
+  }
+})
+
+test('切工作区后忽略旧AI预览，旧请求不能解除新请求等待', async ({ page }) => {
+  const ids = [`late-a-${Date.now()}`, `late-b-${Date.now()}`]
+  const pending = []
+  for (const id of ids) await page.request.post(`${baseURL}/api/workspaces`, { data: {
+    id, title: id, problemText, breakdown: [{ id: 'shared', title: id, idea: '原思路', steps: [] }],
+  } })
+  try {
+    await page.addInitScript((id) => { if (!localStorage.getItem('mmg_current_ws_v1')) localStorage.setItem('mmg_current_ws_v1', id) }, ids[0])
+    await page.route('**/api/chat/stream', async (route) => {
+      const index = pending.length
+      await new Promise((resolve) => pending.push(resolve))
+      const content = JSON.stringify({ blockId: 'shared', patch: { title: index === 0 ? 'A迟到预览' : 'B当前预览', idea: '待确认', steps: [] } })
+      await route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ delta: content })}\n\ndata: {"done":true}\n\n` })
+    })
+    await page.goto(`${baseURL}/#/settings`)
+    await page.locator('#api-key').fill('smoke-key-not-real')
+    await page.getByRole('button', { name: '保存设置', exact: true }).click()
+    await page.getByTitle('建模思路梳理').click()
+    const modeling = page.locator('.page-view.active .mdl')
+    const send = modeling.getByTitle('发送', { exact: true })
+    await modeling.locator('.composer textarea').fill('修改A')
+    await send.click()
+    await expect.poll(() => pending.length).toBe(1)
+    await modeling.getByTitle('展开侧栏', { exact: true }).click()
+    await page.getByTitle(ids[1], { exact: true }).click()
+    await expect(modeling.locator('.block-title-btn')).toContainText(ids[1])
+    await modeling.locator('.composer textarea').fill('修改B')
+    await send.click()
+    await expect.poll(() => pending.length).toBe(2)
+    pending[0]()
+    await page.waitForTimeout(200)
+    await expect(modeling.locator('.modify-preview')).toHaveCount(0)
+    await expect(send).toBeDisabled()
+    pending[1]()
+    await expect(modeling.locator('.modify-preview')).toContainText('B当前预览')
+    await expect(modeling.locator('.chat')).not.toContainText('A迟到预览')
+    await modeling.locator('.modify-preview').getByRole('button', { name: '取消', exact: true }).click()
+    await expect(modeling.locator('.block-idea-preview')).toHaveText('原思路')
+  } finally {
+    pending.forEach((release) => release())
+    for (const id of ids) await page.request.delete(`${baseURL}/api/workspaces/${id}`)
+  }
+})
+
+test('迟到运行不能串区输出图表或解除新运行等待', async ({ page }) => {
+  const ids = [`run-race-a-${Date.now()}`, `run-race-b-${Date.now()}`]
+  for (const id of ids) await page.request.post(`${baseURL}/api/workspaces`, { data: { id, title: id, problemText, code: 'import numpy\nvalue = 1' } })
+  try {
+    await page.addInitScript((id) => { if (!localStorage.getItem('mmg_current_ws_v1')) localStorage.setItem('mmg_current_ws_v1', id) }, ids[0])
+    await page.route('https://cdn.jsdelivr.net/pyodide/**/pyodide.js', (route) => route.fulfill({ contentType: 'application/javascript', body: `
+      window.loadPyodide = async () => {
+        let stdout = () => {}, plot = false;
+        return {
+          FS: { mkdir() {}, readdir() { return ['.', '..'] }, writeFile() {}, unlink() { plot = false },
+            readFile() { return Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='), c => c.charCodeAt(0)) } },
+          loadPackage: async () => { await new Promise(r => (window.pendingRuns ||= []).push(r)) },
+          setStdout(o) { stdout = o.batched }, setStderr() {},
+          runPython(code) { if (code.includes('exec(')) { stdout('当前运行输出'); plot = true } return plot ? 'True' : 'False' },
+        };
+      };
+    ` }))
+    await page.goto(`${baseURL}/#/coding`)
+    const root = page.locator('.code-split')
+    await root.getByRole('button', { name: '运行', exact: true }).click()
+    await page.waitForFunction(() => window.pendingRuns?.length === 1)
+    await root.getByTitle('展开侧栏', { exact: true }).click()
+    await page.getByTitle(ids[1], { exact: true }).click()
+    await root.getByRole('button', { name: '运行', exact: true }).click()
+    await page.waitForFunction(() => window.pendingRuns?.length === 2)
+    await page.evaluate(() => window.pendingRuns[0]())
+    await page.waitForTimeout(200)
+    await expect(root.getByRole('button', { name: '运行中…', exact: true })).toBeDisabled()
+    await expect(root).not.toContainText('当前运行输出')
+    await expect(root.locator('img')).toHaveCount(0)
+    await page.evaluate(() => window.pendingRuns[1]())
+    await expect(root.getByText('当前运行输出', { exact: true }).first()).toBeVisible()
+    await expect(root.locator('img').first()).toBeVisible()
+    await root.getByRole('button', { name: '运行', exact: true }).click()
+    await page.waitForFunction(() => window.pendingRuns?.length === 3)
+    await root.locator('pre.code').fill('edited_value = 3')
+    await page.evaluate(() => window.pendingRuns[2]())
+    await expect(root).toContainText('代码已修改，旧运行结果不再应用；请运行当前代码')
+    await expect(root.locator('pre.code')).toContainText('edited_value = 3')
+    await expect(root.getByRole('button', { name: '运行', exact: true })).toBeEnabled()
+  } finally {
+    await page.evaluate(() => window.pendingRuns?.forEach(r => r())).catch(() => {})
+    for (const id of ids) await page.request.delete(`${baseURL}/api/workspaces/${id}`)
+  }
+})
+
+test('代码生成跨区隔离，迟到改进不覆盖手工输入', async ({ page }) => {
+  const ids = [`code-race-a-${Date.now()}`, `code-race-b-${Date.now()}`]
+  const pending = []
+  for (const id of ids) await page.request.post(`${baseURL}/api/workspaces`, { data: { id, title: id, problemText,
+    code: 'value = 0\nprint(value)', breakdown: [{ id: 'same', title: '方案', idea: '比较', steps: [] }],
+  } })
+  try {
+    await page.addInitScript((id) => { if (!localStorage.getItem('mmg_current_ws_v1')) localStorage.setItem('mmg_current_ws_v1', id) }, ids[0])
+    await page.route('**/api/chat/stream', async (route) => {
+      await new Promise((resolve) => pending.push(resolve))
+      await route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ delta: '```python\nvalue = 1\nprint("迟到AI代码")\n```' })}\n\ndata: {"done":true}\n\n` })
+    })
+    await page.route('**/api/chat', (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ content: '```python\nvalue = 1\nprint(value)\n```' }) }))
+    await page.goto(`${baseURL}/#/settings`)
+    await page.locator('#api-key').fill('smoke-key-not-real')
+    await page.getByRole('button', { name: '保存设置', exact: true }).click()
+    await page.getByRole('button', { name: '编程工作台', exact: true }).click()
+    const root = page.locator('.code-split')
+    const editor = root.locator('pre.code[contenteditable]')
+    await root.getByRole('button', { name: 'AI生成', exact: true }).click()
+    await page.locator('.check-opt').first().click()
+    await page.getByRole('button', { name: '生成', exact: true }).click()
+    await expect.poll(() => pending.length).toBe(1)
+    await root.getByTitle('展开侧栏', { exact: true }).click()
+    await page.getByTitle(ids[1], { exact: true }).click()
+    await root.getByRole('button', { name: 'AI改进', exact: true }).click()
+    await expect.poll(() => pending.length).toBe(2)
+    pending[0]()
+    await page.waitForTimeout(200)
+    await expect(root.getByRole('button', { name: 'AI生成', exact: true })).toBeDisabled()
+    await editor.fill('manual_value = 2\nprint("手工保留")')
+    pending[1]()
+    await expect(root).toContainText('已保留手工输入')
+    await expect.poll(async () => (await (await page.request.get(`${baseURL}/api/workspaces/${ids[1]}`)).json()).workspace.code).toContain('手工保留')
+    await expect(editor).toContainText('手工保留')
+    await expect(editor).not.toContainText('迟到AI代码')
+  } finally {
+    pending.forEach((release) => release())
+    for (const id of ids) await page.request.delete(`${baseURL}/api/workspaces/${id}`)
+  }
+})
+
+test('整体解读开始及完成后隐藏精读空闲提示，失败保留已有解读', async ({ page }) => {
+  const id = `reading-idle-${Date.now()}`
+  let release
+  await page.request.post(`${baseURL}/api/workspaces`, { data: { id, title: id, problemText } })
+  try {
+    await page.addInitScript(id => { if (!localStorage.getItem('mmg_current_ws_v1')) localStorage.setItem('mmg_current_ws_v1', id) }, id)
+    await page.route('**/api/chat/stream', async route => {
+      await new Promise(resolve => { release = resolve })
+      await route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ delta: '## 解读结果\n先核对数据。' })}\n\ndata: {"done":true}\n\n` })
+    })
+    await page.goto(`${baseURL}/#/settings`)
+    await page.locator('#api-key').fill('smoke-key-not-real')
+    await page.getByRole('button', { name: '保存设置', exact: true }).click()
+    await page.getByRole('button', { name: '读题工作台', exact: true }).click()
+    const guide = page.locator('.reading-empty-guide')
+    const generate = page.getByRole('button', { name: 'AI 整体解读', exact: true })
+    await expect(guide).toBeVisible()
+    await generate.click()
+    await expect(guide).toHaveCount(0)
+    await expect.poll(() => Boolean(release)).toBe(true)
+    release()
+    await expect(generate).toBeEnabled()
+    await expect(page.getByText('先核对数据。', { exact: true })).toBeVisible()
+    await expect(guide).toHaveCount(0)
+    await page.reload()
+    await expect(page.getByText('先核对数据。', { exact: true })).toBeVisible()
+    await expect(guide).toHaveCount(0)
+    await page.unroute('**/api/chat/stream')
+    for (const endpoint of ['**/api/chat/stream', '**/api/chat']) {
+      await page.route(endpoint, route => route.fulfill({ status: 503, contentType: 'application/json', body: '{"message":"解读失败测试"}' }))
+    }
+    await generate.click()
+    await expect(generate).toBeEnabled()
+    await expect(page.getByText('先核对数据。', { exact: true })).toBeVisible()
+    await expect(guide).toHaveCount(0)
+  } finally {
+    release?.()
+    await page.request.delete(`${baseURL}/api/workspaces/${id}`)
+  }
+})
+
+test('Python TextMate 按VS Code深浅主题着色，未闭合引号和跨行字符串不串色', async ({ page }) => {
+  const id = `textmate-${Date.now()}`
+  await page.request.post(`${baseURL}/api/workspaces`, { data: { id, title: id, code: 'print("hello)' } })
+  try {
+    await page.addInitScript(id => localStorage.setItem('mmg_current_ws_v1', id), id)
+    await page.goto(`${baseURL}/#/coding`)
+    const editor = page.getByRole('textbox', { name: 'Python 代码' })
+    const token = text => page.locator('.code-highlight span').filter({ hasText: text }).first()
+    for (const width of [1280, 1440]) for (const theme of ['light', 'dark']) {
+      await page.setViewportSize({ width, height: width === 1280 ? 800 : 900 })
+      await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme)
+      await expect(editor).toBeVisible()
+      await editor.focus()
+      await page.keyboard.press('Control+a')
+      await page.keyboard.insertText('print("hello)')
+      await expect(token(/^print$/)).toHaveCSS('color', theme === 'dark' ? 'rgb(220, 220, 170)' : 'rgb(121, 94, 38)')
+      await expect(token(/^"hello\)$/)).toHaveCSS('color', theme === 'dark' ? 'rgb(206, 145, 120)' : 'rgb(163, 21, 21)')
+      await page.screenshot({ path: path.join(repoRoot, 'docs/04-质量/records/screenshots/2026-10-09-python-textmate', `unfinished-${theme}-${width}.png`) })
+      await page.keyboard.press('Control+a')
+      await page.keyboard.insertText('print("hello")')
+      await expect(token(/^\)$/)).toHaveCSS('color', theme === 'dark' ? 'rgb(212, 212, 212)' : 'rgb(0, 0, 0)')
+      await expect(editor).toBeFocused()
+      await page.screenshot({ path: path.join(repoRoot, 'docs/04-质量/records/screenshots/2026-10-09-python-textmate', `closed-${theme}-${width}.png`) })
+      await page.keyboard.press('Control+a')
+      await page.keyboard.insertText('note = """first\nif print # text\n"""\nprint(1)')
+      await expect(token(/^if print # text$/)).toHaveCSS('color', theme === 'dark' ? 'rgb(206, 145, 120)' : 'rgb(163, 21, 21)')
+      await expect(token(/^print$/)).toHaveCSS('color', theme === 'dark' ? 'rgb(220, 220, 170)' : 'rgb(121, 94, 38)')
+      await page.screenshot({ path: path.join(repoRoot, 'docs/04-质量/records/screenshots/2026-10-09-python-textmate', `multiline-${theme}-${width}.png`) })
+    }
+  } finally {
+    await page.request.delete(`${baseURL}/api/workspaces/${id}`)
+  }
+})
+
+test('已有代码中间Enter换行，输入时着色且保留光标和撤销', async ({ page }) => {
+  const id = `live-editor-${Date.now()}`
+  await page.request.post(`${baseURL}/api/workspaces`, { data: { id, title: id, code: 'value = 1\nprint(value)' } })
+  try {
+    await page.addInitScript(id => localStorage.setItem('mmg_current_ws_v1', id), id)
+    await page.goto(`${baseURL}/#/coding`)
+    const editor = page.getByRole('textbox', { name: 'Python 代码' })
+    await expect(editor).toContainText('print(value)')
+    await editor.focus()
+    await page.keyboard.press('Control+Home')
+    await page.keyboard.press('End')
+    await page.keyboard.press('Enter')
+    await page.keyboard.type('if True:')
+    await expect.poll(() => editor.innerText()).toBe('value = 1\nif True:\nprint(value)')
+    await expect(page.locator('.code-highlight span').filter({ hasText: /^if$/ }).first()).toHaveText('if')
+    await expect(editor).toBeFocused()
+    await page.keyboard.press('Enter')
+    await page.keyboard.press('Tab')
+    await page.keyboard.type('# comment')
+    await expect(page.locator('.code-highlight span').filter({ hasText: /^# comment$/ })).toHaveText('# comment')
+    await page.keyboard.press('Control+z')
+    await expect(editor).not.toContainText('# comment')
+    await page.keyboard.press('Control+Shift+z')
+    await expect(editor).toContainText('# comment')
+    const edited = await editor.innerText()
+    await page.getByRole('button', { name: '建模思路梳理', exact: true }).click()
+    await page.getByRole('button', { name: '编程工作台', exact: true }).click()
+    await expect.poll(() => editor.textContent()).toBe(edited)
+    await page.reload()
+    await expect.poll(() => editor.textContent()).toBe(edited)
+    await editor.focus()
+    await page.keyboard.press('Control+End')
+    await page.keyboard.press('Enter')
+    await page.getByRole('button', { name: '建模思路梳理', exact: true }).click()
+    await page.getByRole('button', { name: '编程工作台', exact: true }).click()
+    await expect.poll(() => editor.textContent()).toBe(edited + '\n')
+  } finally {
+    await page.request.delete(`${baseURL}/api/workspaces/${id}`)
+  }
+})
+
+test('原生Enter换行与立即离台刷新保留代码，批注迟到不覆盖手工输入', async ({ page }) => {
+  const id = `code-input-${Date.now()}`
+  let release
+  await page.request.post(`${baseURL}/api/workspaces`, { data: { id, title: id, code: '' } })
+  try {
+    await page.addInitScript((id) => { if (!localStorage.getItem('mmg_current_ws_v1')) localStorage.setItem('mmg_current_ws_v1', id) }, id)
+    await page.goto(`${baseURL}/#/settings`)
+    await page.locator('#api-key').fill('smoke-key-not-real')
+    await page.getByRole('button', { name: '保存设置', exact: true }).click()
+    await page.getByRole('button', { name: '编程工作台', exact: true }).click()
+    const root = page.locator('.code-split')
+    const editor = root.locator('pre.code[contenteditable]')
+    await editor.click()
+    await page.keyboard.type('value = 1')
+    await page.keyboard.press('Enter')
+    await page.keyboard.type('print(value)')
+    const code = 'value = 1\nprint(value)'
+    await page.getByRole('button', { name: '建模思路梳理', exact: true }).click()
+    await page.getByRole('button', { name: '编程工作台', exact: true }).click()
+    await expect(editor).toHaveText(code)
+    await editor.click()
+    await page.keyboard.press('End')
+    await page.keyboard.type(' # saved')
+    await page.reload()
+    await expect(editor).toHaveText(code + ' # saved')
+    await expect.poll(async () => (await (await page.request.get(`${baseURL}/api/workspaces/${id}`)).json()).workspace.code).toBe(code + ' # saved')
+    await page.route('**/api/chat', async (route) => {
+      await new Promise((resolve) => { release = resolve })
+      await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ content: '# 中文说明\nvalue = 999' }) })
+    })
+    await editor.fill('# unusual English explanation\nvalue = 2')
+    await root.getByRole('button', { name: '中文化批注', exact: true }).click()
+    await expect.poll(() => typeof release).toBe('function')
+    await editor.fill('manual_value = 3')
+    release()
+    await expect(root).toContainText('已保留手工输入')
+    await expect(editor).toHaveText('manual_value = 3')
+    await expect.poll(async () => (await (await page.request.get(`${baseURL}/api/workspaces/${id}`)).json()).workspace.code).toBe('manual_value = 3')
+  } finally {
+    release?.()
+    await page.request.delete(`${baseURL}/api/workspaces/${id}`)
+  }
+})
+
+test('解读刚完成即切区先保存，失败留在原区并可重试', async ({ page }) => {
+  const ids = [`switch-save-a-${Date.now()}`, `switch-save-b-${Date.now()}`]
+  for (const id of ids) await page.request.post(`${baseURL}/api/workspaces`, { data: { id, title: id, problemText } })
+  try {
+    await page.addInitScript((id) => { if (!localStorage.getItem('mmg_current_ws_v1')) localStorage.setItem('mmg_current_ws_v1', id) }, ids[0])
+    await installModelMocks(page)
+    await page.goto(`${baseURL}/#/settings`)
+    await page.locator('#api-key').fill('smoke-key-not-real')
+    await page.getByRole('button', { name: '保存设置', exact: true }).click()
+    await page.getByRole('button', { name: '读题工作台', exact: true }).click()
+    const root = page.locator('.page-view.active')
+    await root.getByTitle('展开侧栏', { exact: true }).click()
+    await root.getByRole('button', { name: /AI 整体解读/ }).click()
+    await expect(root.getByText('模拟模型已完成整体解读，并识别了预算约束与收益目标。', { exact: true })).toBeVisible()
+    await page.getByTitle(ids[1], { exact: true }).click()
+    await expect.poll(async () => (await (await page.request.get(`${baseURL}/api/workspaces/${ids[0]}`)).json()).workspace.overview).toContain('模拟模型已完成整体解读')
+    await page.getByTitle(ids[0], { exact: true }).click()
+    await expect(root.getByText('模拟模型已完成整体解读，并识别了预算约束与收益目标。', { exact: true })).toBeVisible()
+    await page.reload()
+    await expect(root.getByText('模拟模型已完成整体解读，并识别了预算约束与收益目标。', { exact: true })).toBeVisible()
+    await root.getByTitle('展开侧栏', { exact: true }).click()
+    await page.route('**/api/workspaces', async (route) => {
+      if (route.request().method() === 'POST') await route.fulfill({ status: 503, contentType: 'application/json', body: '{}' })
+      else await route.continue()
+    })
+    await page.getByTitle(ids[1], { exact: true }).click()
+    await expect(page.getByText('保存失败：HTTP 503，仍留在当前工作区，请重试切换', { exact: true })).toBeVisible()
+    await expect(root.getByText('模拟模型已完成整体解读，并识别了预算约束与收益目标。', { exact: true })).toBeVisible()
+    await page.unroute('**/api/workspaces')
+    await page.getByTitle(ids[1], { exact: true }).click()
+    await expect(root.getByText('模拟模型已完成整体解读，并识别了预算约束与收益目标。', { exact: true })).toHaveCount(0)
+  } finally {
+    await page.unroute('**/api/workspaces')
+    for (const id of ids) await page.request.delete(`${baseURL}/api/workspaces/${id}`)
+  }
+})
+
+test('题干修改后忽略旧解读，旧请求不能解除新解读等待', async ({ page }) => {
+  const id = `reading-race-${Date.now()}`
+  const pending = []
+  await page.request.post(`${baseURL}/api/workspaces`, { data: { id, title: '读题异步隔离', problemText } })
+  try {
+    await page.addInitScript((id) => localStorage.setItem('mmg_current_ws_v1', id), id)
+    await page.route('**/api/chat/stream', async (route) => {
+      const content = await new Promise((resolve) => pending.push(resolve))
+      await route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ delta: content })}\n\ndata: {"done":true}\n\n` })
+    })
+    await page.goto(`${baseURL}/#/settings`)
+    await page.locator('#api-key').fill('smoke-key-not-real')
+    await page.getByRole('button', { name: '保存设置', exact: true }).click()
+    await page.getByRole('button', { name: '读题工作台', exact: true }).click()
+    const root = page.locator('.page-view.active')
+    const ai = root.getByRole('button', { name: /AI 整体解读|AI 解读中/ })
+    await ai.click()
+    await expect.poll(() => pending.length).toBe(1)
+    await root.getByRole('button', { name: '编辑题干', exact: true }).click()
+    await page.locator('.sheet textarea').fill('已修改题干，增加新的预算约束。')
+    await page.locator('.sheet').getByRole('button', { name: '保存', exact: true }).click()
+    await ai.click()
+    await expect.poll(() => pending.length).toBe(2)
+    pending[0]('旧题干解读不应出现')
+    await page.waitForTimeout(200)
+    await expect(ai).toBeDisabled()
+    await expect(root).not.toContainText('旧题干解读不应出现')
+    pending[1]('新题干的正确解读')
+    await expect(root.getByText('新题干的正确解读', { exact: true })).toBeVisible()
+    await expect.poll(async () => (await (await page.request.get(`${baseURL}/api/workspaces/${id}`)).json()).workspace.overview).toBe('新题干的正确解读')
+  } finally {
+    pending.forEach((release) => release('测试结束'))
     await page.request.delete(`${baseURL}/api/workspaces/${id}`)
   }
 })
@@ -801,7 +1471,7 @@ test('AI思路建议保留手工输入，取消重开后忽略迟到结果', asy
     await block.getByRole('button', { name: '忽略建议', exact: true }).press('Enter')
     await expect(ai).toBeFocused()
     await expect(idea).toHaveValue('重开的草稿')
-    await block.locator('details').nth(1).locator('summary').click()
+    if (await block.locator('details').nth(1).getAttribute('open') === null) await block.locator('details').nth(1).locator('summary').click()
     await block.getByTitle('编辑步骤 2').click()
     await block.getByTitle('删除步骤').nth(1).press('Enter')
     await expect(block.locator('.step-edit-card')).toHaveCount(2)
@@ -815,6 +1485,88 @@ test('AI思路建议保留手工输入，取消重开后忽略迟到结果', asy
     pending.splice(0).forEach((resolve) => resolve())
     await page.request.delete(`${baseURL}/api/workspaces/${id}`)
   }
+})
+
+test('新建等待期间暂停上传，失败可重试且新题不会写入旧工作区', async ({ page }) => {
+  const oldId = 'creation-upload-old'
+  await page.request.post(`${baseURL}/api/workspaces`, { data: { id: oldId, title: '旧工作区', problemText: '旧题内容保持' } })
+  await page.addInitScript((id) => { if (!localStorage.getItem('mmg_current_ws_v1')) localStorage.setItem('mmg_current_ws_v1', id) }, oldId)
+  await page.goto(baseURL)
+  const active = page.locator('.page-view.active')
+  await expect(active.getByText('旧题内容保持', { exact: true })).toBeVisible()
+  let release
+  let failNext = false
+  await page.route('**/api/workspaces', async (route) => {
+    if (route.request().method() === 'POST' && !route.request().postDataJSON()?.id) {
+      if (failNext) return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ ok: false, message: '创建暂时失败，请重试' }) })
+      await new Promise((resolve) => { release = resolve })
+    }
+    await route.continue()
+  })
+  await page.getByTitle('新建工作区', { exact: true }).click()
+  await expect(page.getByRole('status')).toContainText('正在创建')
+  await expect(page.locator('input[accept=".pdf,.md,.txt"]')).toBeDisabled()
+  await expect(page.locator('main')).toHaveAttribute('inert', '')
+  await expect.poll(() => typeof release).toBe('function')
+  release()
+  await expect(page.locator('input[accept=".pdf,.md,.txt"]')).toBeEnabled()
+  await page.locator('input[accept=".pdf,.md,.txt"]').setInputFiles({ name: '新题.md', mimeType: 'text/markdown', buffer: Buffer.from('# 新题\n\n新工作区的上传内容') })
+  await expect(active.getByText('新工作区的上传内容', { exact: true })).toBeVisible()
+  const newId = await page.evaluate(() => localStorage.getItem('mmg_current_ws_v1'))
+  expect(newId).not.toBe(oldId)
+  await expect.poll(async () => (await (await page.request.get(`${baseURL}/api/workspaces/${newId}`)).json()).workspace.problemText).toContain('新工作区的上传内容')
+  expect((await (await page.request.get(`${baseURL}/api/workspaces/${oldId}`)).json()).workspace.problemText).toBe('旧题内容保持')
+  failNext = true
+  await page.getByTitle('新建工作区', { exact: true }).click()
+  await expect(page.getByRole('status')).toContainText('创建暂时失败')
+  await expect(page.locator('input[accept=".pdf,.md,.txt"]')).toBeEnabled()
+  await expect(active.getByText('新工作区的上传内容', { exact: true })).toBeVisible()
+  await page.request.delete(`${baseURL}/api/workspaces/${oldId}`)
+  await page.request.delete(`${baseURL}/api/workspaces/${newId}`)
+})
+
+test('上传PDF可切换原版、完整下载并在刷新和备份恢复后保留原件', async ({ page }) => {
+  await page.goto(`${baseURL}/#/settings`)
+  await page.getByRole('button', { name: '＋ 新建工作区' }).click()
+  await page.getByRole('button', { name: '读题工作台', exact: true }).click()
+  const bytes = pdfTableFixture()
+  await page.locator('input[accept=".pdf,.md,.txt"]').setInputFiles({ name: '原件.pdf', mimeType: 'application/pdf', buffer: bytes })
+  const active = page.locator('.page-view.active')
+  await expect(active.locator('.pdf-extracted-table')).toBeVisible()
+  await active.getByRole('button', { name: 'PDF原版', exact: true }).click()
+  await expect(active.getByRole('img', { name: 'PDF原版第1页', exact: true })).toBeVisible()
+  expect(await active.getByRole('img', { name: 'PDF原版第1页', exact: true }).evaluate((img) => img.naturalWidth)).toBe(1400)
+  const downloaded = await active.getByRole('link', { name: '下载原PDF' }).evaluate(async (a) => {
+    const bytes = new Uint8Array(await (await fetch(a.href)).arrayBuffer())
+    return Array.from(bytes)
+  })
+  expect(Buffer.from(downloaded).equals(bytes)).toBeTruthy()
+  const id = await page.evaluate(() => localStorage.getItem('mmg_current_ws_v1'))
+  await expect.poll(async () => (await (await page.request.get(`${baseURL}/api/workspaces/${id}`)).json()).workspace.problemDocument?.data).toBe(bytes.toString('base64'))
+  await page.reload()
+  await active.getByRole('button', { name: 'PDF原版', exact: true }).click()
+  await expect(active.getByRole('img', { name: 'PDF原版第1页', exact: true })).toBeVisible()
+  await active.getByRole('button', { name: '提取文本', exact: true }).focus()
+  await page.keyboard.press('Enter')
+  await expect(active.locator('.pdf-extracted-table')).toBeVisible()
+  const backup = await (await page.request.get(`${baseURL}/api/workspaces/${id}/backup`)).json()
+  const restored = await (await page.request.post(`${baseURL}/api/workspaces/import`, { data: { backup } })).json()
+  expect(restored.workspace.problemDocument.data).toBe(bytes.toString('base64'))
+  await active.getByRole('button', { name: '编辑题干', exact: true }).click()
+  await page.getByPlaceholder('题目文本…', { exact: true }).fill('取消的修改')
+  await page.locator('.sheet').getByRole('button', { name: '取消', exact: true }).click()
+  await expect(active.locator('.pdf-extracted-table')).toBeVisible()
+  await active.getByRole('button', { name: '编辑题干', exact: true }).click()
+  await page.getByPlaceholder('题目文本…', { exact: true }).fill('修改后的预算为300。')
+  await page.locator('.sheet').getByRole('button', { name: '保存', exact: true }).click()
+  await expect(active.locator('.pdf-document-paragraph').filter({ hasText: '修改后的预算为300。' })).toBeVisible()
+  await expect(active.getByRole('button', { name: '已编辑文本', exact: true })).toBeVisible()
+  await expect(active.locator('.pdf-extracted-table')).toHaveCount(0)
+  await page.reload()
+  await expect(active.locator('.pdf-document-paragraph').filter({ hasText: '修改后的预算为300。' })).toBeVisible()
+  expect((await (await page.request.get(`${baseURL}/api/workspaces/${id}`)).json()).workspace.problemDocument.data).toBe(bytes.toString('base64'))
+  await page.request.delete(`${baseURL}/api/workspaces/${id}`)
+  await page.request.delete(`${baseURL}/api/workspaces/${restored.id}`)
 })
 
 test('真实 Pyodide 从 G02 多工作表附件计算排名并生成图表（显式运行）', async ({ page }) => {
@@ -896,7 +1648,7 @@ plt.legend()
 plt.tight_layout()
 plt.savefig('/plot.png')
 `
-  const editor = page.locator('pre.code[contenteditable="true"]')
+  const editor = page.locator('pre.code[contenteditable]')
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: baseURL })
   await page.evaluate((source) => navigator.clipboard.writeText(source), code)
   await editor.click()
@@ -1003,7 +1755,7 @@ plt.legend()
 plt.tight_layout()
 plt.savefig('/plot.png')
 `
-  const editor = page.locator('pre.code[contenteditable="true"]')
+  const editor = page.locator('pre.code[contenteditable]')
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: baseURL })
   await page.evaluate((source) => navigator.clipboard.writeText(source), code)
   await editor.click()
@@ -1121,7 +1873,7 @@ plt.legend()
 plt.tight_layout()
 plt.savefig('/plot.png')
 `
-  const editor = page.locator('pre.code[contenteditable="true"]')
+  const editor = page.locator('pre.code[contenteditable]')
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: baseURL })
   await page.evaluate((source) => navigator.clipboard.writeText(source), code)
   await editor.click()
@@ -1228,7 +1980,7 @@ plt.legend()
 plt.tight_layout()
 plt.savefig('/plot.png')
 `
-  const editor = page.locator('pre.code[contenteditable="true"]')
+  const editor = page.locator('pre.code[contenteditable]')
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: baseURL })
   await page.evaluate((source) => navigator.clipboard.writeText(source), code)
   await editor.click()
@@ -1349,7 +2101,7 @@ plt.legend()
 plt.tight_layout()
 plt.savefig('/plot.png')
 `
-  const editor = page.locator('pre.code[contenteditable="true"]')
+  const editor = page.locator('pre.code[contenteditable]')
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: baseURL })
   await page.evaluate((source) => navigator.clipboard.writeText(source), code)
   await editor.click()
@@ -1500,7 +2252,7 @@ plt.title('Pareto plans (circles) and dominated plans (crosses)')
 plt.tight_layout()
 plt.savefig('/plot.png')
 `
-  const editor = page.locator('pre.code[contenteditable="true"]')
+  const editor = page.locator('pre.code[contenteditable]')
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: baseURL })
   await page.evaluate((source) => navigator.clipboard.writeText(source), code)
   await editor.click()
@@ -1656,7 +2408,7 @@ ax.set_title('G07 held-out confusion matrix')
 fig.tight_layout()
 fig.savefig('/plot.png')
 `
-  const editor = page.locator('pre.code[contenteditable="true"]')
+  const editor = page.locator('pre.code[contenteditable]')
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: baseURL })
   await page.evaluate((source) => navigator.clipboard.writeText(source), code)
   await editor.click()
@@ -1821,7 +2573,7 @@ ax.legend()
 fig.tight_layout()
 fig.savefig('/plot.png')
 `
-  const editor = page.locator('pre.code[contenteditable="true"]')
+  const editor = page.locator('pre.code[contenteditable]')
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: baseURL })
   await page.evaluate((source) => navigator.clipboard.writeText(source), code)
   await editor.click()
@@ -1983,7 +2735,7 @@ ax.legend()
 fig.tight_layout()
 fig.savefig('/plot.png')
 `
-  const editor = page.locator('pre.code[contenteditable="true"]')
+  const editor = page.locator('pre.code[contenteditable]')
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: baseURL })
   await page.evaluate((source) => navigator.clipboard.writeText(source), code)
   await editor.click()
@@ -2139,7 +2891,7 @@ ax.set_title('G10 shortest route via C; B-D closed')
 fig.tight_layout()
 fig.savefig('/plot.png')
 `
-  const editor = page.locator('pre.code[contenteditable="true"]')
+  const editor = page.locator('pre.code[contenteditable]')
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: baseURL })
   await page.evaluate((source) => navigator.clipboard.writeText(source), code)
   await editor.click()
@@ -2191,4 +2943,261 @@ fig.savefig('/plot.png')
   }, { message: 'G10 代码未保存', timeout: 20_000 }).toBe(true)
   expect(pageErrors).toEqual([])
   expect(modelRequests).toEqual([])
+})
+
+
+test('长图表滚动到底可见完整底部，放大关闭后仍可滚动', async ({ playwright }, testInfo) => {
+  const browser = await playwright.chromium.launch({ ignoreDefaultArgs: ['--hide-scrollbars'] })
+  const page = await browser.newPage()
+  const id = 'chart-scroll-' + Date.now()
+  await page.request.post(baseURL + '/api/workspaces', { data: { id, title: '长图滚动夹具', code: '# 固定数据多图夹具\nprint("scroll fixture")' } })
+  try {
+    const png = await page.evaluate(() => {
+      const canvas = document.createElement('canvas'); canvas.width = 1200; canvas.height = 1000
+      const ctx = canvas.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 1200, 1000)
+      ctx.fillStyle = '#222'; ctx.font = '32px sans-serif'; ctx.fillText('MULTI-PANEL SCROLL FIXTURE', 30, 45)
+      for (let i = 0; i < 4; i++) { const x = 30 + (i % 2) * 590, y = 80 + Math.floor(i / 2) * 420; ctx.strokeRect(x, y, 540, 370); ctx.fillText('Panel ' + (i + 1), x + 20, y + 45) }
+      ctx.fillText('BOTTOM ROW / END OF FIGURE', 30, 970)
+      return canvas.toDataURL('image/png').split(',')[1]
+    })
+    await installFakePyodide(page, png)
+    await page.addInitScript(id => localStorage.setItem('mmg_current_ws_v1', id), id)
+    await page.goto(baseURL + '/#/coding')
+    await expect(page.getByRole('textbox', { name: 'Python 代码' })).toContainText('scroll fixture')
+    for (const width of [1280, 1440]) for (const theme of ['light', 'dark']) {
+      await page.setViewportSize({ width, height: width === 1280 ? 720 : 900 })
+      await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme)
+      await page.getByRole('button', { name: '运行', exact: true }).click()
+      const chart = page.getByRole('img', { name: '运行结果', exact: true })
+      await expect(chart).toBeVisible()
+      await expect.poll(() => chart.evaluate(el => el.naturalHeight)).toBe(1000)
+      const pane = page.locator('.out-pane')
+      await pane.hover(); await page.mouse.wheel(0, -2500)
+      await expect.poll(() => pane.evaluate(el => el.scrollTop)).toBe(0)
+      const initial = await pane.boundingBox()
+      const metrics = await pane.evaluate(el => ({ client: el.clientHeight, scroll: el.scrollHeight, gutter: el.offsetWidth - el.clientWidth }))
+      expect(metrics.scroll).toBeGreaterThan(metrics.client)
+      expect(metrics.gutter).toBeGreaterThan(0)
+      const x = initial.x + initial.width - metrics.gutter / 2
+      const thumbCenter = initial.y + metrics.client * metrics.client / metrics.scroll / 2
+      await page.mouse.move(x, thumbCenter)
+      await page.mouse.down()
+      await page.mouse.move(x, initial.y + initial.height - 2, { steps: 20 })
+      await page.mouse.up()
+      await expect.poll(() => pane.evaluate(el => el.scrollHeight - el.clientHeight - el.scrollTop)).toBeLessThanOrEqual(1)
+      expect(await pane.boundingBox()).toEqual(initial)
+      await expect.poll(() => chart.evaluate(el => {
+        const img = el.getBoundingClientRect(), card = el.closest('.chart-card').getBoundingClientRect(), pane = el.closest('.out-pane').getBoundingClientRect()
+        return img.bottom <= Math.min(card.bottom, pane.bottom) + 1
+      })).toBe(true)
+      await page.screenshot({ path: testInfo.outputPath('bottom-' + theme + '-' + width + '.png') })
+      const history = page.getByRole('region', { name: '历次运行对比' })
+      await expect(history.locator('.run-history-item')).toHaveCount((width === 1280 ? 0 : 2) + (theme === 'light' ? 1 : 2))
+      const latest = history.locator('details').first()
+      await expect(latest.locator('time')).toHaveAttribute('datetime', /T/)
+      await latest.locator('summary').click()
+      await expect(latest.getByRole('img')).toBeVisible()
+      await latest.getByRole('button').click()
+      await expect(page.getByRole('dialog')).toContainText('次运行')
+      await page.getByRole('button', { name: '关闭', exact: true }).click()
+      await latest.locator('summary').click()
+      await page.getByTitle('点击放大查看图表').click()
+      await expect(page.getByRole('dialog', { name: '运行结果图表放大' })).toBeVisible()
+      await page.getByRole('button', { name: '关闭', exact: true }).click()
+      await pane.hover(); await page.mouse.wheel(0, -2500)
+      await expect.poll(() => pane.evaluate(el => el.scrollTop)).toBe(0)
+    }
+  } finally { await page.request.delete(baseURL + '/api/workspaces/' + id); await browser.close() }
+})
+
+
+test('真实 Pyodide 中文标签与历次图像快照（显式运行）', async ({ page }, testInfo) => {
+  test.skip(process.env.MMG_REAL_PYODIDE !== '1', '显式真实运行验收；默认不下载外部运行时')
+  test.setTimeout(240_000)
+  const id = 'real-chinese-chart-' + Date.now()
+  await page.route('**/api/chat**', route => route.abort())
+  await page.request.post(baseURL + '/api/workspaces', { data: { id, title: '中文绘图验收', code: '' } })
+  await page.addInitScript(id => localStorage.setItem('mmg_current_ws_v1', id), id)
+  try {
+    await page.goto(baseURL + '/#/coding')
+    const editor = page.getByRole('textbox', { name: 'Python 代码' })
+    const images = []
+    for (let run = 1; run <= 2; run++) {
+      const code = [
+        'import matplotlib', "matplotlib.use('Agg')", 'import matplotlib.pyplot as plt', 'import warnings',
+        'from matplotlib.ft2font import FT2Font',
+        'font = FT2Font("/NotoSansSC.ttf")',
+        'assert all(ord(c) in font.get_charmap() for c in "孕周体质指数预测残差分析")',
+        'plt.close("all")', 'fig, ax = plt.subplots(figsize=(7, 4))',
+        'ax.plot([12, 16, 20, 24], [' + [run, run + 2, run + 1, run + 3].join(',') + '], label="预测值")',
+        'ax.set_title("孕周与预测结果 · 第' + run + '次")', 'ax.set_xlabel("孕周（周）")', 'ax.set_ylabel("预测值（单位）")', 'ax.legend()',
+        'with warnings.catch_warnings(record=True) as caught:', '    warnings.simplefilter("always")', '    fig.tight_layout()', '    fig.savefig("/plot.png")',
+        '    assert not any("Glyph" in str(w.message) for w in caught), [str(w.message) for w in caught]',
+        'print("中文表头：孕周，预测值")', 'print("中文绘图验收通过：' + run + '")'
+      ].join('\n')
+      await editor.fill(code)
+      await page.getByRole('button', { name: '运行', exact: true }).click()
+      await expect(page.locator('.result-box')).toContainText('中文绘图验收通过：' + run, { timeout: 180_000 })
+      await expect(page.locator('.out-pane > .alert.error')).toHaveCount(0)
+      const image = page.getByRole('img', { name: '运行结果', exact: true })
+      await expect(image).toBeVisible()
+      images.push(await image.getAttribute('src'))
+      await image.screenshot({ path: testInfo.outputPath('chinese-plot-' + run + '.png') })
+    }
+    expect(images[0]).not.toBe(images[1])
+    const history = page.getByRole('region', { name: '历次运行对比' })
+    await expect(history.locator('details')).toHaveCount(2)
+    for (let i = 0; i < 2; i++) {
+      const record = history.locator('details').nth(i)
+      await record.locator('summary').click()
+      await expect(record.getByRole('img')).toHaveAttribute('src', images[1 - i])
+      await expect(record.locator('time')).toHaveAttribute('datetime', /T/)
+    }
+    await page.screenshot({ path: testInfo.outputPath('history-expanded.png'), fullPage: true })
+    await page.getByRole('button', { name: '建模思路梳理', exact: true }).click()
+    await page.getByRole('button', { name: '编程工作台', exact: true }).click()
+    await expect(page.getByRole('region', { name: '历次运行对比' }).locator('details')).toHaveCount(2)
+    const first = page.getByRole('region', { name: '历次运行对比' }).locator('details').last()
+    await first.locator('summary').click()
+    await expect(first.getByRole('img')).toHaveAttribute('src', images[0])
+    await first.getByRole('button', { name: '放大第 1 次图像' }).click()
+    await expect(page.getByRole('dialog').getByRole('img')).toHaveAttribute('src', images[0])
+    await page.getByRole('button', { name: '关闭', exact: true }).click()
+  } finally { await page.request.delete(baseURL + '/api/workspaces/' + id) }
+})
+
+
+test('生成和改进请求统一携带通用中文展示约束', async ({ page }) => {
+  const id = 'presentation-prompt-' + Date.now()
+  const systems = []
+  page.on('request', request => {
+    if (request.url().includes('/api/chat')) {
+      const body = request.postDataJSON()
+      systems.push((body.messages || []).find(message => message.role === 'system')?.content || '')
+    }
+  })
+  await installModelMocks(page)
+  await page.request.post(baseURL + '/api/workspaces', { data: { id, title: '通用展示约束', code: 'print(1)', breakdown: [{ id: 'b1', title: '分析数据', idea: '比较分布', steps: [{ action: '检查分布', method: '统计图' }] }] } })
+  await page.addInitScript(id => localStorage.setItem('mmg_current_ws_v1', id), id)
+  try {
+    await page.goto(baseURL + '/#/settings')
+    await page.locator('#api-key').fill('fixture-not-real')
+    await page.getByRole('button', { name: '保存设置', exact: true }).click()
+    await page.getByRole('button', { name: '编程工作台', exact: true }).click()
+    await page.getByRole('button', { name: 'AI改进', exact: true }).click()
+    await expect(page.locator('pre.code[contenteditable]')).toContainText('模拟代码运行结果')
+    await page.getByRole('button', { name: 'AI生成', exact: true }).click()
+    await page.locator('.check-opt').first().click()
+    await page.getByRole('button', { name: '生成', exact: true }).click()
+    await expect(page.locator('pre.code[contenteditable]')).toContainText('模拟代码运行结果')
+    await expect.poll(() => systems.filter(system => system.includes('数学建模编程助手')).length).toBeGreaterThan(0)
+    for (const role of ['数学建模编程助手', 'Python 代码优化助手']) {
+      const system = systems.find(system => system.includes(role))
+      expect(system).toContain('【代码产出的展示语言约束】')
+      expect(system).toContain('绘图库自动生成')
+      expect(system).toContain('展示副本')
+      expect(system).toContain('所有子图和表格已覆盖')
+    }
+  } finally { await page.request.delete(baseURL + '/api/workspaces/' + id) }
+})
+
+
+test('本次失败可修复、历史选择删除可撤销且编号不复用', async ({ page }, testInfo) => {
+  const id = 'failure-delete-' + Date.now()
+  const good = 'import statsmodels.api as sm\nprint("运行成功")\n# plt.savefig("/plot.png")'
+  const fixed = good + '\n# 修复后的版本'
+  const failed = 'print("错误前输出")\nraise ModuleNotFoundError("No module named missing_demo")'
+  const repairRequests = []
+  await page.request.post(baseURL + '/api/workspaces', { data: { id, title: '失败修复删除验收', code: good } })
+  await page.addInitScript(id => localStorage.setItem('mmg_current_ws_v1', id), id)
+  await page.route('**/pyodide.js', route => route.fulfill({contentType:'application/javascript',body:
+    'window.loadPyodide = async () => { let out=()=>{}, plot=false; return { FS:{mkdir(){}, readdir(){return []}, writeFile(){}, unlink(){plot=false}, readFile(){return Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="),c=>c.charCodeAt(0))}},setStdout(o){out=o.batched},setStderr(){}, async loadPackage(name){(window.loadedTestPackages ||= []).push(name)},runPython(source){if(source.includes("exec(")){if(source.includes("missing_demo")){out("错误前输出\\n=== 运行错误 ===\\nTraceback (most recent call last):\\nModuleNotFoundError: No module named missing_demo")}else{out("运行成功\\n[运行完成]");plot=true}} if(source.includes("os.path.exists"))return plot?"True":"False";return null} } }' }))
+  await page.route('**/api/chat/stream', route => {
+    repairRequests.push(route.request().postDataJSON())
+    return route.fulfill({contentType:'text/event-stream',body:'data: '+JSON.stringify({delta:'\x60\x60\x60python\n'+fixed+'\n\x60\x60\x60'})+'\n\ndata: {"done":true}\n\n'})
+  })
+  try {
+    await page.goto(baseURL + '/#/settings')
+    await page.locator('#api-key').fill('fixture-not-real')
+    await page.getByRole('button',{name:'保存设置',exact:true}).click()
+    await page.getByRole('button',{name:'编程工作台',exact:true}).click()
+    const editor=page.getByRole('textbox',{name:'Python 代码'})
+    await expect(editor).toContainText('statsmodels')
+    await page.getByRole('button',{name:'运行',exact:true}).click()
+    await expect(page.getByRole('img',{name:'运行结果',exact:true})).toBeVisible()
+    expect(await page.evaluate(()=>window.loadedTestPackages)).toContain('statsmodels')
+    await editor.fill(failed)
+    await page.getByRole('button',{name:'运行',exact:true}).click()
+    await expect(page.locator('.latest-run-status')).toContainText('第 2 次运行')
+    await expect(page.locator('.latest-run-status')).toContainText('运行失败')
+    await expect(page.locator('.chart-card')).toContainText('本次运行失败')
+    await expect(page.locator('.result-box')).toContainText('错误前输出')
+    await expect(page.locator('.result-box')).toContainText('ModuleNotFoundError')
+    await expect(page.getByRole('img',{name:'运行结果',exact:true})).toHaveCount(0)
+    await page.screenshot({path:testInfo.outputPath('latest-failure.png')})
+    await page.getByRole('button',{name:'建模思路梳理',exact:true}).click()
+    await page.getByRole('button',{name:'编程工作台',exact:true}).click()
+    await expect(page.locator('.latest-run-status')).toContainText('运行失败')
+    await expect(page.locator('.result-box')).toContainText('ModuleNotFoundError')
+    await page.getByRole('button',{name:'用本次错误修复代码',exact:true}).click()
+    await expect(editor).toContainText('修复后的版本')
+    expect(repairRequests).toHaveLength(1)
+    const messages=repairRequests[0].messages
+    expect(messages[0].content).toContain('statsmodels')
+    expect(messages[1].content).toContain('ModuleNotFoundError')
+    expect(messages[1].content).toContain('Traceback')
+    expect(messages[1].content).toContain('与当前编辑器一致')
+    await page.getByRole('button',{name:'运行',exact:true}).click()
+    await expect(page.locator('.latest-run-status')).toContainText('第 3 次运行')
+    await expect(page.getByRole('img',{name:'运行结果',exact:true})).toBeVisible()
+    const history=page.getByRole('region',{name:'历次运行对比'})
+    await expect(history.locator('details')).toHaveCount(3)
+    await history.getByRole('checkbox',{name:'选择第 2 次运行',exact:true}).check()
+    await history.getByRole('button',{name:'删除所选记录',exact:true}).click()
+    await expect(history.locator('details')).toHaveCount(2)
+    await expect(history).toContainText('第 1 次运行')
+    await expect(history).toContainText('第 3 次运行')
+    await expect(history).not.toContainText('第 2 次运行')
+    await history.getByRole('button',{name:'撤销删除',exact:true}).click()
+    await expect(history.locator('details')).toHaveCount(3)
+    await history.getByRole('checkbox',{name:'选择第 1 次运行',exact:true}).check()
+    await history.getByRole('checkbox',{name:'选择第 2 次运行',exact:true}).check()
+    await history.getByRole('button',{name:'删除所选记录',exact:true}).click()
+    await expect(history.locator('details')).toHaveCount(1)
+    await expect(history).toContainText('第 3 次运行')
+    await expect(editor).toContainText('修复后的版本')
+    await page.getByRole('button',{name:'运行',exact:true}).click()
+    await expect(page.locator('.latest-run-status')).toContainText('第 4 次运行')
+    await expect(history.locator('details')).toHaveCount(2)
+    await page.screenshot({path:testInfo.outputPath('selective-deletion.png')})
+  } finally { await page.request.delete(baseURL+'/api/workspaces/'+id) }
+})
+
+test('真实 Pyodide 加载statsmodels并从失败恢复出图（显式运行）', async ({page},testInfo)=>{
+  test.skip(process.env.MMG_REAL_PYODIDE!=='1','显式真实依赖验收')
+  test.setTimeout(300_000)
+  const id='real-statsmodels-'+Date.now()
+  const code=['import numpy as np','import statsmodels.api as sm','import matplotlib',"matplotlib.use('Agg')",'import matplotlib.pyplot as plt','x=np.arange(1,11,dtype=float)','y=1+2*x','fit=sm.OLS(y,sm.add_constant(x)).fit()','assert abs(fit.params[1]-2)<1e-9','print("统计模型依赖与计算通过")','plt.figure(figsize=(7,4))','plt.plot(x,fit.fittedvalues,label="拟合值")','plt.title("统计模型运行结果")','plt.xlabel("输入值")','plt.ylabel("拟合值")','plt.legend()','plt.tight_layout()',"plt.savefig('/plot.png')"].join('\n')
+  await page.request.post(baseURL+'/api/workspaces',{data:{id,title:'真实统计模型验收',code}})
+  await page.addInitScript(id=>localStorage.setItem('mmg_current_ws_v1',id),id)
+  await page.route('**/api/chat**',route=>route.abort())
+  try {
+    await page.goto(baseURL+'/#/coding')
+    const editor=page.getByRole('textbox',{name:'Python 代码'})
+    await expect(editor).toContainText('statsmodels')
+    await page.getByRole('button',{name:'运行',exact:true}).click()
+    await expect(page.locator('.result-box')).toContainText('统计模型依赖与计算通过',{timeout:240_000})
+    await expect(page.getByRole('img',{name:'运行结果',exact:true})).toBeVisible()
+    await editor.fill('print("失败前的输出")\nraise ValueError("真实运行受控失败")')
+    await page.getByRole('button',{name:'运行',exact:true}).click()
+    await expect(page.locator('.result-box')).toContainText('ValueError: 真实运行受控失败')
+    await expect(page.locator('.result-box')).toContainText('失败前的输出')
+    await expect(page.locator('.chart-card')).toContainText('本次运行失败')
+    await page.screenshot({path:testInfo.outputPath('real-failure.png')})
+    await editor.fill(code)
+    await page.getByRole('button',{name:'运行',exact:true}).click()
+    await expect(page.locator('.result-box')).toContainText('统计模型依赖与计算通过',{timeout:30_000})
+    await expect(page.locator('.latest-run-status')).toContainText('第 3 次运行')
+    await page.getByRole('img',{name:'运行结果',exact:true}).screenshot({path:testInfo.outputPath('real-recovered-plot.png')})
+  } finally { await page.request.delete(baseURL+'/api/workspaces/'+id) }
 })

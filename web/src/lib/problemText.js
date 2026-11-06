@@ -2,7 +2,7 @@ function splitLines(text) {
   return String(text || '')
     .replace(/\r/g, '')
     .split('\n')
-    .map((line) => line.replace(/\s+$/g, ''))
+    .map((line) => line.replace(/ +$/g, ''))
 }
 
 function isPdfPageMarker(line) {
@@ -110,6 +110,20 @@ function classifyLines(lines, { allowTitle = true, allowLead = true } = {}) {
 
   for (let i = 0; i < lines.length; i++) {
     const raw = lines[i]
+    // PDF text extraction uses tabs for horizontal cell gaps. Keep aligned rows
+    // before heading/paragraph heuristics, including empty edge cells.
+    if (raw.includes('\t') && lines[i + 1]?.includes('\t')) {
+      flush()
+      const rows = []
+      while (i < lines.length && lines[i].includes('\t')) {
+        rows.push(lines[i].split('\t').map((cell) => cell.trim()))
+        i += 1
+      }
+      i -= 1
+      items.push({ type: 'table', text: rows.map((row) => row.join('\t')).join('\n'), rows })
+      seenBody = true
+      continue
+    }
     const t = String(raw || '').trim()
     if (!t || isPdfPageMarker(t)) {
       flush()
@@ -152,6 +166,57 @@ function classifyLines(lines, { allowTitle = true, allowLead = true } = {}) {
   }
 }
 
+// PDF is a document, not a stream of Markdown snippets. Use explicit headings
+// and, when available, page geometry. Never turn a short opening sentence into
+// a title/lead or an attachment reference into a section.
+function classifyPdfPage(text, layout = [], firstPage = false) {
+  const lines = splitLines(text)
+  const positioned = Array.isArray(layout) && layout.length === lines.length
+    && layout.every((line, i) => line.text === lines[i] && [line.x, line.y, line.height].every(Number.isFinite))
+  const heights = positioned ? layout.map((line) => line.height).filter((h) => h > 0).sort((a, b) => a - b) : []
+  const bodyHeight = heights[Math.floor(heights.length / 2)] || 12
+  const left = positioned ? Math.min(...layout.filter((line) => !line.text.includes('\t')).map((line) => line.x)) : 0
+  const items = []
+  let buffer = [], indent = false, title = ''
+  const flush = () => {
+    if (buffer.length) items.push({ type: 'body', text: joinWrappedLines(buffer), indent })
+    buffer = []; indent = false
+  }
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim()
+    if (!t || isPdfPageMarker(t)) { flush(); continue }
+    if (lines[i].includes('\t') && lines[i + 1]?.includes('\t')) {
+      flush()
+      const rows = []
+      while (i < lines.length && lines[i].includes('\t')) rows.push(lines[i++].split('\t').map((cell) => cell.trim()))
+      i -= 1
+      items.push({ type: 'table', text: rows.map((row) => row.join('\t')).join('\n'), rows })
+      continue
+    }
+    const question = t.match(/^(问题\s*\d+|题目\s*\d+)(?:\s+|[:：]|(?=[\u4e00-\u9fff]))(.*)$/)
+      || t.match(/^(问题\s*\d+|题目\s*\d+)$/)
+    const attachment = /^(?:附件|附录)\s*\d*(?:\s*[:：]\s*[^。；]+)?$/.test(t)
+    const markdownHeading = t.match(/^#{1,6}\s+(.+)$/)
+    const geometryHeading = positioned && layout[i].height > bodyHeight * 1.2 && t.length <= 80 && !/[。；！？]/.test(t)
+    if (question || attachment || markdownHeading || geometryHeading) {
+      flush()
+      const heading = question ? question[1] : (markdownHeading?.[1] || t)
+      if (firstPage && !title && !question && !attachment && (markdownHeading || geometryHeading)) title = heading
+      items.push({ type: 'section', text: heading, level: firstPage && title === heading ? 2 : 3 })
+      if (question?.[2]) buffer.push(question[2])
+      continue
+    }
+    const indented = positioned ? layout[i].x - left >= bodyHeight * 0.8 : /^[\u3000 ]{2,}/.test(lines[i])
+    const gap = positioned && i > 0 && Math.abs(layout[i].y - layout[i - 1].y) > bodyHeight * 1.8
+    const numbered = /^(?:[（(]\d+[)）]|\d+[.、)]|[-•])\s*/.test(t)
+    if (indented || gap || numbered) flush()
+    if (!buffer.length) indent = indented && !numbered
+    buffer.push(lines[i])
+  }
+  flush()
+  return { title, subtitle: '', lead: '', items }
+}
+
 export function analyzeProblemText(text, sourceKind = 'text', pages = []) {
   const raw = String(text || '').replace(/\r/g, '').trim()
   if (!raw) {
@@ -163,7 +228,7 @@ export function analyzeProblemText(text, sourceKind = 'text', pages = []) {
       ? pages
           .map((p, i) => {
             const pageText = String(p?.text || '').replace(/\r/g, '').trim()
-            return pageText ? { no: Number.isFinite(Number(p?.num)) ? Number(p.num) : i + 1, text: pageText } : null
+            return pageText ? { no: Number.isFinite(Number(p?.num)) ? Number(p.num) : i + 1, text: pageText, lines: Array.isArray(p?.lines) ? p.lines : [] } : null
           })
           .filter(Boolean)
       : []
@@ -172,7 +237,7 @@ export function analyzeProblemText(text, sourceKind = 'text', pages = []) {
       : splitPdfPages(raw).map((page) => ({ no: page.num, text: page.text }))
 
     if (normalizedPages.length === 0) {
-      const fallback = classifyLines(splitLines(raw))
+      const fallback = classifyPdfPage(raw, [], true)
       const body = fallback.items.filter((item) => item.type !== 'pageBreak').map((item) => item.text).join('\n\n')
       return {
         raw,
@@ -200,7 +265,7 @@ export function analyzeProblemText(text, sourceKind = 'text', pages = []) {
     let lead = ''
 
     normalizedPages.forEach((page, index) => {
-      const parts = classifyLines(splitLines(page.text), { allowTitle: index === 0, allowLead: index === 0 })
+      const parts = classifyPdfPage(page.text, page.lines, index === 0)
       if (!title && parts.title) title = parts.title
       if (!subtitle && parts.subtitle) subtitle = parts.subtitle
       if (!lead && parts.lead) lead = parts.lead

@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { marked } from 'marked'
 import { streamChat, chat, attachSummary, retrieveKnowledge, formatKnowledgeContext } from '../api.js'
-import { KnowledgeCard, findConceptMatches, ALL_CARD_IDS, CARD_BY_ID, CARD_STARTER_IDS, getCardWorkflow } from './Cards.jsx'
+import { KnowledgeLibrary, KnowledgeCard, findConceptMatches, CARD_BY_ID, getCardWorkflow } from './Cards.jsx'
 import MD, { sanitize } from '../components/MD.jsx'
 import AttachmentList from '../components/AttachmentList.jsx'
 import ResizeHandle from '../components/ResizeHandle.jsx'
@@ -119,6 +119,19 @@ function loadPanelW() {
 }
 
 const MODELING_PANEL_STATE_KEY = 'mmg_modeling_panel_state_v1'
+const MODELING_DRAFT_KEY = 'mmg_modeling_draft_v1'
+
+function loadModelingDraft(wsId, blocks) {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(`${MODELING_DRAFT_KEY}:${wsId}`) || 'null')
+    if (!saved || !blocks.some((block) => block.id === saved.id) || !saved.draft) return null
+    return { id: saved.id, draft: { ...normalizeBlockPatch(saved.draft),
+      aiSuggestion: typeof saved.draft.aiSuggestion === 'string' ? saved.draft.aiSuggestion : '',
+      focusStep: Number.isInteger(saved.draft.focusStep) ? saved.draft.focusStep : null,
+      focusField: typeof saved.draft.focusField === 'string' ? saved.draft.focusField : '',
+    } }
+  } catch { return null }
+}
 
 function loadModelingPanelState(wsId) {
   if (!wsId) return null
@@ -209,6 +222,12 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
   const [relateId, setRelateId] = useState(null)
   const [editingId, setEditingId] = useState(null)
   const [draft, setDraft] = useState(null)
+  const [pendingEdit, setPendingEdit] = useState(null)
+  const editSwitchDialog = useRef(null)
+  const lastDraftInput = useRef(null)
+  const decompRef = useRef(null)
+  const removedBlockFocus = useRef(null)
+  const [draftCacheOk, setDraftCacheOk] = useState(true)
   const draftSession = useRef(0)
   const [kcQuery, setKcQuery] = useState(() => initialPanelState.current?.kcQuery || '')
   const [ctxOpen, setCtxOpen] = useState(false)
@@ -218,24 +237,49 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
   const restoringPanelStateRef = useRef(false)
 
   const wsIdNow = ws?.id
+  const activeWorkspace = useRef(wsIdNow)
+  activeWorkspace.current = wsIdNow
+  const aiRequest = useRef(0)
 
   // 工作区切换 / 首次载入 → 载入拆解块；等 ws 真正到位后再同步，避免空壳覆盖已存在数据
   useEffect(() => {
     if (!wsIdNow || !ws || ws.id !== wsIdNow) return
     const b = normalizeBlocks(ws.breakdown)
     const saved = loadModelingPanelState(wsIdNow)
+    const savedDraft = loadModelingDraft(wsIdNow, b)
     restoringPanelStateRef.current = true
     setBlocks(b)
+    aiRequest.current += 1
+    setBusy(false)
     draftSession.current += 1
     setBlocksWsId(wsIdNow)
     publishedBlocks.current = { id: wsIdNow, value: JSON.stringify(b) }
-    setEditingId(null); setDraft(null)
-    setOpenSet(b.length ? new Set([b[0].id]) : new Set())
+    setEditingId(savedDraft?.id || null); setDraft(savedDraft?.draft || null)
+    setPendingEdit(null)
+    setOpenSet(new Set([...(b.length ? [b[0].id] : []), ...(savedDraft ? [savedDraft.id] : [])]))
     setPreview(null); setError(''); setStreaming('')
     setPanel(saved?.panel || 'chat')
     setMsgs(saved?.msgs || [])
     setKcQuery(saved?.kcQuery || '')
   }, [wsIdNow, ws?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 草稿仅在当前标签页按工作区暂存；不写入已确认的 breakdown。
+  useLayoutEffect(() => {
+    if (!wsIdNow || blocksWsId !== wsIdNow) return
+    try {
+      const key = `${MODELING_DRAFT_KEY}:${wsIdNow}`
+      if (editingId && draft) sessionStorage.setItem(key, JSON.stringify({ id: editingId, draft }))
+      else sessionStorage.removeItem(key)
+      setDraftCacheOk(true)
+    } catch { setDraftCacheOk(false) }
+  }, [wsIdNow, blocksWsId, editingId, draft])
+
+  useEffect(() => {
+    if (draftCacheOk || !editingId) return
+    const warn = (event) => { event.preventDefault(); event.returnValue = '' }
+    addEventListener('beforeunload', warn)
+    return () => removeEventListener('beforeunload', warn)
+  }, [draftCacheOk, editingId])
 
   // 保留思路梳理台右栏的对话、知识卡片 tab 和搜索状态。
   useEffect(() => {
@@ -248,7 +292,8 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
 
   // 已确认块立即同步到三台共享状态；父层仍负责网络保存防抖。
   // 所属工作区与内容签名避免初始空状态覆盖载入块，以及同内容重复发布。
-  useEffect(() => {
+  // 在确认内容绘制前发布，避免界面已显示新内容而离页保存引用仍为旧值。
+  useLayoutEffect(() => {
     if (!wsIdNow || blocksWsId !== wsIdNow) return
     const breakdown = blocks.map((b) => ({
           ...normalizeBlock(b),
@@ -281,6 +326,7 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
   }
 
   function removeBlock(id) {
+    removedBlockFocus.current = { wsId: wsIdNow, index: blocks.findIndex((block) => block.id === id) }
     setBlocks((prev) => prev.filter((b) => b.id !== id))
     setOpenSet((prev) => {
       const next = new Set(prev)
@@ -289,6 +335,19 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
     })
   }
 
+  useEffect(() => {
+    const pending = removedBlockFocus.current
+    if (!pending) return
+    removedBlockFocus.current = null
+    if (pending.wsId !== wsIdNow || blocksWsId !== wsIdNow) return
+    const remaining = decompRef.current?.querySelectorAll('.decomp-block:not(.new-block-preview)')
+    const neighbor = remaining?.[Math.min(pending.index, remaining.length - 1)]
+    const target = neighbor?.querySelector('.block-head button[title="编辑"]:not(:disabled), .block-head input')
+      || decompRef.current?.querySelector('.new-block, .decomp-empty button')
+    target?.scrollIntoView({ block: 'nearest' })
+    target?.focus({ preventScroll: true })
+  }, [blocks, blocksWsId, wsIdNow])
+
   function updateStep(blockId, si, patch) {
     setBlocks((prev) => prev.map((blk) => (blk.id === blockId ? {
       ...blk,
@@ -296,7 +355,41 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
     } : blk)))
   }
 
-  function startAddStep(b) {
+  useEffect(() => {
+    const dialog = editSwitchDialog.current
+    if (pendingEdit && !dialog?.open) dialog?.showModal()
+    if (!pendingEdit && dialog?.open) dialog.close()
+  }, [pendingEdit])
+
+  function guardEditSwitch(b, addStep) {
+    if (!editingId || editingId === b.id || !draft) return false
+    const original = blocks.find((block) => block.id === editingId)
+    const content = (value) => JSON.stringify({ title: value.title, quote: value.quote || '', idea: value.idea || '', steps: (value.steps || []).map(normalizeStep) })
+    if (!original || (content(original) === content(draft) && !draft.aiSuggestion)) return false
+    setPendingEdit({ id: b.id, addStep })
+    return true
+  }
+
+  function resumeDraft() {
+    editSwitchDialog.current?.close()
+    setPendingEdit(null)
+    const target = lastDraftInput.current?.isConnected ? lastDraftInput.current : document.getElementById(`block-idea-${editingId}`)
+    target?.scrollIntoView({ block: 'nearest' })
+    target?.focus({ preventScroll: true })
+  }
+
+  function finishEditSwitch(save) {
+    const target = blocks.find((block) => block.id === pendingEdit?.id)
+    if (!target) return resumeDraft()
+    if (save) commitEdit()
+    const addStep = pendingEdit.addStep
+    setPendingEdit(null)
+    if (addStep) startAddStep(target, true)
+    else startEdit(target, true)
+  }
+
+  function startAddStep(b, skipGuard = false) {
+    if (!skipGuard && guardEditSwitch(b, true)) return
     draftSession.current += 1
     setEditingId(b.id)
     setDraft({
@@ -309,7 +402,8 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
     setOpenSet((prev) => new Set([...prev, b.id]))
   }
 
-  function startEdit(b) {
+  function startEdit(b, skipGuard = false) {
+    if (!skipGuard && guardEditSwitch(b, false)) return
     draftSession.current += 1
     setEditingId(b.id)
     setDraft({ title: b.title, quote: b.quote || '', idea: b.idea || '', steps: (b.steps || []).map(normalizeStep) })
@@ -323,6 +417,7 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
     const steps = nextSteps.length ? nextSteps : [{ action: '', method: '' }]
     setBlocks((prev) => prev.map((b) => (b.id === editingId ? { ...b, title: draft.title || b.title, quote: draft.quote, idea: draft.idea, steps } : b)))
     setEditingId(null); setDraft(null)
+    window.__notify?.('拆解块修改已应用，正在保存…')
   }
 
   /** AI 指令 → 修改预览 */
@@ -330,6 +425,9 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
     const text = input.trim()
     if (!text || busy) return
     if (!settings.apiKey) return setError('请先在「模型设置」配置 API Key')
+    const request = ++aiRequest.current
+    const owner = wsIdNow
+    const isCurrent = () => aiRequest.current === request && activeWorkspace.current === owner
     setBusy(true); setError(''); setInput(''); setStreaming('')
     setMsgs((prev) => [...prev, { role: 'user', text, time: now() }])
 
@@ -347,6 +445,7 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
     try {
       // 追问界面中已有卡片时，优先使用卡片上下文，避免泛关键词 RAG 把“噪声”带到无关的图像处理条目。
       const hits = isCardFollowUp(text) && cardContext ? [] : await retrieveKnowledge(text, settings, 3)
+      if (!isCurrent()) return
       const kbContext = formatKnowledgeContext(hits)
       const contextMessages = [
         { role: 'system', content: MODIFY_SYSTEM + cardContext + kbContext },
@@ -354,16 +453,18 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
         { role: 'user', content: userMsg },
       ]
       try {
-        await streamChat(settings, contextMessages, { onDelta: (t) => { content = t; setStreaming(t) } })
+        await streamChat(settings, contextMessages, { onDelta: (t) => { content = t; if (isCurrent()) setStreaming(t) } })
       } catch (e) {
         degraded = true
       }
+      if (!isCurrent()) return
       if (!content.trim()) {
         // 流式返回空（模型未输出）：非流式重试
         degraded = true
         const r = await chat(settings, contextMessages)
         content = r.content || ''
       }
+      if (!isCurrent()) return
       const parsed = extractJson(content)
       const patch = parsed?.patch && typeof parsed.patch === 'object' ? normalizeBlockPatch(parsed.patch) : null
       if (parsed && (typeof parsed.blockId === 'string' || Number.isInteger(parsed.blockId)) && patch) {
@@ -416,11 +517,13 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
         }
       }
     } catch (e) {
+      if (!isCurrent()) return
       setError(e.message)
+      setInput((current) => current || text)
       setMsgs((prev) => [...prev, { role: 'ai', time: now(), text: `出错了：${e.message}` }])
     }
-    // 降级成功时清除中途的警告；失败时错误横幅已在 catch 设置
-    if (degraded && !error) setError('')
+    // The request already cleared its previous error at start. Keep a final failure visible.
+    if (!isCurrent()) return
     setStreaming('')
     setBusy(false)
   }
@@ -460,7 +563,10 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
   async function aiWriteIdea(block, setDraftFn) {
     if (!settings.apiKey) return setError('请先在「模型设置」配置 API Key')
     const session = draftSession.current
-    const isCurrent = () => draftSession.current === session
+    const request = ++aiRequest.current
+    const owner = wsIdNow
+    const isRequestCurrent = () => aiRequest.current === request && activeWorkspace.current === owner
+    const isCurrent = () => isRequestCurrent() && draftSession.current === session
     setBusy(true); setError(''); setStreaming('')
     const sysContent = settings.guideMode !== false ? IDEA_GEN_GUIDE : IDEA_GEN_DIRECT
     const userContent = `拆解块标题：${block.title}\n题目依据：${block.quote}\n题目背景：${problemText.trim() || '（无）'}`
@@ -495,7 +601,7 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
       if (isCurrent()) setError(e.message)
     } finally {
       if (isCurrent()) setStreaming('')
-      setBusy(false)
+      if (isRequestCurrent()) setBusy(false)
     }
   }
 
@@ -548,13 +654,6 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
   }
 
   const doneTables = attachments.filter((a) => a.status === 'done' && a.type === 'table')
-  const conceptHits = (kcQuery.trim() ? ALL_CARD_IDS : CARD_STARTER_IDS).filter((id) => {
-    const card = CARD_BY_ID.get(id)
-    if (!kcQuery.trim()) return true
-    if (!card) return false
-    const q = kcQuery.trim().toLowerCase()
-    return [card.title, card.tag, card.concept, card.note, card.try, card.src].filter(Boolean).some((v) => String(v).toLowerCase().includes(q))
-  })
   const recallMatchesByMessage = useMemo(() => {
     const seen = new Set()
     return msgs.map((message) => {
@@ -577,6 +676,21 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
 
   return (
     <div className="ws mdl" style={{ '--panel-w': panelW }}>
+      <dialog ref={editSwitchDialog} className="draft-switch-dialog" aria-labelledby="draft-switch-title" onCancel={(event) => { event.preventDefault(); resumeDraft() }} onKeyDown={(event) => {
+        if (event.key !== 'Tab') return
+        const buttons = event.currentTarget.querySelectorAll('button')
+        const target = event.shiftKey && document.activeElement === buttons[0] ? buttons[buttons.length - 1]
+          : !event.shiftKey && document.activeElement === buttons[buttons.length - 1] ? buttons[0] : null
+        if (target) { event.preventDefault(); target.focus() }
+      }}>
+        <h2 id="draft-switch-title">先处理当前草稿</h2>
+        <p>“{blocks.find((block) => block.id === editingId)?.title}”有未保存的修改或待采用建议。切换编辑前，请选择如何处理。</p>
+        <div className="draft-switch-actions">
+          <button type="button" className="btn btn-ghost btn-sm" autoFocus onClick={resumeDraft}>继续编辑</button>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => finishEditSwitch(false)}>放弃并切换</button>
+          <button type="button" className="btn btn-primary btn-sm" onClick={() => finishEditSwitch(true)}>保存并切换</button>
+        </div>
+      </dialog>
       {/* 左图标窄栏 */}
       <aside className="rail">
         <button className="rail-btn" onClick={onExpandSidebar} title="展开侧栏"><IconMenu size={16} /></button>
@@ -600,15 +714,16 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
         <div className="ws-body">
           {/* 题干 + 附件上下文（来自读题工作台，可折叠） */}
           <div className="ctx-card">
-            <button className="ctx-toggle" onClick={() => setCtxOpen(!ctxOpen)}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><IconFile size={14} /> 题干与附件</span>
-              <span className="hint">{ws?.title || '未命名题目'} · 附件 {attachments.length} 个</span>
+            <button className="ctx-toggle" aria-expanded={ctxOpen} onClick={() => setCtxOpen(!ctxOpen)}>
+              <span className="ctx-label"><IconFile size={14} /> 题干与附件</span>
+              <span className="hint ctx-title" title={ws?.title || '未命名题目'}>{ws?.title || '未命名题目'}</span>
+              <span className="hint ctx-count">附件 {attachments.length} 个</span>
               <span className="ctx-chev">{ctxOpen ? '▲ 收起' : '▼ 展开'}</span>
             </button>
             {ctxOpen && (
               <div className="ctx-body">
-                {problemText ? (
-                  <ProblemTextView text={problemText} sourceKind={ws?.problemSourceKind || ''} pages={Array.isArray(ws?.problemPages) ? ws.problemPages : []} />
+                {problemText || ws?.problemDocument ? (
+                  <ProblemTextView text={problemText} sourceKind={ws?.problemSourceKind || ''} pages={Array.isArray(ws?.problemPages) ? ws.problemPages : []} document={ws?.problemDocument} />
                 ) : (
                   <div className="hint" style={{ padding: '8px 2px' }}>暂无题干，请先在读题工作台上传。</div>
                 )}
@@ -620,7 +735,7 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
             )}
           </div>
 
-          {error && <div className="alert error">{error}</div>}
+          {error && <div className="alert error" role="alert">{error}</div>}
 
           <div className="mdl-intro">
             <div className="mdl-intro-copy">
@@ -639,7 +754,9 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
               </div>
             )}
           </div>
-          <div className="decomp">
+          <div ref={decompRef} className="decomp" onBlurCapture={(event) => {
+            if (editingId && event.target.matches('input, textarea')) lastDraftInput.current = event.target
+          }}>
             {blocks.length === 0 && (
               <div className="decomp-empty">
                 <div className="decomp-empty-mark">01</div>
@@ -650,15 +767,16 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
                 <button type="button" className="btn btn-primary btn-sm" onClick={addBlock}>新建拆解块</button>
               </div>
             )}
-            {blocks.map((b, i) => (
+            {(blocksWsId === wsIdNow ? blocks : []).map((b, i) => (
             <Block
-                key={b.id}
+                key={`${blocksWsId}:${b.id}`}
                 b={b}
                 index={i}
                 open={openSet.has(b.id)}
                 preview={preview && preview.targetId === b.id ? preview.patch : null}
                 editing={editingId === b.id}
                 draft={draft}
+                draftCacheOk={draftCacheOk}
                 setDraft={setDraft}
                 onToggle={() => toggleOpen(b.id)}
                 onEdit={() => startEdit(b)}
@@ -723,7 +841,7 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
           <>
             <header className="ai-head">
               <div className="ai-head-copy">
-                <div className="ai-title"><span className="ai-brand"><IconSparkles size={14} /></span>AI 助手 <span className="suffix">· 拆解中</span></div>
+                <div className="ai-title"><span className="ai-brand"><IconSparkles size={14} /></span>AI 助手 <span className={`suffix ai-phase ${error ? 'failed' : busy ? 'working' : ''}`} role="status">· {busy ? (streaming ? '回复中' : '等待回复') : error ? '请求失败' : '就绪'}</span></div>
                 <span className="ai-head-note">{msgs.length ? `已交流 ${msgs.length} 轮` : '等待你的下一步判断'}</span>
               </div>
             </header>
@@ -799,16 +917,7 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
                 <span><IconSearch size={14} /></span>
                 <input value={kcQuery} onChange={(e) => setKcQuery(e.target.value)} placeholder="搜索知识卡片…" />
               </div>
-              <div className="kp-guide">
-                <strong>{kcQuery.trim() ? `找到 ${conceptHits.length} 张相关卡片` : '先从高频入门卡开始'}</strong>
-                <span>{kcQuery.trim() ? '展开后看题目信号与第一步。' : '需要其他方法时，再用上方搜索全部卡片。'}</span>
-              </div>
-              <div className="kp-list">
-                {conceptHits.map((id) => (
-                  <KnowledgeCard key={id} cardId={id} defaultOpen={false} variant="study" label="快速摘要" onAddToBreakdown={addCardToBreakdown} />
-                ))}
-              </div>
-              <div className={`kp-empty ${kcQuery && conceptHits.length === 0 ? 'show' : ''}`}>没有匹配的知识卡片。</div>
+              <KnowledgeLibrary query={kcQuery} onAddToBreakdown={addCardToBreakdown} />
             </div>
           </>
         )}
@@ -1031,7 +1140,7 @@ function LegacyBlock({ b, index, open, preview, editing, draft, setDraft, onTogg
   )
 }
 
-function Block({ b, index, open, preview, editing, draft, setDraft, onToggle, onEdit, onCommitEdit, onCancelEdit, onRelate, onRemove, onAddStep, onApply, onCancelPreview, onAiIdea, aiBusy }) {
+function Block({ b, index, open, preview, editing, draft, draftCacheOk, setDraft, onToggle, onEdit, onCommitEdit, onCancelEdit, onRelate, onRemove, onAddStep, onApply, onCancelPreview, onAiIdea, aiBusy }) {
   const [moreOpen, setMoreOpen] = useState(false)
   const [activeStep, setActiveStep] = useState(null)
   const stepsSection = useRef(null)
@@ -1047,12 +1156,22 @@ function Block({ b, index, open, preview, editing, draft, setDraft, onToggle, on
     removedStepFocus.current = null
   }, [draft?.steps?.length])
   useEffect(() => {
-    if (editing) setActiveStep(Number.isInteger(draft?.focusStep) ? draft.focusStep : null)
+    if (!editing) return
+    setActiveStep(Number.isInteger(draft?.focusStep) ? draft.focusStep : null)
+    if (!Number.isInteger(draft?.focusStep) && draft?.focusField) {
+      const field = document.getElementById(draft.focusField)
+      const section = field?.closest('details')
+      if (section) section.open = true
+      field?.focus()
+    }
   }, [editing])
   useEffect(() => {
     if (editing && activeStep !== null) {
       if (stepsSection.current) stepsSection.current.open = true
-      stepInput.current?.focus()
+      const fieldId = [`step-action-${b.id}-${activeStep}`, `step-method-${b.id}-${activeStep}`].includes(draft?.focusField) ? draft.focusField : ''
+      const field = fieldId ? document.getElementById(fieldId) : null
+      const target = field || stepInput.current
+      target?.focus()
     }
   }, [editing, activeStep])
   const editTrigger = useRef(null)
@@ -1064,6 +1183,8 @@ function Block({ b, index, open, preview, editing, draft, setDraft, onToggle, on
   const steps = (b.steps || []).map(normalizeStep)
   const status = getBlockStatus(b)
   const statusClass = status.status === '已完成' ? 'done' : status.status === '进行中' ? 'active' : 'idle'
+
+  const draftChanged = editing && draft && JSON.stringify({ title: draft.title, quote: draft.quote || '', idea: draft.idea || '', steps: (draft.steps || []).map(normalizeStep) }) !== JSON.stringify({ title: b.title, quote: b.quote || '', idea: b.idea || '', steps })
 
   function updateDraft(patch) {
     setDraft((current) => ({ ...current, ...patch }))
@@ -1090,7 +1211,12 @@ function Block({ b, index, open, preview, editing, draft, setDraft, onToggle, on
   }
 
   return (
-    <article className={`decomp-block ${open ? 'open' : ''} status-${statusClass}`}>
+    <article className={`decomp-block ${open ? 'open' : ''} ${editing ? 'is-editing' : ''} status-${statusClass}`} onFocusCapture={(event) => {
+      if (!editing || !event.target.matches('input, textarea')) return
+      const field = event.target.id
+      const stepMatch = field.match(/^step-(?:action|method)-.+-(\d+)$/)
+      if (draft?.focusField !== field) updateDraft({ focusField: field, focusStep: stepMatch ? Number(stepMatch[1]) : null })
+    }}>
       <div className="block-head">
         {editing ? (
           <div className="block-title-btn block-inline-editor">
@@ -1099,11 +1225,11 @@ function Block({ b, index, open, preview, editing, draft, setDraft, onToggle, on
               <label className="sr-only" htmlFor={`block-title-${b.id}`}>拆解块标题</label>
               <input id={`block-title-${b.id}`} className="bk-input" value={draft?.title || ''} onChange={(e) => updateDraft({ title: e.target.value })} placeholder="拆解块标题" />
               <label className="bk-label" htmlFor={`block-idea-${b.id}`}>思路 <span>用一句话说清解决方向</span></label>
-              <textarea ref={ideaInput} id={`block-idea-${b.id}`} autoFocus className="bk-textarea bk-idea" value={draft?.idea || ''} onChange={(e) => updateDraft({ idea: e.target.value })} placeholder="先写一句你打算怎样解决这个问题" rows={2} />
+              <textarea ref={ideaInput} id={`block-idea-${b.id}`} autoFocus={!Number.isInteger(draft?.focusStep)} className="bk-textarea bk-idea" value={draft?.idea || ''} onChange={(e) => updateDraft({ idea: e.target.value })} placeholder="先写一句你打算怎样解决这个问题" rows={2} />
               <div className="bk-edit-actions">
                 <button className="btn btn-primary btn-sm" onClick={onCommitEdit}>保存拆解块</button>
                 <button className="btn btn-ghost btn-sm" onClick={onCancelEdit}>取消</button>
-                <span className="block-draft-note">草稿 · 保存后应用</span>
+                <span className="block-draft-note" role="status">{!draftCacheOk ? '草稿暂存失败，请在离开前保存' : draftChanged ? '有未应用修改 · 本标签页已暂存' : '编辑中 · 内容尚未修改'}</span>
               </div>
             </div>
           </div>
@@ -1123,7 +1249,7 @@ function Block({ b, index, open, preview, editing, draft, setDraft, onToggle, on
           <button className="ico-btn block-toggle" title={open ? '收起' : '展开'} onClick={onToggle} aria-expanded={open}><IconChevronRight size={14} /></button>
         </span>
       </div>
-      <div className="block-body">
+      <div className="block-body" aria-hidden={!open} inert={!open ? '' : undefined}>
         <div className="body-inner">
           <div className="bd">
             {editing ? (
@@ -1186,7 +1312,11 @@ function Block({ b, index, open, preview, editing, draft, setDraft, onToggle, on
                   ))}
                 </div>
                 <button type="button" className="add-step-btn" onClick={addDraftStep}><IconPlus size={14} /> 添加步骤</button>
-
+                <div className="bk-edit-actions block-step-actions">
+                  <span className="block-draft-note">步骤修改随整个拆解块一起保存</span>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={onCancelEdit}>取消整块编辑</button>
+                  <button type="button" className="btn btn-primary btn-sm" onClick={onCommitEdit}>保存整个拆解块</button>
+                </div>
                 </details>
 
               </div>
