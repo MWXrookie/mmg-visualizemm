@@ -148,9 +148,9 @@
 
 ## 6. 最近验证基线
 
-2026-11-26 生产依赖安全修补：仍使用 Express 4，锁定 `express@4.22.3`、`body-parser@1.20.9`、`proxy-addr@2.0.8`、`qs@6.16.2`，并将 `brace-expansion` 升至 1.1.22 / 2.1.8。`npm audit --omit=dev` 不再有 high/critical。仍剩 DOMPurify 3.4.14 的 low（调用的是默认 `sanitize`，未使用 IN_PLACE、SAFE_FOR_TEMPLATES 或 XHTML）以及 exceljs 传递的 uuid moderate（非破坏性修复不存在；降到 exceljs 3.4.0 会破坏当前表格解析，未采用）。`check:syntax` 改为扫描 `server/*.js`，覆盖 `pdf-layout.js`。Node 24.22.3 上 `npm run check` 54/54、四个服务端文件语法检查和生产构建通过；Playwright 默认冒烟 37 通过，12 项真实 Pyodide 显式跳过。未改 API、信任边界或 Express 大版本。
+2026-11-26 生产依赖安全修补：仍使用 Express 4，锁定 `express@4.22.3`、`body-parser@1.20.9`、`proxy-addr@2.0.8`、`qs@6.16.2`，并将 `brace-expansion` 升至 1.1.22 / 2.1.8。`npm audit --omit=dev` 不再有 high/critical。仍剩 DOMPurify 3.4.14 的 low（调用的是默认 `sanitize`，未使用 IN_PLACE、SAFE_FOR_TEMPLATES 或 XHTML）以及 exceljs 传递的 uuid moderate（非破坏性修复不存在；降到 exceljs 3.4.0 会破坏当前表格解析，未采用）。`check:syntax` 改为扫描 `server/*.js`，覆盖 `pdf-layout.js`。Node 24.22.3 上该修补的 `npm run check` 为 54/54；Playwright 默认冒烟 37 通过，12 项真实 Pyodide 显式跳过。未改 Express 大版本。
 
-2026-11-26 出站 SSRF 防护：新增 `server/outbound-policy.js`，对话、流式、测试连接和 Embedding 在连接前拒绝非 http(s)、本机、私网、链路本地和云元数据目标；`MMG_ALLOW_PRIVATE_UPSTREAM` 与 `MMG_UPSTREAM_ALLOWLIST` 为显式放行。`GET /api/knowledge/stats` 不再接受查询串中的 Key 或上游地址。静态架构 PNG 仍是先前快照，信任边界文字已写入架构说明、JSON 和 HTML。当日 `npm run check` 为 65/65、语法检查与生产构建通过；该结果会过期，新会话须重跑。
+2026-11-26 出站 SSRF 防护：新增 `server/outbound-policy.js`，对话、流式、测试连接和 Embedding 在连接前拒绝非 http(s)、本机、私网、链路本地和云元数据目标；`MMG_ALLOW_PRIVATE_UPSTREAM` 与 `MMG_UPSTREAM_ALLOWLIST` 为显式放行。`GET /api/knowledge/stats` 不再接受查询串中的 Key 或上游地址。静态架构 PNG 仍是先前快照，信任边界文字已写入架构说明、JSON 和 HTML。请求体里的代理使用已授权 IP，并保留原来的 Host 与 TLS 名称；服务端代理则由代理解析并跳过本机 DNS。公网域名解析到 `198.18.0.0/15` 假 IP 时允许直连，字面假 IP 仍按私网处理。`fd00:ec2::254` 始终拒绝。名单不写端口时只匹配 80/443。`MMG_ALLOW_PRIVATE_UPSTREAM` 与 `MMG_UPSTREAM_ALLOWLIST` 从 `server/.env.local` 读入，且不覆盖已有进程环境。解析失败和解析到内网返回同一条拒绝说明。上游错误正文会去掉 HTML 并截断。知识库不会把被拒绝的 Embedding 地址缓存到进程结束。当日检查结果会过期，新会话须重跑。
 
 2026-10-02 交互优化v2.7已交付：O0–O5全部出口通过，本包提前交付。第七轮实际活动约18分钟，累计约74/300分钟；剩余约226分钟不继续消耗。旧修复包约92分钟单独保留。下一唯一动作：等待用户对交付的具体反馈，不自动开始第三包。最终check 35/35、默认浏览器10通过/10真实Pyodide显式跳过、diff通过；四桌面组合完整操作与22张截图/指南锚点核对完成。图表放大补齐Escape、Tab和焦点返回，替身不证明真实模型/Python/数学质量；大包/CDN限制保留。证据[最终交付](docs/04-质量/records/2026-10-02-optimization-round7.md)。
 

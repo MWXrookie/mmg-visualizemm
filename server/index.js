@@ -14,6 +14,7 @@ import { randomUUID } from 'node:crypto'
 import ExcelJS from 'exceljs'
 import { pdfLayoutLines } from './pdf-layout.js'
 import { formatNetworkError, requestUpstream, responseText } from './upstream.js'
+import { lanPrivateUpstreamWarning } from './outbound-policy.js'
 
 // pdf-parse 2.x：导出 { PDFParse } 类（ESM 下用 createRequire 加载）
 const require = createRequire(import.meta.url)
@@ -148,8 +149,21 @@ function statusToCode(status) {
   return 'MODEL_ERROR'
 }
 
+function upstreamErrorDetail(json, text) {
+  const preferred = json?.error?.message ?? json?.message
+  const source = preferred != null && String(preferred).trim() ? String(preferred) : String(text || '')
+  const stripped = source
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!stripped) return ''
+  return stripped.length > 500 ? `${stripped.slice(0, 500)}…` : stripped
+}
+
 function formatError(status, json, text) {
-  const msg = json?.error?.message || json?.message || text?.slice(0, 200) || `HTTP ${status}`
+  const msg = upstreamErrorDetail(json, text) || `HTTP ${status}`
   const map = {
     401: 'API Key 无效或已过期',
     403: '无权访问（Key 权限不足）',
@@ -902,8 +916,12 @@ app.use((err, _req, res, next) => {
   next(err)
 })
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   // 监听所有网卡（0.0.0.0）：本机用 127.0.0.1，局域网内其他人用本机局域网 IP
+  const bound = server.address()
+  const bindAddress = bound && typeof bound === 'object' ? bound.address : ''
+  const privateWarning = lanPrivateUpstreamWarning(bindAddress)
+  if (privateWarning) console.warn(`[server] ${privateWarning}`)
   const nets = require('os').networkInterfaces()
   const lanIps = []
   for (const name of Object.keys(nets)) {

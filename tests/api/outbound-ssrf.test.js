@@ -263,3 +263,42 @@ test('放行私网后本机模型可用，元数据和非法协议仍然拒绝',
     await once(provider, 'close')
   }
 })
+
+test('上游错误优先使用 JSON 说明，并去掉超长 HTML', async () => {
+  const provider = createHttpServer(async (req, res) => {
+    const chunks = []
+    for await (const chunk of req) chunks.push(chunk)
+    if (String(req.url).includes('/html/')) {
+      res.writeHead(502, { 'Content-Type': 'text/html' })
+      res.end(`<html><body><h1>bad-gateway</h1>${'A'.repeat(2000)}</body></html>`)
+      return
+    }
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: { message: `<b>上游拒绝</b> ${'B'.repeat(800)}` } }))
+  })
+  const port = await new Promise((resolve, reject) => {
+    provider.once('error', reject)
+    provider.listen(0, '127.0.0.1', () => resolve(provider.address().port))
+  })
+  const base = {
+    apiKey: 'local-test-only',
+    model: 'local-mock',
+    messages: [{ role: 'user', content: 'ping' }],
+  }
+  try {
+    const html = await request(allowUrl, '/api/chat', { ...base, baseUrl: `http://127.0.0.1:${port}/html` })
+    assert.equal(html.response.status, 400)
+    assert.equal(html.payload.message.includes('<html>'), false)
+    assert.equal(html.payload.message.includes('<h1>'), false)
+    assert.match(html.payload.message, /bad-gateway/)
+    assert.equal(html.payload.message.length < 700, true)
+    const json = await request(allowUrl, '/api/chat', { ...base, baseUrl: `http://127.0.0.1:${port}/v1` })
+    assert.equal(json.payload.message.includes('<b>'), false)
+    assert.match(json.payload.message, /上游拒绝/)
+    assert.equal(json.payload.message.includes('B'.repeat(600)), false)
+    assert.equal(json.payload.message.length < 700, true)
+  } finally {
+    provider.close()
+    await once(provider, 'close')
+  }
+})

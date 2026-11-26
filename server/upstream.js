@@ -4,22 +4,37 @@ import tls from 'tls'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { authorizeOutboundUrl, policyHost } from './outbound-policy.js'
+import { authorizeOutboundUrl, classifyIp, connectionHost, policyHost } from './outbound-policy.js'
 
 const DEFAULT_TIMEOUT = 300000
 const ENV_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), '.env.local')
+const SERVER_ENV_KEYS = new Set([
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'ALL_PROXY',
+  'NO_PROXY',
+  'MMG_ALLOW_PRIVATE_UPSTREAM',
+  'MMG_UPSTREAM_ALLOWLIST',
+])
+
+/** 把 server/.env.local 中尚未出现在进程环境里的代理和出站放行项写入 env。已有进程环境优先。 */
+export function applyServerEnvFile(text, env) {
+  for (const line of String(text || '').split(/\r?\n/)) {
+    const match = line.match(/^\s*([A-Za-z0-9_]+)\s*=\s*(.*?)\s*$/)
+    if (!match) continue
+    const name = match[1].toUpperCase()
+    if (!SERVER_ENV_KEYS.has(name)) continue
+    const value = match[2].replace(/^(['"])(.*)\1$/, '$2').trim()
+    if (value && !env[name]) env[name] = value
+  }
+  return env
+}
 
 function loadProxyEnvFile() {
   try {
     if (!fs.existsSync(ENV_FILE)) return
-    for (const line of fs.readFileSync(ENV_FILE, 'utf8').split(/\r?\n/)) {
-      const match = line.match(/^\s*(HTTP_PROXY|HTTPS_PROXY|ALL_PROXY|NO_PROXY)\s*=\s*(.*?)\s*$/i)
-      if (!match) continue
-      const value = match[2].replace(/^(['"])(.*)\1$/, '$2').trim()
-      const name = match[1].toUpperCase()
-      if (value && !process.env[name]) process.env[name] = value
-    }
-  } catch { /* 代理文件不可读时继续使用系统环境变量或直连 */ }
+    applyServerEnvFile(fs.readFileSync(ENV_FILE, 'utf8'), process.env)
+  } catch { /* 配置文件不可读时继续使用系统环境变量或直连 */ }
 }
 
 loadProxyEnvFile()
@@ -142,7 +157,18 @@ function requestWithTransport(transport, options, body, { signal, timeout, stage
   })
 }
 
-function connectProxy(proxy, proxyConnectHost, proxyLookup, target, { signal, timeout }) {
+function pinnedAuthority(address, port) {
+  const host = address.family === 6 ? `[${address.address}]` : address.address
+  return `${host}:${port}`
+}
+
+function pinnedRequestUrl(target, address) {
+  const pinned = new URL(target.href)
+  pinned.hostname = address.family === 6 ? `[${address.address}]` : address.address
+  return pinned.href
+}
+
+function connectProxy(proxy, proxyConnectHost, proxyLookup, targetAuthority, { signal, timeout }) {
   return new Promise((resolve, reject) => {
     let settled = false
     let timer
@@ -165,16 +191,15 @@ function connectProxy(proxy, proxyConnectHost, proxyLookup, target, { signal, ti
       fail(error)
     }
     const transport = proxy.protocol === 'https:' ? https : http
-    const port = targetPort(target)
     try {
       proxyRequest = transport.request({
         hostname: proxyConnectHost,
         lookup: proxyLookup,
         port: Number(proxy.port || (proxy.protocol === 'https:' ? 443 : 80)),
         method: 'CONNECT',
-        path: `${target.hostname}:${port}`,
+        path: targetAuthority,
         headers: {
-          Host: `${target.hostname}:${port}`,
+          Host: targetAuthority,
           ...proxyHeaders(proxy),
         },
         rejectUnauthorized: true,
@@ -218,10 +243,29 @@ function connectProxy(proxy, proxyConnectHost, proxyLookup, target, { signal, ti
   })
 }
 
-async function requestThroughProxy(target, proxyDecision, options, body, config) {
-  // HTTP 目标可以使用代理的绝对地址转发；HTTPS 目标必须先建立 CONNECT 隧道。
+function hostnameAuthority(target) {
+  const host = target.hostname.includes(':') && !target.hostname.startsWith('[')
+    ? `[${target.hostname}]`
+    : target.hostname
+  return `${host}:${targetPort(target)}`
+}
+
+function proxyForwardsOriginalName(targetDecision) {
+  if (targetDecision.forwardHostname || targetDecision.addresses.length === 0) return true
+  // Clash/TUN 的 198.18/15 假 IP 只在本机有意义，交给代理时仍用原来的主机名。
+  return targetDecision.addresses.every((item) => classifyIp(item.address) === 'fake')
+}
+
+async function requestThroughProxy(targetDecision, proxyDecision, options, body, config) {
+  // 已在本机解析出真实地址时，绝对 URL 和 CONNECT 改用该 IP，Host 与 TLS SNI 仍用原主机名。
+  // 服务端代理跳过本机 DNS，或只有假 IP 时，把原主机名交给代理解析。
   // 不跟随上游 3xx，避免 Location 把已经通过检查的请求带到内网。
+  const target = targetDecision.url
   const proxy = proxyDecision.url
+  const port = targetPort(target)
+  const useName = proxyForwardsOriginalName(targetDecision)
+  const authority = useName ? hostnameAuthority(target) : pinnedAuthority(targetDecision.addresses[0], port)
+  const absoluteUrl = useName ? target.href : pinnedRequestUrl(target, targetDecision.addresses[0])
   if (target.protocol === 'http:') {
     const transport = proxy.protocol === 'https:' ? https : http
     return requestWithTransport(transport, {
@@ -229,7 +273,7 @@ async function requestThroughProxy(target, proxyDecision, options, body, config)
       lookup: proxyDecision.lookup,
       port: Number(proxy.port || (proxy.protocol === 'https:' ? 443 : 80)),
       method: options.method,
-      path: target.href,
+      path: absoluteUrl,
       headers: {
         ...options.headers,
         Host: target.host,
@@ -239,16 +283,31 @@ async function requestThroughProxy(target, proxyDecision, options, body, config)
     }, body, { ...config, stage: 'proxy-request', viaProxy: true })
   }
 
-  const socket = await connectProxy(proxy, proxyDecision.connectHost, proxyDecision.lookup, target, config)
+  const socket = await connectProxy(proxy, proxyDecision.connectHost, proxyDecision.lookup, authority, config)
   let secureSocket = socket
   if (target.protocol === 'https:') {
     secureSocket = await new Promise((resolve, reject) => {
-      const secure = tls.connect({ socket, servername: target.hostname, rejectUnauthorized: true })
-      secure.once('secureConnect', () => resolve(secure))
-      secure.once('error', (error) => {
+      let timer
+      const secure = tls.connect({
+        socket,
+        servername: connectionHost(target.hostname),
+        rejectUnauthorized: true,
+      })
+      const fail = (error) => {
+        clearTimeout(timer)
         secure.destroy()
         reject(annotate(error, 'proxy-tls', true))
+      }
+      timer = setTimeout(() => {
+        const error = new Error('代理 TLS 握手超时')
+        error.code = 'UND_ERR_CONNECT_TIMEOUT'
+        fail(error)
+      }, config.timeout)
+      secure.once('secureConnect', () => {
+        clearTimeout(timer)
+        resolve(secure)
       })
+      secure.once('error', fail)
     })
   }
   // CONNECT 后 socket 已经完成 TLS 握手，后续使用普通 HTTP 请求写入该 TLS socket，
@@ -257,11 +316,11 @@ async function requestThroughProxy(target, proxyDecision, options, body, config)
   const agent = new http.Agent({ keepAlive: false })
   agent.createConnection = () => secureSocket
   return requestWithTransport(transport, {
-    hostname: target.hostname,
-    port: targetPort(target),
+    hostname: connectionHost(target.hostname),
+    port,
     method: options.method,
     path: targetPath(target),
-    headers: options.headers,
+    headers: { ...options.headers, Host: target.host },
     agent,
     rejectUnauthorized: true,
   }, body, { ...config, stage: 'target-via-proxy', viaProxy: true })
@@ -279,18 +338,32 @@ export async function requestUpstream({
   lookup,
 }) {
   // 先授权目标，再授权代理。两边都只连接检查通过的地址，请求里的私网代理不能把服务器带到元数据地址。
-  const targetDecision = await authorizeOutboundUrl(url, { role: 'target', source: 'request', env, lookup })
-  const target = targetDecision.url
   const clientProxy = String(proxyUrl || '').trim()
+  let envProxy = ''
+  if (!clientProxy) {
+    try {
+      const parsed = new URL(String(url).trim())
+      if (['http:', 'https:'].includes(parsed.protocol)) envProxy = proxyFromEnv(parsed, env)
+    } catch { /* 非法目标地址由下面的授权统一拒绝 */ }
+  }
+  const targetDecision = await authorizeOutboundUrl(url, {
+    role: 'target',
+    source: 'request',
+    env,
+    lookup,
+    timeout,
+    signal,
+    skipResolve: Boolean(envProxy),
+  })
+  const target = targetDecision.url
   let proxyDecision = null
   if (clientProxy) {
-    proxyDecision = await authorizeOutboundUrl(clientProxy, { role: 'proxy', source: 'request', env, lookup })
-  } else {
-    const fromEnv = proxyFromEnv(target, env)
-    if (fromEnv) proxyDecision = await authorizeOutboundUrl(fromEnv, { role: 'proxy', source: 'env', env, lookup })
+    proxyDecision = await authorizeOutboundUrl(clientProxy, { role: 'proxy', source: 'request', env, lookup, timeout, signal })
+  } else if (envProxy) {
+    proxyDecision = await authorizeOutboundUrl(envProxy, { role: 'proxy', source: 'env', env, lookup, timeout, signal })
   }
   const options = { method, headers }
-  if (proxyDecision) return requestThroughProxy(target, proxyDecision, options, body, { signal, timeout })
+  if (proxyDecision) return requestThroughProxy(targetDecision, proxyDecision, options, body, { signal, timeout })
   const transport = target.protocol === 'https:' ? https : http
   return requestWithTransport(transport, {
     hostname: targetDecision.connectHost,

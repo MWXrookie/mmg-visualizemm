@@ -31,12 +31,14 @@ addSubnets(alwaysIPv4, [
   ['169.254.0.0', 16],
   ['192.0.0.0', 24],
   ['192.0.2.0', 24],
-  ['198.18.0.0', 15],
   ['198.51.100.0', 24],
   ['203.0.113.0', 24],
   ['224.0.0.0', 4],
   ['240.0.0.0', 4],
 ], 'ipv4')
+
+const fakeIPv4 = new BlockList()
+fakeIPv4.addSubnet('198.18.0.0', 15, 'ipv4')
 
 const privateIPv4 = new BlockList()
 addSubnets(privateIPv4, [
@@ -82,12 +84,11 @@ const PROXY_FORMAT = '代理地址格式不正确，请填写类似 http://127.0
 const TARGET_USERINFO = '模型地址不能包含用户名或密码，请只填写服务商的 Base URL。'
 const RESERVED_MESSAGE = '已拒绝该地址：它指向链路本地、云元数据或保留网段，不能作为模型或代理目标。'
 
-function privateTargetMessage(host) {
-  return `已拒绝该模型地址（${host}）：它指向本机、内网或保留地址。公网服务商（OpenAI、DeepSeek、通义、月之暗面、智谱等）可直接使用。若要连接本机模型（如 Ollama、LM Studio），请在服务端设置环境变量 MMG_ALLOW_PRIVATE_UPSTREAM=1，或把主机写入 MMG_UPSTREAM_ALLOWLIST 后重启服务。`
-}
-
-function privateProxyMessage(host) {
-  return `已拒绝请求中的代理地址（${host}）：它指向本机或内网。请改在服务端配置 HTTPS_PROXY（或 HTTP_PROXY、ALL_PROXY）。设置页若填写同一本机代理，需与该环境变量的主机和端口一致，或设置 MMG_ALLOW_PRIVATE_UPSTREAM=1，或把代理主机写入 MMG_UPSTREAM_ALLOWLIST 后重启。`
+function unreachableMessage(role, host) {
+  if (role === 'proxy') {
+    return `已拒绝该代理地址（${host}）。请确认它是可公开访问的 http/https 代理，或改在服务端配置 HTTPS_PROXY。本机代理需设置 MMG_ALLOW_PRIVATE_UPSTREAM=1，或把主机和端口写入 MMG_UPSTREAM_ALLOWLIST 后重启。`
+  }
+  return `已拒绝该模型地址（${host}）。请确认它是公网 http/https 服务。本机或内网地址需在服务端设置 MMG_ALLOW_PRIVATE_UPSTREAM=1，或把主机和端口写入 MMG_UPSTREAM_ALLOWLIST 后重启。`
 }
 
 export function connectionHost(hostname) {
@@ -210,6 +211,7 @@ function classifyIPv4(ip) {
   const canonical = canonicalIPv4(ip)
   if (METADATA_IPV4.has(canonical)) return 'always'
   if (alwaysIPv4.check(canonical, 'ipv4')) return 'always'
+  if (fakeIPv4.check(canonical, 'ipv4')) return 'fake'
   if (privateIPv4.check(canonical, 'ipv4')) return 'private'
   return 'public'
 }
@@ -234,6 +236,10 @@ export function classifyIp(ip) {
   const bytes = ipv6ToBytes(host)
   if (!bytes) return 'always'
   if (regionIsZero(bytes, 0, 16)) return 'always'
+  // AWS 在启用 IPv6 元数据时使用 fd00:ec2::254。它落在 ULA 里，但不能随私网放行一并打开。
+  if (bytes[0] === 0xfd && bytes[1] === 0x00 && bytes[2] === 0x0e && bytes[3] === 0xc2 && regionIsZero(bytes, 4, 14) && bytes[14] === 0x02 && bytes[15] === 0x54) {
+    return 'always'
+  }
   if (bytes[15] === 1 && regionIsZero(bytes, 0, 15)) return 'private'
   const embedded = embeddedIPv4(bytes)
   if (embedded) return classifyIPv4(embedded)
@@ -285,7 +291,28 @@ function formsOf(ip) {
 }
 
 function portMatches(entry, port) {
-  return !entry.port || entry.port === String(port)
+  if (entry.port) return entry.port === String(port)
+  // 名单没写端口时只匹配协议默认端口，避免 localhost 放开 11434 以外的全部端口。
+  return port === '80' || port === '443'
+}
+
+export function isIpLiteral(hostname) {
+  return isIP(policyHost(hostname)) !== 0
+}
+
+export function isClearlyInternalHostname(hostname) {
+  const host = policyHost(hostname)
+  if (!host || isIpLiteral(host)) return false
+  if (host === 'localhost' || host.endsWith('.localhost')) return true
+  if (host.endsWith('.local') || host.endsWith('.internal')) return true
+  return !host.includes('.')
+}
+
+export function lanPrivateUpstreamWarning(bindAddress, env = process.env) {
+  const bind = String(bindAddress || '')
+  const loopback = bind === '127.0.0.1' || bind === '::1' || bind === 'localhost'
+  if (loopback || !readOutboundPolicy(env).allowPrivate) return ''
+  return '已放行私网出站（MMG_ALLOW_PRIVATE_UPSTREAM），并且服务监听的不是仅本机地址。局域网里的其他设备可以让本进程访问内网目标。若只在本机使用，请只监听 127.0.0.1，或改用写明主机和端口的 MMG_UPSTREAM_ALLOWLIST。'
 }
 
 function hostnameAllowlisted(host, port, allowlist) {
@@ -331,6 +358,48 @@ export async function defaultLookup(hostname) {
   }))
 }
 
+const DNS_CAP_MS = 10_000
+
+function abortError() {
+  const error = new Error('请求已取消')
+  error.name = 'AbortError'
+  error.code = 'ABORT_ERR'
+  return error
+}
+
+async function resolveHost(host, lookup, timeoutMs, signal) {
+  const limit = Math.min(Math.max(1, Number(timeoutMs) || DNS_CAP_MS), DNS_CAP_MS)
+  let timer
+  let onAbort
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new Error('dns timeout')
+      error.code = 'ETIMEOUT'
+      reject(error)
+    }, limit)
+  })
+  const abort = signal
+    ? new Promise((_, reject) => {
+      if (signal.aborted) {
+        reject(abortError())
+        return
+      }
+      onAbort = () => reject(abortError())
+      signal.addEventListener('abort', onAbort, { once: true })
+    })
+    : null
+  try {
+    return await Promise.race([
+      Promise.resolve().then(() => lookup(host)),
+      timeout,
+      ...(abort ? [abort] : []),
+    ])
+  } finally {
+    clearTimeout(timer)
+    if (signal && onAbort) signal.removeEventListener('abort', onAbort)
+  }
+}
+
 function normalizeRecords(records) {
   const list = Array.isArray(records) ? records : []
   return list.map((record) => {
@@ -371,11 +440,23 @@ export function pinLookup(addresses) {
  * 解析并授权一个出站 URL。返回的 lookup 只交出已通过检查的地址，避免检查后 DNS 重新绑定到内网。
  * role: target | proxy。source: request | env。env 来源的代理允许私网，目标地址不允许因此放宽。
  */
+function denyUnreachable(role, label) {
+  throw new OutboundPolicyError(unreachableMessage(role, label), 'UPSTREAM_BLOCKED')
+}
+
+/**
+ * 解析并授权一个出站 URL。返回的 lookup 只交出已通过检查的地址，避免检查后 DNS 重新绑定到内网。
+ * role: target | proxy。source: request | env。env 来源的代理允许私网，目标地址不允许因此放宽。
+ * skipResolve：服务端代理会自己解析目标，此时不在本机做 DNS，只拒绝明显的内网主机名和字面私网地址。
+ */
 export async function authorizeOutboundUrl(raw, {
   role = 'target',
   source = 'request',
   env = process.env,
   lookup = defaultLookup,
+  timeout = DNS_CAP_MS,
+  signal,
+  skipResolve = false,
 } = {}) {
   let url = parseOutboundUrl(raw, role)
   let effectiveSource = source
@@ -388,20 +469,31 @@ export async function authorizeOutboundUrl(raw, {
   }
   const host = policyHost(url.hostname)
   const label = hostLabel(url.hostname)
-  if (METADATA_HOSTS.has(host)) {
-    throw new OutboundPolicyError(RESERVED_MESSAGE, 'UPSTREAM_BLOCKED')
+  const literal = isIpLiteral(host)
+  if (METADATA_HOSTS.has(host) || (skipResolve && !literal && isClearlyInternalHostname(host))) {
+    if (literal) throw new OutboundPolicyError(RESERVED_MESSAGE, 'UPSTREAM_BLOCKED')
+    denyUnreachable(role, label)
   }
   let resolved
-  try {
-    resolved = normalizeRecords(await lookup(host))
-  } catch (error) {
-    if (!error.code) error.code = 'ENOTFOUND'
-    throw error
+  if (skipResolve && !literal) {
+    return {
+      url,
+      connectHost: connectionHost(url.hostname),
+      addresses: [],
+      lookup: null,
+      forwardHostname: true,
+    }
   }
-  if (resolved.length === 0) {
-    const error = new Error(`getaddrinfo ENOTFOUND ${host}`)
-    error.code = 'ENOTFOUND'
-    throw error
+  if (skipResolve && literal) {
+    resolved = [{ address: connectionHost(url.hostname), family: isIP(host) === 6 ? 6 : 4 }]
+  } else {
+    try {
+      resolved = normalizeRecords(await resolveHost(host, lookup, timeout, signal))
+    } catch (error) {
+      if (error?.code === 'ABORT_ERR' || error?.name === 'AbortError') throw error
+      denyUnreachable(role, label)
+    }
+    if (!resolved?.length) denyUnreachable(role, label)
   }
   const policy = readOutboundPolicy(env)
   const allowPrivate = policy.allowPrivate || (role === 'proxy' && effectiveSource === 'env')
@@ -412,6 +504,13 @@ export async function authorizeOutboundUrl(raw, {
   for (const record of resolved) {
     const kind = isIP(record.address) ? classifyIp(record.address) : 'always'
     if (kind === 'public') continue
+    if (kind === 'fake') {
+      if (literal) {
+        const allowed = allowPrivate || hostListed || addressAllowlisted(record.address, port, policy.allowlist)
+        if (!allowed) privateAddress = true
+      }
+      continue
+    }
     if (kind === 'always') {
       reserved = true
       continue
@@ -419,10 +518,10 @@ export async function authorizeOutboundUrl(raw, {
     const allowed = allowPrivate || hostListed || addressAllowlisted(record.address, port, policy.allowlist)
     if (!allowed) privateAddress = true
   }
-  if (reserved) throw new OutboundPolicyError(RESERVED_MESSAGE, 'UPSTREAM_BLOCKED')
-  if (privateAddress) {
-    throw new OutboundPolicyError(role === 'proxy' ? privateProxyMessage(label) : privateTargetMessage(label), 'UPSTREAM_BLOCKED')
+  if (reserved) {
+    throw new OutboundPolicyError(literal ? RESERVED_MESSAGE : unreachableMessage(role, label), 'UPSTREAM_BLOCKED')
   }
+  if (privateAddress) denyUnreachable(role, label)
   const addresses = resolved.map((record) => ({
     address: record.address,
     family: record.family === 6 ? 6 : 4,
@@ -432,5 +531,6 @@ export async function authorizeOutboundUrl(raw, {
     connectHost: connectionHost(url.hostname),
     addresses,
     lookup: pinLookup(addresses),
+    forwardHostname: false,
   }
 }

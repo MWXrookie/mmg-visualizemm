@@ -147,23 +147,16 @@ function localEmbed(text) {
  * 生成 embedding：优先千问 API（.env.local），失败降级本地。
  * 传入的 provider（浏览器 settings）作为第二优先（用户可在产品设置里配）。
  */
-const rejectedEmbedTargets = new Set()
-
-function rememberRejectedEmbedTarget(key) {
-  if (rejectedEmbedTargets.size > 64) rejectedEmbedTargets.clear()
-  rejectedEmbedTargets.add(key)
-}
-
-async function embedText(text, provider = {}) {
+async function embedText(text, provider = {}, rejected = null) {
   // 优先级：本地 .env.local 千问 > 浏览器传入 provider > 本地哈希。
-  // 被策略拒绝的地址只检查一次，避免建库时对同一内网目标重复解析。
+  // rejected 只在这一次构建或检索内复用，下次请求会重新判断。
   const candidates = []
   if (!FORCE_LOCAL_EMBEDDING && localCfg.apiKey && localCfg.baseUrl) candidates.push({ baseUrl: localCfg.baseUrl, apiKey: localCfg.apiKey, model: localCfg.embedModel, proxyUrl: localCfg.proxyUrl })
   if (!FORCE_LOCAL_EMBEDDING && provider.baseUrl && provider.apiKey) candidates.push({ baseUrl: provider.baseUrl, apiKey: provider.apiKey, model: provider.embedModel, proxyUrl: provider.proxyUrl })
   for (const c of candidates) {
     const base = (c.baseUrl || '').trim().replace(/\/+$/, '').replace(/\/chat\/completions$/, '')
     const targetKey = `${base}\n${c.proxyUrl || ''}`
-    if (rejectedEmbedTargets.has(targetKey)) continue
+    if (rejected?.has(targetKey)) continue
     try {
       const res = await requestUpstream({
         url: `${base}/embeddings`,
@@ -180,7 +173,7 @@ async function embedText(text, provider = {}) {
         if (Array.isArray(vec) && vec.length > 0) return { vector: vec, source: 'api' }
       }
     } catch (error) {
-      if (error?.code === 'UPSTREAM_BLOCKED' || error?.code === 'PROXY_BAD_CONFIG') rememberRejectedEmbedTarget(targetKey)
+      if (rejected && (error?.code === 'UPSTREAM_BLOCKED' || error?.code === 'PROXY_BAD_CONFIG')) rejected.add(targetKey)
     }
   }
   return { vector: localEmbed(text), source: 'local' }
@@ -232,13 +225,14 @@ export async function ensureKnowledgeBase(provider) {
   }
 
   const vecs = new Array(chunks.length)
+  const rejected = new Set()
   let usedApi = false
   const CONC = 4
   let idx = 0
   async function worker() {
     while (idx < chunks.length) {
       const i = idx++
-      const r = await embedText(chunks[i].text, provider || {})
+      const r = await embedText(chunks[i].text, provider || {}, rejected)
       vecs[i] = r.vector
       if (r.source === 'api') usedApi = true
     }
@@ -253,7 +247,7 @@ export async function ensureKnowledgeBase(provider) {
 export async function searchKnowledge(query, provider, topK = 4) {
   const k = await ensureKnowledgeBase(provider)
   if (k.chunks.length === 0) return []
-  const { vector } = await embedText(query, provider || {})
+  const { vector } = await embedText(query, provider || {}, new Set())
 
   // 查询关键词
   const qGrams = new Set()
