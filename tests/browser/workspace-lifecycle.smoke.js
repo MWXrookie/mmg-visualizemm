@@ -298,7 +298,7 @@ test('本地工作区可上传题干、跨工作台持久化并完成备份恢�
   const download = await downloadPromise
   const backup = JSON.parse(await readFile(await download.path(), 'utf8'))
   expect(backup.format).toBe('mmg-workspace-backup')
-  expect(backup.schemaVersion).toBe(1)
+  expect(backup.schemaVersion).toBe(2)
   expect(backup.workspace.problemText).toBe(problemText)
   expect(backup.workspace.breakdown).toHaveLength(1)
   expect(backup).not.toHaveProperty('apiKey')

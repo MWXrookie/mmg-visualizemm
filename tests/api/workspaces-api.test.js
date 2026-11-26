@@ -5,6 +5,7 @@ import { once } from 'node:events'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import { createServer as createHttpServer } from 'node:http'
+import { DatabaseSync } from 'node:sqlite'
 import os from 'node:os'
 import path from 'node:path'
 import { pdfTableFixture } from '../support/document-pdf.js'
@@ -51,6 +52,27 @@ async function request(urlPath, options = {}) {
     ? await response.json()
     : await response.text()
   return { response, body }
+}
+
+function postWorkspace(body) {
+  return request('/api/workspaces', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+async function stopProcess(proc) {
+  if (!proc || proc.exitCode !== null) return
+  const exited = once(proc, 'exit')
+  proc.kill()
+  let stopTimer
+  await Promise.race([
+    exited,
+    new Promise((resolve) => { stopTimer = setTimeout(resolve, 3_000) }),
+  ])
+  clearTimeout(stopTimer)
+  if (proc.exitCode === null) proc.kill('SIGKILL')
 }
 
 before(async () => {
@@ -215,7 +237,7 @@ test('工作区备份带版本导出，并以新 ID 安全恢复', async () => {
   const exported = await request(`/api/workspaces/${sourceId}/backup`)
   assert.equal(exported.response.status, 200)
   assert.equal(exported.body.format, 'mmg-workspace-backup')
-  assert.equal(exported.body.schemaVersion, 1)
+  assert.equal(exported.body.schemaVersion, 2)
   assert.equal(Number.isNaN(Date.parse(exported.body.exportedAt)), false)
   assert.equal(exported.body.workspace.id, sourceId)
   assert.equal(Object.hasOwn(exported.body.workspace, 'apiKey'), false)
@@ -227,7 +249,7 @@ test('工作区备份带版本导出，并以新 ID 安全恢复', async () => {
     body: JSON.stringify({ backup: exported.body }),
   })
   assert.equal(imported.response.status, 201)
-  assert.equal(imported.body.schemaVersion, 1)
+  assert.equal(imported.body.schemaVersion, 2)
   assert.notEqual(imported.body.id, sourceId)
   assert.equal(imported.body.workspace.title, source.title)
   assert.equal(imported.body.workspace.problemText, source.problemText)
@@ -416,5 +438,348 @@ test('本地替身上游的完成原因经流式和整段接口透传', async ()
     assert.equal(whole.body.finishReason, 'length')
   } finally {
     await new Promise((resolve) => provider.close(resolve))
+  }
+})
+
+const sampleThoughtBoard = {
+  rootPosition: { x: 12, y: -3 },
+  sourcePositions: { 'src-a': { x: 1, y: 2 } },
+  hiddenSources: ['src-b'],
+  chat: [{ role: 'user', text: '先画因果' }],
+  note: '内部字段不校验',
+}
+
+test('thoughtBoard 往返保存，缺省更新保留原值，null 清空', async () => {
+  const id = 'thought-board-round-trip'
+  const created = await postWorkspace({
+    id,
+    title: '思路板',
+    problemText: '保留题干',
+    thoughtBoard: sampleThoughtBoard,
+  })
+  assert.equal(created.response.status, 200)
+  assert.deepEqual(created.body, { ok: true, id })
+
+  const loaded = await request(`/api/workspaces/${id}`)
+  assert.equal(loaded.response.status, 200)
+  assert.deepEqual(loaded.body.workspace.thoughtBoard, sampleThoughtBoard)
+  assert.equal(loaded.body.workspace.problemText, '保留题干')
+
+  const renamed = await postWorkspace({ id, title: '只改标题' })
+  assert.equal(renamed.response.status, 200)
+  const kept = await request(`/api/workspaces/${id}`)
+  assert.equal(kept.body.workspace.title, '只改标题')
+  assert.equal(kept.body.workspace.problemText, '保留题干')
+  assert.deepEqual(kept.body.workspace.thoughtBoard, sampleThoughtBoard)
+
+  const cleared = await postWorkspace({ id, thoughtBoard: null })
+  assert.equal(cleared.response.status, 200)
+  const afterClear = await request(`/api/workspaces/${id}`)
+  assert.equal(afterClear.body.workspace.thoughtBoard, null)
+  assert.equal(afterClear.body.workspace.title, '只改标题')
+
+  await request(`/api/workspaces/${id}`, { method: 'DELETE' })
+})
+
+test('thoughtBoard 类型错误返回 400，超过 2MB 返回 413', async () => {
+  const id = 'thought-board-reject'
+  const seeded = await postWorkspace({ id, title: '已有思路板', thoughtBoard: sampleThoughtBoard })
+  assert.equal(seeded.response.status, 200)
+
+  for (const thoughtBoard of [['not-an-object'], 'text', 1, true]) {
+    const rejected = await postWorkspace({ id, thoughtBoard })
+    assert.equal(rejected.response.status, 400)
+    assert.equal(rejected.body.ok, false)
+    assert.equal(rejected.body.code, 'BAD_THOUGHT_BOARD')
+  }
+  const stillThere = await request(`/api/workspaces/${id}`)
+  assert.deepEqual(stillThere.body.workspace.thoughtBoard, sampleThoughtBoard)
+
+  const limit = 2 * 1024 * 1024
+  const wrapper = Buffer.byteLength(JSON.stringify({ pad: '' }), 'utf8')
+  const exact = { pad: 'x'.repeat(limit - wrapper) }
+  assert.equal(Buffer.byteLength(JSON.stringify(exact), 'utf8'), limit)
+  const accepted = await postWorkspace({ id: 'thought-board-exact', thoughtBoard: exact })
+  assert.equal(accepted.response.status, 200)
+  const exactLoaded = await request('/api/workspaces/thought-board-exact')
+  assert.equal(exactLoaded.body.workspace.thoughtBoard.pad, exact.pad)
+
+  const over = { pad: `${exact.pad}y` }
+  assert.equal(Buffer.byteLength(JSON.stringify(over), 'utf8'), limit + 1)
+  const tooLarge = await postWorkspace({ id, thoughtBoard: over })
+  assert.equal(tooLarge.response.status, 413)
+  assert.equal(tooLarge.body.ok, false)
+  assert.equal(tooLarge.body.code, 'THOUGHT_BOARD_TOO_LARGE')
+  const afterOver = await request(`/api/workspaces/${id}`)
+  assert.deepEqual(afterOver.body.workspace.thoughtBoard, sampleThoughtBoard)
+
+  const cjk = { pad: '你'.repeat(700_000) }
+  const cjkJson = JSON.stringify(cjk)
+  assert.ok(cjkJson.length < limit)
+  assert.ok(Buffer.byteLength(cjkJson, 'utf8') > limit)
+  const cjkRejected = await postWorkspace({ id, thoughtBoard: cjk })
+  assert.equal(cjkRejected.response.status, 413)
+  assert.equal(cjkRejected.body.code, 'THOUGHT_BOARD_TOO_LARGE')
+
+  await request(`/api/workspaces/${id}`, { method: 'DELETE' })
+  await request('/api/workspaces/thought-board-exact', { method: 'DELETE' })
+})
+
+test('thoughtBoard 随备份导出导入，没有该字段的 v1 备份仍可导入', async () => {
+  const sourceId = 'thought-board-backup'
+  await postWorkspace({
+    id: sourceId,
+    title: '可迁移思路板',
+    problemText: '备份题干',
+    attachments: [{ type: 'text', name: '说明.txt', text: '附件' }],
+    thoughtBoard: sampleThoughtBoard,
+  })
+
+  const exported = await request(`/api/workspaces/${sourceId}/backup`)
+  assert.equal(exported.response.status, 200)
+  assert.equal(exported.body.schemaVersion, 2)
+  assert.deepEqual(exported.body.workspace.thoughtBoard, sampleThoughtBoard)
+
+  const imported = await request('/api/workspaces/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ backup: exported.body }),
+  })
+  assert.equal(imported.response.status, 201)
+  assert.equal(imported.body.schemaVersion, 2)
+  assert.notEqual(imported.body.id, sourceId)
+  assert.equal(imported.body.workspace.title, '可迁移思路板')
+  assert.equal(imported.body.workspace.problemText, '备份题干')
+  assert.deepEqual(imported.body.workspace.thoughtBoard, sampleThoughtBoard)
+  const restored = await request(`/api/workspaces/${imported.body.id}`)
+  assert.deepEqual(restored.body.workspace.thoughtBoard, sampleThoughtBoard)
+
+  const legacy = {
+    format: 'mmg-workspace-backup',
+    schemaVersion: 1,
+    exportedAt: '2026-09-01T00:00:00.000Z',
+    workspace: {
+      title: '旧版备份',
+      problemText: '没有思路板',
+      problemPages: [{ no: 1, text: '没有思路板' }],
+      attachments: [{ type: 'text', name: 'a.txt', text: '附件' }],
+      breakdown: [{ title: '一步', content: '保留' }],
+      code: 'print("old")',
+      overview: '旧解读',
+    },
+  }
+  const legacyImported = await request('/api/workspaces/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ backup: legacy }),
+  })
+  assert.equal(legacyImported.response.status, 201)
+  assert.equal(legacyImported.body.workspace.thoughtBoard, null)
+  assert.equal(legacyImported.body.workspace.title, legacy.workspace.title)
+  assert.equal(legacyImported.body.workspace.problemText, legacy.workspace.problemText)
+  assert.deepEqual(legacyImported.body.workspace.problemPages, legacy.workspace.problemPages)
+  assert.deepEqual(legacyImported.body.workspace.attachments, legacy.workspace.attachments)
+  assert.deepEqual(legacyImported.body.workspace.breakdown, legacy.workspace.breakdown)
+  assert.equal(legacyImported.body.workspace.code, legacy.workspace.code)
+  assert.equal(legacyImported.body.workspace.overview, legacy.workspace.overview)
+
+  const invalidBackup = structuredClone(exported.body)
+  invalidBackup.workspace.thoughtBoard = ['not-an-object']
+  const invalidImport = await request('/api/workspaces/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ backup: invalidBackup }),
+  })
+  assert.equal(invalidImport.response.status, 400)
+  assert.equal(invalidImport.body.code, 'BAD_THOUGHT_BOARD')
+
+  const limit = 2 * 1024 * 1024
+  const wrapper = Buffer.byteLength(JSON.stringify({ pad: '' }), 'utf8')
+  const oversizedBackup = structuredClone(exported.body)
+  oversizedBackup.workspace.thoughtBoard = { pad: 'y'.repeat(limit - wrapper + 1) }
+  const oversizedImport = await request('/api/workspaces/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ backup: oversizedBackup }),
+  })
+  assert.equal(oversizedImport.response.status, 413)
+  assert.equal(oversizedImport.body.code, 'THOUGHT_BOARD_TOO_LARGE')
+
+  await request(`/api/workspaces/${sourceId}`, { method: 'DELETE' })
+  await request(`/api/workspaces/${imported.body.id}`, { method: 'DELETE' })
+  await request(`/api/workspaces/${legacyImported.body.id}`, { method: 'DELETE' })
+})
+
+test('v1 数据库补上 thought_board 后保留原数据，user_version 变为 2', async () => {
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), 'mmg-thought-migrate-'))
+  const legacyId = 'legacy-v1-workspace'
+  const createdAt = 1_700_000_000_000
+  const updatedAt = 1_700_000_001_000
+  const attachments = [{ type: 'text', name: 'a.txt', text: '迁移附件' }]
+  const breakdown = [{ title: '旧块', content: '保留拆解' }]
+  const problemPages = [{ no: 1, text: '迁移题干' }]
+  let proc = null
+  try {
+    const database = new DatabaseSync(path.join(dataDir, 'mmg.db'))
+    database.exec(`
+      CREATE TABLE workspaces (
+        id TEXT PRIMARY KEY,
+        title TEXT DEFAULT '',
+        problem_text TEXT DEFAULT '',
+        problem_source_kind TEXT DEFAULT '',
+        problem_pages TEXT DEFAULT '[]',
+        attachments TEXT DEFAULT '[]',
+        breakdown TEXT DEFAULT '[]',
+        code TEXT DEFAULT '',
+        created_at INTEGER,
+        updated_at INTEGER,
+        overview TEXT DEFAULT '',
+        problem_document TEXT DEFAULT 'null'
+      )
+    `)
+    database.exec('PRAGMA user_version = 1')
+    database.prepare(`
+      INSERT INTO workspaces (
+        id, title, problem_text, problem_source_kind, problem_pages, attachments, breakdown, code,
+        created_at, updated_at, overview, problem_document
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      legacyId,
+      '迁移前工作区',
+      '迁移题干',
+      'text',
+      JSON.stringify(problemPages),
+      JSON.stringify(attachments),
+      JSON.stringify(breakdown),
+      'print("legacy")',
+      createdAt,
+      updatedAt,
+      '旧解读',
+      'null',
+    )
+    const beforeNames = database.prepare('PRAGMA table_info(workspaces)').all().map((column) => column.name)
+    assert.equal(beforeNames.includes('thought_board'), false)
+    assert.equal(database.prepare('PRAGMA user_version').get().user_version, 1)
+    database.close()
+
+    const port = await reservePort()
+    let output = ''
+    proc = spawn(process.execPath, ['server/index.js'], {
+      cwd: projectRoot,
+      env: {
+        ...process.env,
+        PORT: String(port),
+        MMG_DATA_DIR: dataDir,
+        MMG_FORCE_LOCAL_EMBEDDING: '1',
+        NO_PROXY: '127.0.0.1,localhost',
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    })
+    proc.stdout.on('data', (chunk) => { output += chunk.toString() })
+    proc.stderr.on('data', (chunk) => { output += chunk.toString() })
+    const deadline = Date.now() + 30_000
+    let healthy = false
+    while (Date.now() < deadline) {
+      if (proc.exitCode !== null) throw new Error(`迁移测试服务提前退出（code=${proc.exitCode}）\n${output}`)
+      try {
+        const response = await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(1_000) })
+        if (response.ok) { healthy = true; break }
+      } catch { /* 服务尚在启动 */ }
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    if (!healthy) throw new Error(`等待迁移测试服务超时\n${output}`)
+
+    const loaded = await fetch(`http://127.0.0.1:${port}/api/workspaces/${legacyId}`)
+    const body = await loaded.json()
+    assert.equal(loaded.status, 200)
+    assert.equal(body.workspace.title, '迁移前工作区')
+    assert.equal(body.workspace.problemText, '迁移题干')
+    assert.equal(body.workspace.problemSourceKind, 'text')
+    assert.deepEqual(body.workspace.problemPages, problemPages)
+    assert.deepEqual(body.workspace.attachments, attachments)
+    assert.deepEqual(body.workspace.breakdown, breakdown)
+    assert.equal(body.workspace.code, 'print("legacy")')
+    assert.equal(body.workspace.overview, '旧解读')
+    assert.equal(body.workspace.problemDocument, null)
+    assert.equal(body.workspace.thoughtBoard, null)
+    assert.equal(body.workspace.createdAt, createdAt)
+    assert.equal(body.workspace.updatedAt, updatedAt)
+
+    const migrated = new DatabaseSync(path.join(dataDir, 'mmg.db'), { readOnly: true, timeout: 5_000 })
+    try {
+      assert.equal(migrated.prepare('PRAGMA user_version').get().user_version, 2)
+      const names = migrated.prepare('PRAGMA table_info(workspaces)').all().map((column) => column.name)
+      for (const name of ['overview', 'problem_source_kind', 'problem_pages', 'problem_document', 'thought_board']) {
+        assert.equal(names.includes(name), true, name)
+      }
+      const row = migrated.prepare('SELECT title, problem_text, thought_board FROM workspaces WHERE id = ?').get(legacyId)
+      assert.equal(row.title, '迁移前工作区')
+      assert.equal(row.problem_text, '迁移题干')
+      assert.equal(row.thought_board, 'null')
+    } finally {
+      migrated.close()
+    }
+  } finally {
+    await stopProcess(proc)
+    if (path.basename(dataDir).startsWith('mmg-thought-migrate-')) {
+      await rm(dataDir, { recursive: true, force: true })
+    }
+  }
+})
+
+test('高于程序支持版本的数据库拒绝启动且不改写', async () => {
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), 'mmg-thought-downgrade-'))
+  let proc = null
+  try {
+    const database = new DatabaseSync(path.join(dataDir, 'mmg.db'))
+    database.exec(`CREATE TABLE workspaces (id TEXT PRIMARY KEY, title TEXT)`)
+    database.exec('PRAGMA user_version = 3')
+    database.prepare('INSERT INTO workspaces (id, title) VALUES (?, ?)').run('future-ws', '未来数据')
+    database.close()
+
+    const port = await reservePort()
+    let output = ''
+    proc = spawn(process.execPath, ['server/index.js'], {
+      cwd: projectRoot,
+      env: {
+        ...process.env,
+        PORT: String(port),
+        MMG_DATA_DIR: dataDir,
+        MMG_FORCE_LOCAL_EMBEDDING: '1',
+        NO_PROXY: '127.0.0.1,localhost',
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    })
+    proc.stdout.on('data', (chunk) => { output += chunk.toString() })
+    proc.stderr.on('data', (chunk) => { output += chunk.toString() })
+    const exited = once(proc, 'exit')
+    let timer
+    const exitCode = await Promise.race([
+      exited.then(([code]) => code),
+      new Promise((resolve) => { timer = setTimeout(() => resolve('timeout'), 10_000) }),
+    ])
+    clearTimeout(timer)
+    if (exitCode === 'timeout') {
+      proc.kill('SIGKILL')
+      assert.fail(`更高版本数据库没有阻止启动\n${output}`)
+    }
+    assert.notEqual(exitCode, 0)
+    assert.match(output, /数据库 schema 版本 3 高于当前程序支持的版本 2/)
+
+    const unchanged = new DatabaseSync(path.join(dataDir, 'mmg.db'), { readOnly: true })
+    try {
+      assert.equal(unchanged.prepare('PRAGMA user_version').get().user_version, 3)
+      assert.equal(unchanged.prepare('SELECT title FROM workspaces WHERE id = ?').get('future-ws').title, '未来数据')
+      assert.equal(unchanged.prepare('PRAGMA table_info(workspaces)').all().some((column) => column.name === 'thought_board'), false)
+    } finally {
+      unchanged.close()
+    }
+  } finally {
+    await stopProcess(proc)
+    if (path.basename(dataDir).startsWith('mmg-thought-downgrade-')) {
+      await rm(dataDir, { recursive: true, force: true })
+    }
   }
 })
