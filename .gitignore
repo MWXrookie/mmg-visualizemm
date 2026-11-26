@@ -10,6 +10,10 @@ data/
 .env.local
 .dsh-vision-router/
 
+# 本地 TLS 证书与私钥（mkcert / openssl）。不要提交。
+*.pem
+*.key
+
 # Archify local validation snapshots and contact sheets (the four PNGs are deliverables)
 docs/diagrams/.archify-delivery-*/
 docs/diagrams/*.visual-check.html
