@@ -264,10 +264,15 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
   const aiRequest = useRef(0)
 
   function ensureKnowledge() {
-    knowledgeRequest.current ||= loadKnowledgeCards().then(mod => {
-      setKnowledge(mod)
-      return mod
-    })
+    if (!knowledgeRequest.current) {
+      knowledgeRequest.current = loadKnowledgeCards().then((mod) => {
+        setKnowledge(mod)
+        return mod
+      }).catch((error) => {
+        knowledgeRequest.current = null
+        throw error
+      })
+    }
     return knowledgeRequest.current
   }
 
@@ -719,17 +724,19 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
       ...(node ? buildConversationHistory(history.filter(message => !message.nodeId), 4, 2400) : []),
       ...buildConversationHistory(msgs),
     ]
-    const library = (isCardFollowUp(text) || history.some(message => message.role === 'ai')) ? await ensureKnowledge() : knowledge
-    const recalled = library ? history.filter(message => (message.nodeId || null) === chatNodeId).reduce((seen, message, index, list) => {
-      if (message.role !== 'ai') return [...seen, []]
-      const used = new Set(seen.flat().map(item => item.id))
-      const matches = library.findConceptMatches(message.recallText || message.text).filter(item => !used.has(item.id)).slice(0, 3)
-      return [...seen, matches]
-    }, []) : recallMatchesByMessage
-    const cardContext = buildCardContext(recalled, text, library)
-
     let content = ''
     try {
+      let library = knowledge
+      if (isCardFollowUp(text) || history.some(message => message.role === 'ai')) {
+        try { library = await ensureKnowledge() } catch { library = null }
+      }
+      const recalled = library ? history.filter(message => (message.nodeId || null) === chatNodeId).reduce((seen, message) => {
+        if (message.role !== 'ai') return [...seen, []]
+        const used = new Set(seen.flat().map(item => item.id))
+        const matches = library.findConceptMatches(message.recallText || message.text).filter(item => !used.has(item.id)).slice(0, 3)
+        return [...seen, matches]
+      }, []) : recallMatchesByMessage
+      const cardContext = buildCardContext(recalled, text, library)
       // 追问界面中已有卡片时，优先使用卡片上下文，避免泛关键词 RAG 把“噪声”带到无关的图像处理条目。
       const hits = isCardFollowUp(text) && cardContext ? [] : await retrieveKnowledge(text, settings, 3)
       if (!isCurrent()) return
@@ -864,7 +871,13 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
 
   /** 将知识卡片的行动摘要放入待确认的新节点预览。 */
   async function addCardToBreakdown(card) {
-    const { getCardWorkflow } = await ensureKnowledge()
+    let getCardWorkflow
+    try {
+      ({ getCardWorkflow } = await ensureKnowledge())
+    } catch {
+      setError('知识卡片暂时打不开，请稍后再试')
+      return
+    }
     const workflow = getCardWorkflow(card)
     if (!workflow) return
     setPreview({

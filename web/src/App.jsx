@@ -4,7 +4,7 @@ import LearningEntry from './pages/LearningEntry.jsx'
 import { loadSettings, loadTheme, saveTheme, getCurrentWsId, setCurrentWsId } from './store.js'
 import { loadWorkspace, saveWorkspace, listWorkspaces, deleteWorkspace, exportWorkspaceBackup, importWorkspaceBackup } from './api.js'
 import { apiFetch, warningsFromHealth } from './lib/apiClient.js'
-import { THOUGHT_BOARD_TOO_LARGE_MESSAGE, thoughtBoardTooLarge } from './lib/thoughtBoardState.js'
+import { THOUGHT_BOARD_TOO_LARGE_MESSAGE, THOUGHT_BOARD_TRUNCATED_MESSAGE, fitThoughtBoard } from './lib/thoughtBoardState.js'
 import { IconBook, IconCompass, IconCode, IconHome, IconGear, IconSun, IconMoon, IconEdit, IconTrash, IconMenu, IconClose } from './components/Icons.jsx'
 
 const Workbench = lazy(() => import('./pages/Workbench.jsx'))
@@ -43,11 +43,9 @@ function workspacePayload(w) {
     overview: w.overview || '',
     code: w.code || '',
   }
-  if (w.thoughtBoard && typeof w.thoughtBoard === 'object' && !Array.isArray(w.thoughtBoard)) {
-    if (thoughtBoardTooLarge(w.thoughtBoard)) return { payload, boardOmitted: true }
-    payload.thoughtBoard = w.thoughtBoard
-  }
-  return { payload, boardOmitted: false }
+  const fitted = fitThoughtBoard(w.thoughtBoard)
+  if (fitted.board && !fitted.omitted) payload.thoughtBoard = fitted.board
+  return { payload, boardOmitted: fitted.omitted && !!w.thoughtBoard, truncated: fitted.truncated, fittedBoard: fitted.board }
 }
 
 async function sendWorkspace(payload, unloading) {
@@ -62,6 +60,11 @@ async function sendWorkspace(payload, unloading) {
     if (response.status === 413 && result.code === 'THOUGHT_BOARD_TOO_LARGE') {
       const error = new Error(THOUGHT_BOARD_TOO_LARGE_MESSAGE)
       error.code = 'THOUGHT_BOARD_TOO_LARGE'
+      throw error
+    }
+    if (response.status === 400 && result.code === 'BAD_THOUGHT_BOARD') {
+      const error = new Error('白板内容无法保存，题目、卡片和代码仍会保存。')
+      error.code = 'BAD_THOUGHT_BOARD'
       throw error
     }
     if (!response.ok || result.ok === false) {
@@ -98,19 +101,23 @@ async function sendWorkspace(payload, unloading) {
   }
 }
 
-/** 常规自动保存使用普通请求；仅 pagehide 使用 keepalive 或同步兜底。白板过大时先去掉该字段再保存其余内容。 */
+/** 常规自动保存使用普通请求；仅 pagehide 使用 keepalive 或同步兜底。过长的小墨对话先截短；仍放不下时去掉白板再保存其余内容。 */
 function persist(w, unloading = false) {
   if (!w || !w.id) return
   const prepared = workspacePayload(w)
-  const notifyOversized = () => {
-    if (!unloading) globalThis.__notifyBoardLimit?.(THOUGHT_BOARD_TOO_LARGE_MESSAGE)
+  const notify = (message) => {
+    if (!unloading) globalThis.__notifyBoardLimit?.(message)
   }
-  if (prepared.boardOmitted) notifyOversized()
+  if (prepared.truncated && prepared.payload.thoughtBoard) {
+    notify(THOUGHT_BOARD_TRUNCATED_MESSAGE)
+    if (!unloading) globalThis.__applyFittedThoughtBoard?.(prepared.payload.thoughtBoard)
+  }
+  if (prepared.boardOmitted) notify(THOUGHT_BOARD_TOO_LARGE_MESSAGE)
   const saving = sendWorkspace(prepared.payload, unloading)
   if (unloading || !saving) return saving
   return saving.catch(async (error) => {
-    if (error.code !== 'THOUGHT_BOARD_TOO_LARGE' || !prepared.payload.thoughtBoard) throw error
-    notifyOversized()
+    if ((error.code !== 'THOUGHT_BOARD_TOO_LARGE' && error.code !== 'BAD_THOUGHT_BOARD') || !prepared.payload.thoughtBoard) throw error
+    notify(error.code === 'BAD_THOUGHT_BOARD' ? error.message : THOUGHT_BOARD_TOO_LARGE_MESSAGE)
     const { thoughtBoard, ...rest } = prepared.payload
     await sendWorkspace(rest, false)
   })
@@ -157,10 +164,12 @@ export default function App() {
   useEffect(() => {
     window.__notify = (msg) => setToast(msg)
     window.__notifyBoardLimit = (msg) => setBoardWarning(msg)
+    window.__applyFittedThoughtBoard = (board) => setWs((prev) => (prev ? { ...prev, thoughtBoard: board } : prev))
     window.__lanAuthPrompt = ({ code, message, finish }) => setAuthPrompt({ code, message, finish })
     return () => {
       delete window.__notify
       delete window.__notifyBoardLimit
+      delete window.__applyFittedThoughtBoard
       delete window.__lanAuthPrompt
     }
   }, [])

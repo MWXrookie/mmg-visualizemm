@@ -1,6 +1,8 @@
 export const THOUGHT_BOARD_BYTE_LIMIT = 2 * 1024 * 1024
 
-export const THOUGHT_BOARD_TOO_LARGE_MESSAGE = '思路整理台的小墨对话太长，这次没能写入工作区。请先清理较早的对话；题目、卡片和代码仍会保存。'
+export const THOUGHT_BOARD_TOO_LARGE_MESSAGE = '思路整理台的内容仍然超过 2MB，这次没能写入白板。请再清理较早的对话；题目、卡片和代码仍会保存。'
+
+export const THOUGHT_BOARD_TRUNCATED_MESSAGE = '小墨对话太长，较早的记录没有写入这次保存。布局和较新的对话已保留。'
 
 const PANEL_KEY = 'mmg_modeling_panel_state_v1'
 const ROOT_KEY = 'mmg_thought_root_position_v1'
@@ -108,6 +110,43 @@ export function thoughtBoardByteLength(board) {
 
 export function thoughtBoardTooLarge(board) {
   return thoughtBoardByteLength(board) > THOUGHT_BOARD_BYTE_LIMIT
+}
+
+function shrinkMessage(message) {
+  const next = { ...message }
+  for (const field of ['text', 'historyText', 'recallText']) {
+    if (typeof next[field] === 'string' && next[field].length > 200) next[field] = next[field].slice(-Math.floor(next[field].length / 2))
+  }
+  return next
+}
+
+/** 提交前把白板压进 2MB：先丢掉较早的小墨对话，再缩短最后一条。布局字段保留。 */
+export function fitThoughtBoard(board) {
+  if (!board || typeof board !== 'object' || Array.isArray(board)) return { board: null, omitted: false, truncated: false }
+  if (!thoughtBoardTooLarge(board)) return { board, omitted: false, truncated: false }
+  const next = { ...board, messages: Array.isArray(board.messages) ? board.messages.map(message => ({ ...message })) : [] }
+  let truncated = false
+  let guard = 0
+  while (thoughtBoardTooLarge(next) && guard < 40) {
+    guard += 1
+    if (next.messages.length > 1) {
+      next.messages.shift()
+      truncated = true
+      continue
+    }
+    if (next.messages.length === 1) {
+      const before = thoughtBoardByteLength(next)
+      next.messages = [shrinkMessage(next.messages[0])]
+      truncated = true
+      if (thoughtBoardByteLength(next) >= before) {
+        next.messages = []
+      }
+      continue
+    }
+    break
+  }
+  if (thoughtBoardTooLarge(next)) return { board: null, omitted: true, truncated: true }
+  return { board: next, omitted: false, truncated }
 }
 
 export function cacheThoughtBoard(wsId, board, storage = memory()) {

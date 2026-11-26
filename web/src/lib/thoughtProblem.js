@@ -129,20 +129,23 @@ export function buildThoughtProblem(text, sourceKind, pages) {
   const seen = new Set()
   const lead = []
   let current = null
-  let explicitSeen = false
-  let nextBare = 1
-
+  const prepared = []
   for (const raw of lines) {
     const line = raw.trim().replace(/^#{1,6}\s+/, '').replace(/\*\*/g, '')
     if (!line || /^--\s*(?:page_?number|\d+)\s+of\b/i.test(line)) continue
+    prepared.push(line)
+  }
+  const hasExplicitQuestion = prepared.some(line => explicitQuestion(line))
+  let nextBare = 1
+
+  for (const line of prepared) {
     if (current && /^(?:附录\s*[0-9一二三四五六七八九十A-Z]*|参考文献)(?=$|[\s：:、.．])/.test(line)) break
     const explicit = explicitQuestion(line)
     if (explicit && !seen.has(explicit.number)) {
-      explicitSeen = true
       current = startQuestion(questions, seen, explicit.number, explicit.rest)
       continue
     }
-    const bare = !explicitSeen ? bareQuestion(line) : null
+    const bare = hasExplicitQuestion ? null : bareQuestion(line)
     if (bare && bare.number === nextBare && !seen.has(bare.number)) {
       nextBare = bare.number + 1
       current = startQuestion(questions, seen, bare.number, bare.rest)

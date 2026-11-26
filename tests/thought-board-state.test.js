@@ -5,6 +5,7 @@ import {
   THOUGHT_BOARD_BYTE_LIMIT,
   cacheThoughtBoard,
   emptyThoughtBoard,
+  fitThoughtBoard,
   normalizeThoughtBoard,
   readLegacyThoughtBoard,
   resolveThoughtBoard,
@@ -81,9 +82,23 @@ test('字段为 null 时仍可读本机旧数据，空白板不会凭空制造�
   assert.equal(readLegacyThoughtBoard('', storage).version, 1)
 })
 
-test('超过 2MB 的小墨对话被判定为过大', () => {
+test('超过 2MB 时先截掉较早的小墨对话，布局仍然保留', () => {
   const board = emptyThoughtBoard()
-  board.messages = [{ role: 'user', text: 'x'.repeat(THOUGHT_BOARD_BYTE_LIMIT), time: '' }]
+  board.rootPosition = { x: 12, y: 34 }
+  board.messages = [
+    { role: 'user', text: '较早的长对话'.repeat(20_000), time: '01:00' },
+    { role: 'ai', text: '较新的回答', time: '02:00' },
+    { role: 'user', text: 'x'.repeat(THOUGHT_BOARD_BYTE_LIMIT), time: '03:00' },
+  ]
   assert.equal(thoughtBoardTooLarge(board), true)
-  assert.equal(thoughtBoardTooLarge(emptyThoughtBoard()), false)
+  const fitted = fitThoughtBoard(board)
+  assert.equal(fitted.omitted, false)
+  assert.equal(fitted.truncated, true)
+  assert.equal(thoughtBoardTooLarge(fitted.board), false)
+  assert.deepEqual(fitted.board.rootPosition, { x: 12, y: 34 })
+  assert.equal(fitted.board.messages.at(-1).time, '03:00')
+  assert.ok(fitted.board.messages.length < board.messages.length || fitted.board.messages.at(-1).text.length < board.messages.at(-1).text.length)
+  assert.equal(fitThoughtBoard(emptyThoughtBoard()).truncated, false)
+  assert.equal(fitThoughtBoard('不是对象').board, null)
+  assert.equal(fitThoughtBoard('不是对象').omitted, false)
 })

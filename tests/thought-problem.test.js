@@ -29,6 +29,20 @@ test('多种小问写法会按顺序拆开，括号步骤留在已有小问里',
   assert.doesNotMatch(result.questions[0].id, /missing/)
 })
 
+test('题干里已有「问题 N」时，前面的括号条件不会占掉小问编号', () => {
+  const result = buildThoughtProblem([
+    '（1）各站点的最大供水量见附件。',
+    '（2）每天的总需求量保持不变。',
+    '问题 1：预测供水量。',
+    '问题 2：比较两个站点。',
+  ].join('\n'))
+  assert.deepEqual(result.questions.map(question => [question.questionNumber, question.quote.split('\n')[0]]), [
+    [1, '预测供水量。'],
+    [2, '比较两个站点。'],
+  ])
+  assert.doesNotMatch(result.questions.map(question => question.quote).join('\n'), /最大供水量/)
+})
+
 test('没有显式小问时，成套的括号编号和带任务语气的 1. 可以当作小问', () => {
   const paren = buildThoughtProblem([
     '校园供水',

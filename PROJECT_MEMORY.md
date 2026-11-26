@@ -90,7 +90,7 @@
 
 2026-11-26 思路整理台前端体验：对外名称统一为「思路整理台」。右侧编辑单张卡片。空画布有可关闭的三步引导。小问识别覆盖任务、括号编号和带任务语气的「1.」。Markdown 导出包含小问原文和上下游。分区标题使用 `--display`。多上游卡片按最深上游分列。路由级懒加载后主 JS 约 201 kB。
 
-`thoughtBoard` 随工作区保存，结构为 `{ version: 1, rootPosition, sourcePositions, hiddenQuestions, panel, messages, kcQuery, focusedQuestionId, inputMode }`。未确认草稿仍只在 sessionStorage。GET 返回对象时用它恢复；字段缺失或为 null 时先读本机旧键，有内容再随下次保存迁移。序列化超过 2MB 时不把白板写入本次请求，并提示清理较早的小墨对话，题目和卡片仍保存。局域网口令经统一的 `apiFetch` 附带 `Authorization: Bearer`，401/429 按 `AUTH_REQUIRED`、`AUTH_INVALID`、`AUTH_RATE_LIMITED` 处理。设置页告警优先用 `/api/health` 的 `security.warnings`。
+`thoughtBoard` 随工作区保存。提交前会把过长的小墨对话截到 2MB 以内，并提示较早的记录没有写入；若服务端仍返回 413，则去掉白板字段后再保存题目和卡片。结构为 `{ version: 1, rootPosition, sourcePositions, hiddenQuestions, panel, messages, kcQuery, focusedQuestionId, inputMode }`。未确认草稿仍只在 sessionStorage。GET 返回对象时用它恢复；字段缺失或为 null 时先读本机旧键，有内容再迁移。备份导出和导入沿用服务端返回的 `thoughtBoard`。旧服务端丢弃该字段时，保存仍视为成功。
 
 ### 已完成的阶段基础
 
