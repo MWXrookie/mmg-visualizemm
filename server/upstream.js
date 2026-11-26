@@ -4,6 +4,7 @@ import tls from 'tls'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { authorizeOutboundUrl, policyHost } from './outbound-policy.js'
 
 const DEFAULT_TIMEOUT = 300000
 const ENV_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), '.env.local')
@@ -32,50 +33,27 @@ function errorCode(error) {
   ).toUpperCase()
 }
 
-function proxyFromEnv(target) {
-  const noProxy = String(process.env.NO_PROXY || process.env.no_proxy || '')
+function proxyFromEnv(target, env = process.env) {
+  const noProxy = String(env.NO_PROXY || env.no_proxy || '')
     .split(',')
     .map((item) => item.trim().toLowerCase())
     .filter(Boolean)
-  const hostname = target.hostname.toLowerCase()
+  const hostname = policyHost(target.hostname)
   const port = targetPort(target)
   if (noProxy.some((item) => {
     if (item === '*') return true
     const [host, portPart] = item.split(':')
     if (portPart && Number(portPart) !== port) return false
-    const normalizedHost = host.replace(/^\.+/, '')
+    const normalizedHost = policyHost(host)
     return hostname === normalizedHost || hostname.endsWith(`.${normalizedHost}`)
   })) return ''
   const names = target.protocol === 'http:'
     ? ['HTTP_PROXY', 'http_proxy', 'ALL_PROXY', 'all_proxy']
     : ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy', 'ALL_PROXY', 'all_proxy']
   for (const name of names) {
-    if (process.env[name]?.trim()) return process.env[name].trim()
+    if (env[name]?.trim()) return env[name].trim()
   }
   return ''
-}
-
-/**
- * 只支持 HTTP/HTTPS 代理。代理地址来自用户本次请求或服务端环境变量，
- * 不把代理凭据写入错误信息，也不把请求中的 API Key 带到代理日志。
- */
-function resolveProxy(proxyUrl, target) {
-  const raw = String(proxyUrl || '').trim() || proxyFromEnv(target)
-  if (!raw) return null
-  let proxy
-  try {
-    proxy = new URL(raw)
-  } catch {
-    const error = new Error('代理地址格式不正确，请填写类似 http://127.0.0.1:7890 的地址')
-    error.code = 'PROXY_BAD_CONFIG'
-    throw error
-  }
-  if (!['http:', 'https:'].includes(proxy.protocol) || !proxy.hostname) {
-    const error = new Error('暂只支持 HTTP/HTTPS 代理，请填写类似 http://127.0.0.1:7890 的地址')
-    error.code = 'PROXY_BAD_CONFIG'
-    throw error
-  }
-  return proxy
 }
 
 function proxyHeaders(proxy) {
@@ -164,7 +142,7 @@ function requestWithTransport(transport, options, body, { signal, timeout, stage
   })
 }
 
-function connectProxy(proxy, target, { signal, timeout }) {
+function connectProxy(proxy, proxyConnectHost, proxyLookup, target, { signal, timeout }) {
   return new Promise((resolve, reject) => {
     let settled = false
     let timer
@@ -190,7 +168,8 @@ function connectProxy(proxy, target, { signal, timeout }) {
     const port = targetPort(target)
     try {
       proxyRequest = transport.request({
-        hostname: proxy.hostname,
+        hostname: proxyConnectHost,
+        lookup: proxyLookup,
         port: Number(proxy.port || (proxy.protocol === 'https:' ? 443 : 80)),
         method: 'CONNECT',
         path: `${target.hostname}:${port}`,
@@ -239,12 +218,15 @@ function connectProxy(proxy, target, { signal, timeout }) {
   })
 }
 
-async function requestThroughProxy(target, proxy, options, body, config) {
+async function requestThroughProxy(target, proxyDecision, options, body, config) {
   // HTTP 目标可以使用代理的绝对地址转发；HTTPS 目标必须先建立 CONNECT 隧道。
+  // 不跟随上游 3xx，避免 Location 把已经通过检查的请求带到内网。
+  const proxy = proxyDecision.url
   if (target.protocol === 'http:') {
     const transport = proxy.protocol === 'https:' ? https : http
     return requestWithTransport(transport, {
-      hostname: proxy.hostname,
+      hostname: proxyDecision.connectHost,
+      lookup: proxyDecision.lookup,
       port: Number(proxy.port || (proxy.protocol === 'https:' ? 443 : 80)),
       method: options.method,
       path: target.href,
@@ -257,7 +239,7 @@ async function requestThroughProxy(target, proxy, options, body, config) {
     }, body, { ...config, stage: 'proxy-request', viaProxy: true })
   }
 
-  const socket = await connectProxy(proxy, target, config)
+  const socket = await connectProxy(proxy, proxyDecision.connectHost, proxyDecision.lookup, target, config)
   let secureSocket = socket
   if (target.protocol === 'https:') {
     secureSocket = await new Promise((resolve, reject) => {
@@ -285,26 +267,38 @@ async function requestThroughProxy(target, proxy, options, body, config) {
   }, body, { ...config, stage: 'target-via-proxy', viaProxy: true })
 }
 
-export function requestUpstream({ url, method = 'GET', headers = {}, body = '', proxyUrl = '', signal, timeout = DEFAULT_TIMEOUT }) {
-  let target
-  try {
-    target = new URL(url)
-    if (!['http:', 'https:'].includes(target.protocol)) throw new Error()
-  } catch {
-    const error = new Error('Base URL 格式不正确，请填写以 http:// 或 https:// 开头的地址')
-    error.code = 'BAD_CONFIG'
-    throw error
+export async function requestUpstream({
+  url,
+  method = 'GET',
+  headers = {},
+  body = '',
+  proxyUrl = '',
+  signal,
+  timeout = DEFAULT_TIMEOUT,
+  env = process.env,
+  lookup,
+}) {
+  // 先授权目标，再授权代理。两边都只连接检查通过的地址，请求里的私网代理不能把服务器带到元数据地址。
+  const targetDecision = await authorizeOutboundUrl(url, { role: 'target', source: 'request', env, lookup })
+  const target = targetDecision.url
+  const clientProxy = String(proxyUrl || '').trim()
+  let proxyDecision = null
+  if (clientProxy) {
+    proxyDecision = await authorizeOutboundUrl(clientProxy, { role: 'proxy', source: 'request', env, lookup })
+  } else {
+    const fromEnv = proxyFromEnv(target, env)
+    if (fromEnv) proxyDecision = await authorizeOutboundUrl(fromEnv, { role: 'proxy', source: 'env', env, lookup })
   }
-  const proxy = resolveProxy(proxyUrl, target)
   const options = { method, headers }
-  if (proxy) return requestThroughProxy(target, proxy, options, body, { signal, timeout })
+  if (proxyDecision) return requestThroughProxy(target, proxyDecision, options, body, { signal, timeout })
   const transport = target.protocol === 'https:' ? https : http
   return requestWithTransport(transport, {
-    hostname: target.hostname,
+    hostname: targetDecision.connectHost,
     port: targetPort(target),
     method,
     path: targetPath(target),
     headers,
+    lookup: targetDecision.lookup,
     rejectUnauthorized: true,
   }, body, { signal, timeout, stage: 'target', viaProxy: false })
 }
@@ -317,18 +311,19 @@ export async function responseText(response) {
 
 /** 把 Node 的底层网络错误转换为不泄露密钥、且能指导排查的错误。 */
 export function formatNetworkError(error, targetUrl) {
-  const code = errorCode(error)
-  const target = new URL(targetUrl)
-  const hostname = target.hostname
-  const viaProxy = Boolean(error?.viaProxy)
-  const stage = String(error?.networkStage || '')
-  let message = '连不上模型服务'
-  let advice = '请检查 Base URL、网络或代理设置'
-  if (error?.code === 'PROXY_BAD_CONFIG') {
+  if (error?.code === 'PROXY_BAD_CONFIG' || error?.code === 'UPSTREAM_BLOCKED') {
     const formatted = new Error(error.message)
     formatted.code = error.code
     return formatted
   }
+  const code = errorCode(error)
+  let hostname = '未知地址'
+  try {
+    hostname = new URL(targetUrl).hostname || hostname
+  } catch { /* 地址本身不合法时保留策略或网络错误，不再抛出解析异常 */ }
+  const viaProxy = Boolean(error?.viaProxy)
+  let message = '连不上模型服务'
+  let advice = '请检查 Base URL、网络或代理设置'
   if (error?.code === 'PROXY_HTTP_ERROR') {
     message = '代理服务器拒绝了连接'
     advice = '请确认代理正在运行、地址和端口正确'

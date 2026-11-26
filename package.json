@@ -22,7 +22,7 @@
     "generate:card-library": "node scripts/generate/card-library.mjs",
     "generate:golden-fixtures": "node scripts/generate/golden-original-fixtures.mjs",
     "generate:golden-open-data": "node scripts/generate/golden-open-data-fixtures.mjs",
-    "check:syntax": "node --check server/index.js && node --check server/knowledge.js && node --check server/upstream.js",
+    "check:syntax": "node --check server/index.js && node --check server/knowledge.js && node --check server/upstream.js && node --check server/outbound-policy.js",
     "check": "npm run test && npm run check:syntax && npm run build",
     "start": "node --use-system-ca server/index.js",
     "dev": "concurrently -n WEB,SRV -c blue,green \"npm:dev:web\" \"npm:dev:server\""

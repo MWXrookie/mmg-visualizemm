@@ -64,6 +64,8 @@ before(async () => {
       PORT: String(port),
       MMG_DATA_DIR: testDataDir,
       MMG_FORCE_LOCAL_EMBEDDING: '1',
+      // 本文件的上游替身监听 127.0.0.1。生产默认拒绝该地址，测试显式放行。
+      MMG_ALLOW_PRIVATE_UPSTREAM: '1',
       NO_PROXY: '127.0.0.1,localhost',
     },
     stdio: ['ignore', 'pipe', 'pipe'],

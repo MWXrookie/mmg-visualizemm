@@ -17,6 +17,7 @@ function draftFingerprint(value) {
 function friendlyError(error) {
   const code = String(error?.code || '').toUpperCase()
   const message = String(error?.message || '')
+  if (code === 'UPSTREAM_BLOCKED') return message || '已拒绝该模型或代理地址。请改用公网服务商，或在服务端放行指定的本机地址。'
   if (code === 'INVALID_KEY' || /API Key 无效|Key 无效|401/.test(message)) return 'API Key 无效或已过期。请重新复制 Key，确认没有多余空格，并检查它是否属于当前服务商。'
   if (code === 'QUOTA' || /余额不足|额度|请求过于频繁|402|429/.test(message)) return '服务商余额或调用额度不足。请检查账户余额、模型权限，或稍后再试。'
   if (code === 'NOT_FOUND' || /模型不存在|接口地址|404/.test(message)) return '找不到接口或模型。请检查 Base URL 是否带正确的 /v1，以及模型名是否与服务商控制台一致。'
@@ -149,7 +150,7 @@ export default function Settings({ settings, setSettings }) {
           <div className="field">
             <label htmlFor="base-url">Base URL <span className="label-note">OpenAI 兼容接口</span></label>
             <input id="base-url" type="url" value={baseUrl} onChange={(e) => { setBaseUrl(e.target.value); clearResult() }} placeholder="https://api.deepseek.com/v1" autoComplete="url" spellCheck="false" />
-            <span className="field-hint">通常填写到 /v1；不要填 Key，也不要重复填写 /chat/completions。</span>
+            <span className="field-hint">通常填写到 /v1，不要填 Key，也不要重复填写 /chat/completions。公网地址可直接使用；本机或内网模型需服务端放行。</span>
           </div>
 
           <div className="field">
@@ -164,7 +165,7 @@ export default function Settings({ settings, setSettings }) {
           <div className="field">
             <label htmlFor="proxy-url">网络代理 <span className="label-note">可选</span></label>
             <input id="proxy-url" type="url" value={proxyUrl} onChange={(e) => { setProxyUrl(e.target.value); clearResult() }} placeholder="http://127.0.0.1:7890" autoComplete="url" spellCheck="false" />
-            <span className="field-hint">模型服务无法直连时填写 HTTP/HTTPS 代理；留空表示直连。代理只用于本地中继访问模型服务。</span>
+            <span className="field-hint">无法直连时填写 HTTP/HTTPS 代理，留空表示直连。本机代理（如 http://127.0.0.1:7890）需在服务端配置相同的 HTTPS_PROXY，或设置 MMG_ALLOW_PRIVATE_UPSTREAM=1 / MMG_UPSTREAM_ALLOWLIST 后重启。</span>
           </div>
 
           <div className="field">
