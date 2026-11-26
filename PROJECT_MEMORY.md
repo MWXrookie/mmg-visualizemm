@@ -95,7 +95,7 @@
 - P0：运行时架构核验、架构图、长期路线图、文档治理、质量规范和创新项目底稿已经建立。
 - P1：已经建立 `npm run check`、Node 内置单元/API 测试和 GitHub Actions 最小 CI。
 - API 回归已覆盖工作区 CRUD、部分更新、表格导出、健康检查、TXT/CSV/XLSX/PDF 解析和本地哈希 RAG。
-- 工作区支持 `mmg-workspace-backup` / `schemaVersion: 1` JSON 导出与安全导入；导入创建新 ID，不覆盖原工作区，不包含 API Key。
+- 工作区支持 `mmg-workspace-backup` / `schemaVersion: 2` JSON 导出与安全导入；没有 `thoughtBoard` 的 v1 备份仍可导入。导入创建新 ID，不覆盖原工作区，不包含 API Key。`thoughtBoard` 存在 `workspaces.thought_board`（JSON 文本，默认 `'null'`）；更新请求缺该字段时保留原值，显式 `null` 清空；类型不对返回 `BAD_THOUGHT_BOARD`，UTF-8 序列化超过 2MB 返回 `THOUGHT_BOARD_TOO_LARGE`。数据库 `user_version` 为 2，高于该版本的库拒绝启动。
 - 测试服务使用临时数据目录；`MMG_FORCE_LOCAL_EMBEDDING=1` 可禁止测试读取真实 Embedding 配置或发起外部请求。
 - 已建立 Playwright Chromium 冒烟和 CI 入口，覆盖无 Key 设置、TXT 题干上传、拆解块、编程台入口、备份导入导出与刷新恢复，以及模拟模型整体解读、划词角色卡、代码生成、模拟 Pyodide 文本/图表输出和 CDN 断网错误。
 - AI 生成、改进、批注中文化和调参等离散代码改写会立即写回共享工作区，避免快速切页或导出时丢失；手工连续输入仍使用 800ms 防抖。
@@ -148,6 +148,10 @@
 3. 按学校模板补齐立项类别、指导教师、预算和正式周期。
 
 ## 6. 最近验证基线
+
+2026-11-26 工作区 schema 升至 v2：`workspaces.thought_board` 保存思路板 JSON。Node 24.22.3 上 `npm run check` 通过（59/59、语法检查与生产构建）；默认 Playwright 37 通过，12 项真实 Pyodide 按设计跳过。v1 库在事务中补列后原数据仍在且 `user_version` 为 2；更高版本的库拒绝启动。当前前端保存请求仍不带该字段，因此缺省更新会保留已存值。
+
+2026-11-26 生产依赖安全修补：仍使用 Express 4，锁定 `express@4.22.3`、`body-parser@1.20.9`、`proxy-addr@2.0.8`、`qs@6.16.2`，并将 `brace-expansion` 升至 1.1.22 / 2.1.8。`npm audit --omit=dev` 不再有 high/critical。仍剩 DOMPurify 3.4.14 的 low（调用的是默认 `sanitize`，未使用 IN_PLACE、SAFE_FOR_TEMPLATES 或 XHTML）以及 exceljs 传递的 uuid moderate（非破坏性修复不存在；降到 exceljs 3.4.0 会破坏当前表格解析，未采用）。`check:syntax` 改为扫描 `server/*.js`，覆盖 `pdf-layout.js`。Node 24.22.3 上 `npm run check` 54/54、四个服务端文件语法检查和生产构建通过；Playwright 默认冒烟 37 通过，12 项真实 Pyodide 显式跳过。未改 API、信任边界或 Express 大版本。
 
 2026-10-02 交互优化v2.7已交付：O0–O5全部出口通过，本包提前交付。第七轮实际活动约18分钟，累计约74/300分钟；剩余约226分钟不继续消耗。旧修复包约92分钟单独保留。下一唯一动作：等待用户对交付的具体反馈，不自动开始第三包。最终check 35/35、默认浏览器10通过/10真实Pyodide显式跳过、diff通过；四桌面组合完整操作与22张截图/指南锚点核对完成。图表放大补齐Escape、Tab和焦点返回，替身不证明真实模型/Python/数学质量；大包/CDN限制保留。证据[最终交付](docs/04-质量/records/2026-10-02-optimization-round7.md)。
 
