@@ -83,7 +83,7 @@ npm start
 | 只在本机使用 | `npm start` | `http://127.0.0.1:3088` |
 | 同一局域网的其他设备 | 先设置 `MMG_ACCESS_TOKEN`，再 `npm run start:lan` | `http://<你的局域网 IP>:3088` |
 
-`npm run start:lan` 等价于 `MMG_HOST=0.0.0.0`。只要监听地址不是回环（`127.0.0.1`、`localhost`、`::1`），就必须设置 `MMG_ACCESS_TOKEN`，否则进程会直接退出。令牌至少 8 个字符，不能包含空白，也不要写进仓库。
+`npm run start:lan` 等价于 `MMG_HOST=0.0.0.0`。只要监听地址不是回环（`127.0.0.1`、`localhost`、`::1`），就必须设置 `MMG_ACCESS_TOKEN`，否则进程会直接退出。访问令牌至少 8 个字符，且不能包含任何空白（包括首尾空格）。以前会裁掉首尾空白后继续启动；现在只要令牌里有空白，进程就会拒绝启动。不要把令牌写进仓库。
 
 非回环客户端调用 `/api/*` 时要带精确的请求头 `Authorization: Bearer <MMG_ACCESS_TOKEN>`。`/api/health` 不需要令牌。页面、脚本和其他非 `/api` 静态资源也不校验令牌，这样浏览器才能先打开界面；工作区、附件和模型中继仍然受保护。流式对话走 `fetch` 读取响应流，可以带这个请求头。不要把令牌放在查询串里，服务不会用它完成鉴权。`GET /api/knowledge/stats` 如果查询串里带了 `apiKey`、`baseUrl` 或 `proxyUrl`，会直接返回 400，不会拿这些值去访问外部地址。当前网页还不会自动附带这把局域网令牌，其他设备打开页面后，工作区等接口会返回 401，直到前端把令牌放进 `Authorization`。
 

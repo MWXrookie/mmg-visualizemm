@@ -16,7 +16,7 @@ import { pdfLayoutLines } from './pdf-layout.js'
 import http from 'node:http'
 import https from 'node:https'
 import { formatNetworkError, requestUpstream, responseText } from './upstream.js'
-import { createApiAuthMiddleware, loadServerSecurity } from './lan-security.js'
+import { createApiAuthMiddleware, loadServerSecurity, resolveTestRemoteOverride } from './lan-security.js'
 
 const security = loadServerSecurity(process.env)
 if (!security.ok) {
@@ -75,11 +75,14 @@ app.disable('x-powered-by') // 隐藏 Express 版本号
 app.set('trust proxy', false)
 // 路由大小写敏感，避免 /API/workspaces 命中 /api/workspaces。鉴权仍会先拦住混合大小写的 /api 路径。
 app.set('case sensitive routing', true)
-const testRemoteAddress = typeof process.env.MMG_TEST_REMOTE_ADDRESS === 'string' ? process.env.MMG_TEST_REMOTE_ADDRESS : ''
+const testRemote = resolveTestRemoteOverride({
+  nodeEnv: process.env.NODE_ENV,
+  value: process.env.MMG_TEST_REMOTE_ADDRESS,
+})
+if (testRemote.warning) process.stderr.write(`[security] ${testRemote.warning}\n`)
 app.use(createApiAuthMiddleware({
   accessToken: security.accessToken,
-  // 仅测试用：把所有请求看成这个对端地址。生产环境不要设置。
-  ...(testRemoteAddress ? { getRemoteAddress: () => testRemoteAddress } : {}),
+  ...(testRemote.remoteAddress ? { getRemoteAddress: () => testRemote.remoteAddress } : {}),
 }))
 app.use(express.json({ limit: '100mb' })) // base64 上传放大 ~33%，100mb ≈ 75MB 文件
 

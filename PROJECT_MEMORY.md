@@ -51,7 +51,7 @@
 
 ## 4. 稳定决策
 
-2026-11-26 局域网安全：后端默认改为只监听 `127.0.0.1:3088`。非回环（含 `MMG_HOST=0.0.0.0` 与 `npm run start:lan`）必须设置 `MMG_ACCESS_TOKEN`，至少 8 个字符且不能含空白，否则拒绝启动。非回环客户端访问 `/api/*` 时除 `/api/health` 外要求精确的 `Authorization: Bearer`。Express 开启大小写敏感路由；鉴权仍按小写识别 `/api`，混合大小写在进入处理函数前返回 401。回环判断只看套接字对端地址，不信任转发头，也不启用 trust proxy。可选 `MMG_TLS_CERT` 与 `MMG_TLS_KEY` 成对启用 HTTPS。局域网明文 HTTP 在标准错误和健康检查 `security.warnings` 中给出 `LAN_PLAINTEXT_HTTP`。`GET /api/knowledge/stats` 在查询串含 `apiKey`、`baseUrl` 或 `proxyUrl` 时返回 400，不据此发起出站请求。静态资源仍不校验访问令牌。已变基到含思路板 schema v2 与 `server/*.js` 语法扫描的 main。限制：前端尚未自动附带访问令牌；架构 PNG 未按新文案重渲染。
+2026-11-26 局域网安全：后端默认改为只监听 `127.0.0.1:3088`。非回环（含 `MMG_HOST=0.0.0.0` 与 `npm run start:lan`）必须设置 `MMG_ACCESS_TOKEN`，至少 8 个字符且不能含空白，否则拒绝启动。非回环客户端访问 `/api/*` 时除 `/api/health` 外要求精确的 `Authorization: Bearer`。Express 开启大小写敏感路由；鉴权仍按小写识别 `/api`，混合大小写在进入处理函数前返回 401。回环判断只看套接字对端地址，不信任转发头，也不启用 trust proxy。可选 `MMG_TLS_CERT` 与 `MMG_TLS_KEY` 成对启用 HTTPS。局域网明文 HTTP 在标准错误和健康检查 `security.warnings` 中给出 `LAN_PLAINTEXT_HTTP`。`GET /api/knowledge/stats` 在查询串含 `apiKey`、`baseUrl` 或 `proxyUrl` 时返回 400，不据此发起出站请求。`MMG_TEST_REMOTE_ADDRESS` 只有在 `NODE_ENV=test` 且值为非回环地址时才会改写对端地址，并且会向标准错误告警；其他情况忽略并告警，不能用来假装回环客户端。静态资源仍不校验访问令牌。已变基到含思路板 schema v2 与 `server/*.js` 语法扫描的 main。限制：前端尚未自动附带访问令牌；架构 PNG 未按新文案重渲染。
 
 2026-10-02 交互优化v2.7已交付：O0–O5全部出口通过，本包提前交付。第七轮实际活动约18分钟，累计约74/300分钟；剩余约226分钟不继续消耗。旧修复包约92分钟单独保留。下一唯一动作：等待用户对交付的具体反馈，不自动开始第三包。最终check 35/35、默认浏览器10通过/10真实Pyodide显式跳过、diff通过；四桌面组合完整操作与22张截图/指南锚点核对完成。图表放大补齐Escape、Tab和焦点返回，替身不证明真实模型/Python/数学质量；大包/CDN限制保留。证据[最终交付](docs/04-质量/records/2026-10-02-optimization-round7.md)。
 

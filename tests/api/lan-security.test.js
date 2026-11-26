@@ -19,6 +19,7 @@ import {
   decideApiAccess,
   isLoopbackAddress,
   loadServerSecurity,
+  resolveTestRemoteOverride,
 } from '../../server/lan-security.js'
 
 const projectRoot = path.resolve(import.meta.dirname, '..', '..')
@@ -240,6 +241,22 @@ test('启动配置：空令牌、只配一半 TLS、缺失文件都会拒绝', (
   const minimum = loadServerSecurity({ MMG_HOST: '0.0.0.0', MMG_ACCESS_TOKEN: '12345678' })
   assert.equal(minimum.ok, true)
   assert.equal(minimum.accessToken, '12345678')
+})
+
+test('MMG_TEST_REMOTE_ADDRESS 只在测试环境覆盖非回环地址', () => {
+  assert.deepEqual(resolveTestRemoteOverride({ nodeEnv: 'production', value: '127.0.0.1' }), {
+    remoteAddress: '',
+    warning: 'MMG_TEST_REMOTE_ADDRESS 已设置但被忽略：只有 NODE_ENV=test 时才会改写对端地址。',
+  })
+  assert.deepEqual(resolveTestRemoteOverride({ nodeEnv: 'test', value: '127.0.0.1' }), {
+    remoteAddress: '',
+    warning: 'MMG_TEST_REMOTE_ADDRESS 已设置但被忽略：覆盖值不能是回环地址，否则会放宽鉴权。',
+  })
+  assert.equal(resolveTestRemoteOverride({ nodeEnv: 'test', value: '::ffff:127.0.0.1' }).remoteAddress, '')
+  const applied = resolveTestRemoteOverride({ nodeEnv: 'test', value: '203.0.113.77' })
+  assert.equal(applied.remoteAddress, '203.0.113.77')
+  assert.match(applied.warning, /已生效/)
+  assert.equal(resolveTestRemoteOverride({ nodeEnv: 'test', value: '' }).warning, '')
 })
 
 test('过期的鉴权失败记录会被清出表', () => {
@@ -569,6 +586,7 @@ test('局域网模式下带令牌的 /api/chat/stream 返回 200，查询串里�
     PORT: String(port),
     MMG_HOST: '0.0.0.0',
     MMG_ACCESS_TOKEN: accessToken,
+    NODE_ENV: 'test',
     MMG_TEST_REMOTE_ADDRESS: '203.0.113.77',
   }))
   try {
@@ -614,6 +632,8 @@ test('局域网模式下带令牌的 /api/chat/stream 返回 200，查询串里�
     assert.match(streamed.text, /"delta":"ok"/)
 
     const output = child.output()
+    assert.match(output.stderr, /MMG_TEST_REMOTE_ADDRESS 已生效/)
+    assert.match(output.stderr, /203\.0\.113\.77/)
     const combined = output.stdout + output.stderr
     for (const secret of [queryKey, bodyKey, accessToken]) {
       assert.equal(combined.includes(secret), false)
@@ -635,6 +655,70 @@ test('PORT=0 时启动日志打印实际监听端口', async () => {
     const health = await readJson(await fetch(`http://127.0.0.1:${boundPort}/api/health`))
     assert.equal(health.status, 200)
     assert.equal(health.body.security.lan, false)
+  } finally {
+    await stopChild(child)
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('NODE_ENV 不是 test 时忽略回环覆盖，非回环来源仍然 401', async (t) => {
+  const ip = firstNonLoopbackIPv4()
+  if (!ip) {
+    t.skip('没有非回环 IPv4，跳过真实网卡集成测试')
+    return
+  }
+  const token = 'mmg-prod-token-ok'
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'mmg-lan-override-prod-'))
+  const port = await reservePort()
+  const child = spawnServer('server/index.js', childEnv(dir, {
+    PORT: String(port),
+    MMG_HOST: '0.0.0.0',
+    MMG_ACCESS_TOKEN: token,
+    MMG_TEST_REMOTE_ADDRESS: '127.0.0.1',
+    NODE_ENV: 'production',
+  }))
+  try {
+    await waitForHealth(`http://127.0.0.1:${port}`, child)
+    const remote = await readJson(await fetch(`http://${ip}:${port}/api/workspaces`))
+    assert.equal(remote.status, 401)
+    assert.equal(remote.body.code, 'AUTH_REQUIRED')
+    const loopback = await readJson(await fetch(`http://127.0.0.1:${port}/api/workspaces`))
+    assert.equal(loopback.status, 200)
+    const output = child.output()
+    assert.match(output.stderr, /只有 NODE_ENV=test 时才会改写对端地址/)
+    assert.equal(output.stderr.includes(token), false)
+    assert.equal(output.stdout.includes(token), false)
+  } finally {
+    await stopChild(child)
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('NODE_ENV=test 时回环覆盖值仍然被忽略', async (t) => {
+  const ip = firstNonLoopbackIPv4()
+  if (!ip) {
+    t.skip('没有非回环 IPv4，跳过真实网卡集成测试')
+    return
+  }
+  const token = 'mmg-test-token-ok'
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'mmg-lan-override-loop-'))
+  const port = await reservePort()
+  const child = spawnServer('server/index.js', childEnv(dir, {
+    PORT: String(port),
+    MMG_HOST: '0.0.0.0',
+    MMG_ACCESS_TOKEN: token,
+    MMG_TEST_REMOTE_ADDRESS: '127.0.0.1',
+    NODE_ENV: 'test',
+  }))
+  try {
+    await waitForHealth(`http://127.0.0.1:${port}`, child)
+    const remote = await readJson(await fetch(`http://${ip}:${port}/api/workspaces`))
+    assert.equal(remote.status, 401)
+    assert.equal(remote.body.code, 'AUTH_REQUIRED')
+    const output = child.output()
+    assert.match(output.stderr, /覆盖值不能是回环地址/)
+    assert.equal(output.stderr.includes('已生效'), false)
+    assert.equal(output.stderr.includes(token), false)
   } finally {
     await stopChild(child)
     await rm(dir, { recursive: true, force: true })
@@ -701,7 +785,7 @@ function firstNonLoopbackIPv4() {
 
 function childEnv(dataDir, extra) {
   const env = { ...process.env }
-  for (const key of ['MMG_HOST', 'MMG_ACCESS_TOKEN', 'MMG_TLS_CERT', 'MMG_TLS_KEY', 'MMG_DATA_DIR']) {
+  for (const key of ['MMG_HOST', 'MMG_ACCESS_TOKEN', 'MMG_TLS_CERT', 'MMG_TLS_KEY', 'MMG_DATA_DIR', 'MMG_TEST_REMOTE_ADDRESS']) {
     delete env[key]
   }
   return {

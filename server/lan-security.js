@@ -191,6 +191,31 @@ export function createApiAuthMiddleware(options = {}) {
   }
 }
 
+/**
+ * 测试覆盖只能把对端地址改成非回环，从而让鉴权更严。
+ * 生产环境或回环覆盖值一律忽略，避免 MMG_TEST_REMOTE_ADDRESS=127.0.0.1 关掉鉴权。
+ */
+export function resolveTestRemoteOverride({ nodeEnv, value } = {}) {
+  const raw = typeof value === 'string' ? value.trim() : ''
+  if (!raw) return { remoteAddress: '', warning: '' }
+  if (nodeEnv !== 'test') {
+    return {
+      remoteAddress: '',
+      warning: 'MMG_TEST_REMOTE_ADDRESS 已设置但被忽略：只有 NODE_ENV=test 时才会改写对端地址。',
+    }
+  }
+  if (isLoopbackAddress(raw)) {
+    return {
+      remoteAddress: '',
+      warning: 'MMG_TEST_REMOTE_ADDRESS 已设置但被忽略：覆盖值不能是回环地址，否则会放宽鉴权。',
+    }
+  }
+  return {
+    remoteAddress: raw,
+    warning: `MMG_TEST_REMOTE_ADDRESS 已生效，所有请求按非回环地址 ${raw} 鉴权。仅用于测试。`,
+  }
+}
+
 export function buildSecurityStatus({ lan = false, https = false } = {}) {
   const warnings = []
   if (lan && !https) {
