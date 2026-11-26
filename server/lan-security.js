@@ -60,7 +60,8 @@ function normalizePathname(pathname) {
   const query = raw.indexOf('?')
   let path = query === -1 ? raw : raw.slice(0, query)
   if (path.length > 1) path = path.replace(/\/+$/, '')
-  return path || '/'
+  // Express 默认大小写不敏感。/API/workspaces 会命中 /api/workspaces，鉴权必须同样比较。
+  return (path || '/').toLowerCase()
 }
 
 function isProtectedApiPath(pathname) {

@@ -138,6 +138,12 @@ test('鉴权纯函数：回环放行，非回环区分缺失、无效和正确�
   assert.equal(accepted.allow, true)
 
   assert.equal(decideApiAccess({ remoteAddress: '192.0.2.13', pathname: '/api/health' }).allow, true)
+  assert.equal(decideApiAccess({ remoteAddress: '192.0.2.13', pathname: '/API/health' }).allow, true)
+  const mixedCase = decideApiAccess({ remoteAddress: '192.0.2.20', pathname: '/API/workspaces', accessToken: TOKEN })
+  assert.deepEqual(mixedCase, { allow: false, status: 401, body: { ok: false, code: 'AUTH_REQUIRED' } })
+  const mixedDelete = decideApiAccess({ remoteAddress: '192.0.2.21', pathname: '/Api/workspaces/ws-1', accessToken: TOKEN })
+  assert.equal(mixedDelete.status, 401)
+  assert.equal(mixedDelete.body.code, 'AUTH_REQUIRED')
   assert.equal(decideApiAccess({ remoteAddress: '192.0.2.13', pathname: '/guide.html' }).allow, true)
   assert.equal(decideApiAccess({ remoteAddress: '192.0.2.13', pathname: '/assets/app.js' }).allow, true)
 })
@@ -253,6 +259,7 @@ test('HTTP 中间件使用注入的 remoteAddress，忽略转发头，并放行�
   }))
   app.get('/api/health', (_req, res) => res.json({ ok: true }))
   app.get('/api/workspaces', (_req, res) => res.json({ ok: true, workspaces: [] }))
+  app.delete('/api/workspaces/:id', (_req, res) => res.json({ ok: true, deleted: true }))
   app.post('/api/chat/stream', (_req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' })
     res.end('data: {"delta":"ok"}\n\n')
@@ -274,6 +281,19 @@ test('HTTP 中间件使用注入的 remoteAddress，忽略转发头，并放行�
       const allowed = await hit('/api/workspaces', { remote })
       assert.equal(allowed.status, 200, remote)
     }
+
+    for (const pathname of ['/API/workspaces', '/Api/workspaces', '/api/Workspaces/']) {
+      const mixed = await hit(pathname)
+      assert.equal(mixed.status, 401, pathname)
+      assert.equal(mixed.body.code, 'AUTH_REQUIRED')
+    }
+    const mixedDelete = await hit('/API/workspaces/ws-1', { method: 'DELETE' })
+    assert.equal(mixedDelete.status, 401)
+    assert.equal(mixedDelete.body.code, 'AUTH_REQUIRED')
+    const mixedHealth = await hit('/API/Health')
+    assert.equal(mixedHealth.status, 200)
+    const mixedAllowed = await hit('/API/workspaces', { headers: { Authorization: `Bearer ${TOKEN}` } })
+    assert.equal(mixedAllowed.status, 200)
 
     const required = await hit('/api/workspaces', {
       headers: { 'X-Forwarded-For': '127.0.0.1', 'X-Real-IP': '127.0.0.1', Forwarded: 'for=127.0.0.1' },
