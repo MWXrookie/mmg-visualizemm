@@ -1,7 +1,7 @@
 # MMG_VisualizeMM 项目全局记忆
 
 > 状态：当前项目上下文
-> 更新日期：2026-10-02
+> 更新日期：2026-11-26
 > 记忆范围：仅属于本仓库的项目记忆
 > 用途：为新会话和长期中断后的恢复提供最小、稳定、可核验的项目上下文。
 
@@ -146,6 +146,8 @@
 3. 按学校模板补齐立项类别、指导教师、预算和正式周期。
 
 ## 6. 最近验证基线
+
+2026-11-26 生产依赖安全修补：仍使用 Express 4，锁定 `express@4.22.3`、`body-parser@1.20.9`、`proxy-addr@2.0.8`、`qs@6.16.2`，并将 `brace-expansion` 升至 1.1.22 / 2.1.8。`npm audit --omit=dev` 不再有 high/critical。仍剩 DOMPurify 3.4.14 的 low（调用的是默认 `sanitize`，未使用 IN_PLACE、SAFE_FOR_TEMPLATES 或 XHTML）以及 exceljs 传递的 uuid moderate（非破坏性修复不存在；降到 exceljs 3.4.0 会破坏当前表格解析，未采用）。`check:syntax` 改为扫描 `server/*.js`，覆盖 `pdf-layout.js`。Node 24.22.3 上 `npm run check` 54/54、四个服务端文件语法检查和生产构建通过；Playwright 默认冒烟 37 通过，12 项真实 Pyodide 显式跳过。未改 API、信任边界或 Express 大版本。
 
 2026-10-02 交互优化v2.7已交付：O0–O5全部出口通过，本包提前交付。第七轮实际活动约18分钟，累计约74/300分钟；剩余约226分钟不继续消耗。旧修复包约92分钟单独保留。下一唯一动作：等待用户对交付的具体反馈，不自动开始第三包。最终check 35/35、默认浏览器10通过/10真实Pyodide显式跳过、diff通过；四桌面组合完整操作与22张截图/指南锚点核对完成。图表放大补齐Escape、Tab和焦点返回，替身不证明真实模型/Python/数学质量；大包/CDN限制保留。证据[最终交付](docs/04-质量/records/2026-10-02-optimization-round7.md)。
 
