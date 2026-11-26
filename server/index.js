@@ -13,7 +13,16 @@ import { createRequire } from 'module'
 import { randomUUID } from 'node:crypto'
 import ExcelJS from 'exceljs'
 import { pdfLayoutLines } from './pdf-layout.js'
+import http from 'node:http'
+import https from 'node:https'
 import { formatNetworkError, requestUpstream, responseText } from './upstream.js'
+import { createApiAuthMiddleware, loadServerSecurity, resolveTestRemoteOverride } from './lan-security.js'
+
+const security = loadServerSecurity(process.env)
+if (!security.ok) {
+  for (const line of security.errors) process.stderr.write(`[security] ${line}\n`)
+  process.exit(1)
+}
 
 // pdf-parse 2.x：导出 { PDFParse } 类（ESM 下用 createRequire 加载）
 const require = createRequire(import.meta.url)
@@ -58,9 +67,23 @@ async function parsePdfText(buffer) {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
-const PORT = process.env.PORT || 3088
+const PORT = security.port
+const HOST = security.host
 
 app.disable('x-powered-by') // 隐藏 Express 版本号
+// 鉴权只使用套接字对端地址。不要打开 trust proxy，否则 req.ip 会相信客户端可伪造的转发头。
+app.set('trust proxy', false)
+// 路由大小写敏感，避免 /API/workspaces 命中 /api/workspaces。鉴权仍会先拦住混合大小写的 /api 路径。
+app.set('case sensitive routing', true)
+const testRemote = resolveTestRemoteOverride({
+  nodeEnv: process.env.NODE_ENV,
+  value: process.env.MMG_TEST_REMOTE_ADDRESS,
+})
+if (testRemote.warning) process.stderr.write(`[security] ${testRemote.warning}\n`)
+app.use(createApiAuthMiddleware({
+  accessToken: security.accessToken,
+  ...(testRemote.remoteAddress ? { getRemoteAddress: () => testRemote.remoteAddress } : {}),
+}))
 app.use(express.json({ limit: '100mb' })) // base64 上传放大 ~33%，100mb ≈ 75MB 文件
 
 /* ---------- AI 中继 ---------- */
@@ -890,17 +913,35 @@ app.get('/api/workspaces/:id/attachments/:idx/data.json', (req, res) => {
 
 /* ---------- 健康检查 ---------- */
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, name: 'mmg-visualizemm', time: new Date().toISOString() })
+  res.json({
+    ok: true,
+    name: 'mmg-visualizemm',
+    time: new Date().toISOString(),
+    security: security.security,
+  })
 })
 
 /* ---------- 知识库（RAG） ---------- */
 import { ensureKnowledgeBase, searchKnowledge, knowledgeStats } from './knowledge.js'
 
-// 知识库状态：论文数 / 分块数（按类型）/ embedding 来源
-app.get('/api/knowledge/stats', async (_req, res) => {
+function queryText(value) {
+  if (Array.isArray(value)) return value.map((item) => String(item ?? '')).join(',')
+  return String(value ?? '')
+}
+
+// 知识库状态：论文数 / 分块数（按类型）/ embedding 来源。
+// 不接受查询串中的密钥或上游地址：密钥不能进入 URL，查询串里的 baseUrl / proxyUrl 也不能发起出站请求。
+app.get('/api/knowledge/stats', async (req, res) => {
+  const suppliedInUrl = ['apiKey', 'baseUrl', 'proxyUrl'].filter((key) => queryText(req.query[key]).trim())
+  if (suppliedInUrl.length > 0) {
+    return res.status(400).json({
+      ok: false,
+      code: 'UPSTREAM_BLOCKED',
+      message: '知识库状态不接受网址中的 apiKey、baseUrl 或 proxyUrl。密钥不能放在 URL 里；Embedding 请使用服务端环境变量，或通过 POST /api/knowledge/search 的请求体提交。',
+    })
+  }
   try {
-    const provider = { baseUrl: String(_req.query.baseUrl || ''), apiKey: String(_req.query.apiKey || ''), embedModel: String(_req.query.embedModel || ''), proxyUrl: String(_req.query.proxyUrl || '') }
-    const kb = await ensureKnowledgeBase(provider)
+    const kb = await ensureKnowledgeBase()
     res.json({ ok: true, ...knowledgeStats(), vecsReady: !!kb && kb.vecs.length === kb.chunks.length })
   } catch (e) {
     res.status(500).json({ ok: false, message: `知识库状态获取失败：${e.message}` })
@@ -951,17 +992,46 @@ app.use((err, _req, res, next) => {
   next(err)
 })
 
-app.listen(PORT, () => {
-  // 监听所有网卡（0.0.0.0）：本机用 127.0.0.1，局域网内其他人用本机局域网 IP
-  const nets = require('os').networkInterfaces()
-  const lanIps = []
-  for (const name of Object.keys(nets)) {
-    for (const ni of nets[name] || []) {
-      if (ni.family === 'IPv4' && !ni.internal) lanIps.push(ni.address)
+for (const warning of security.security.warnings) {
+  process.stderr.write(`[security] ${warning.code}: ${warning.message}\n`)
+}
+
+let server
+try {
+  server = security.https
+    ? https.createServer({ cert: security.cert, key: security.key }, app)
+    : http.createServer(app)
+} catch (error) {
+  process.stderr.write(`[security] 无法创建${security.https ? ' HTTPS' : ''}服务：${error.message}\n`)
+  process.exit(1)
+}
+
+server.on('error', (error) => {
+  process.stderr.write(`[server] 监听失败：${error.message}\n`)
+  process.exit(1)
+})
+
+server.listen(PORT, HOST, () => {
+  const scheme = security.https ? 'https' : 'http'
+  const bound = server.address()
+  const boundPort = bound && typeof bound === 'object' ? bound.port : PORT
+  const localHost = HOST === '0.0.0.0' || HOST === '::' ? '127.0.0.1' : HOST
+  console.log('[server] MMG_VisualizeMM 后端已启动')
+  console.log(`  · 监听: ${scheme}://${HOST}:${boundPort}`)
+  console.log(`  · 本机访问: ${scheme}://${localHost}:${boundPort}`)
+  if (security.lan) {
+    const nets = require('os').networkInterfaces()
+    const lanIps = []
+    for (const name of Object.keys(nets)) {
+      for (const ni of nets[name] || []) {
+        if ((ni.family === 'IPv4' || ni.family === 4) && !ni.internal) lanIps.push(ni.address)
+      }
     }
+    const lan = lanIps.length > 0 ? lanIps.map((ip) => `${scheme}://${ip}:${boundPort}`).join(' 或 ') : '（未检测到局域网 IPv4）'
+    console.log(`  · 局域网访问: ${lan}`)
+    console.log('  · 非回环客户端访问 /api/*（除 /api/health）需要请求头 Authorization: Bearer <MMG_ACCESS_TOKEN>')
+    console.log('  · 页面、脚本和其他非 /api 静态资源不校验该令牌')
+  } else {
+    console.log('  · 仅本机可访问。局域网请设置 MMG_ACCESS_TOKEN 后运行 npm run start:lan')
   }
-  const lan = lanIps.length > 0 ? lanIps.map((ip) => `http://${ip}:${PORT}`).join(' 或 ') : '（未检测到局域网 IP）'
-  console.log(`[server] MMG_VisualizeMM 后端已启动`)
-  console.log(`  · 本机访问: http://127.0.0.1:${PORT}`)
-  console.log(`  · 局域网访问(同一网络的其他设备): ${lan}`)
 })

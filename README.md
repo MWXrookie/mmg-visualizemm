@@ -74,22 +74,47 @@ npm run build
 npm start
 ```
 
-### 访问地址（本机 vs 局域网，注意 IP 不同）
+### 访问地址（默认只监听本机）
 
-服务器监听所有网卡（`0.0.0.0:3088`），**不同人访问用不同的地址**：
+这是**破坏性变化**：服务默认绑定 `127.0.0.1:3088`，不再监听 `0.0.0.0`。同一台电脑用 `http://127.0.0.1:3088` 打开；局域网里的其他设备默认访问不到。
 
-| 场景 | 访问地址 | 说明 |
+| 场景 | 怎么启动 | 访问地址 |
 |---|---|---|
-| 部署者本机 | `http://127.0.0.1:3088` | 自己电脑上打开 |
-| **局域网内其他人** | `http://<你的局域网IP>:3088` | 同一 WiFi/网线内的人，用你的 IP（**不是 127.0.0.1**） |
-| 公网/远程 | 需端口映射或内网穿透 | 默认仅局域网可达 |
+| 只在本机使用 | `npm start` | `http://127.0.0.1:3088` |
+| 同一局域网的其他设备 | 先设置 `MMG_ACCESS_TOKEN`，再 `npm run start:lan` | `http://<你的局域网 IP>:3088` |
+
+`npm run start:lan` 等价于 `MMG_HOST=0.0.0.0`。只要监听地址不是回环（`127.0.0.1`、`localhost`、`::1`），就必须设置 `MMG_ACCESS_TOKEN`，否则进程会直接退出。访问令牌至少 8 个字符，且不能包含任何空白（包括首尾空格）。以前会裁掉首尾空白后继续启动；现在只要令牌里有空白，进程就会拒绝启动。不要把令牌写进仓库。
+
+非回环客户端调用 `/api/*` 时要带精确的请求头 `Authorization: Bearer <MMG_ACCESS_TOKEN>`。`/api/health` 不需要令牌。页面、脚本和其他非 `/api` 静态资源也不校验令牌，这样浏览器才能先打开界面；工作区、附件和模型中继仍然受保护。流式对话走 `fetch` 读取响应流，可以带这个请求头。不要把令牌放在查询串里，服务不会用它完成鉴权。`GET /api/knowledge/stats` 如果查询串里带了 `apiKey`、`baseUrl` 或 `proxyUrl`，会直接返回 400，不会拿这些值去访问外部地址。当前网页还不会自动附带这把局域网令牌，其他设备打开页面后，工作区等接口会返回 401，直到前端把令牌放进 `Authorization`。
+
+本机回环连接不要求令牌。判断回环只看 TCP 对端地址（`127.0.0.0/8`、`::1`、`::ffff:127.0.0.1`），不看 `X-Forwarded-For` 或 `Host`。
+
+明文局域网 HTTP 会在启动时向标准错误输出警告，并在 `GET /api/health` 的 `security.warnings` 里返回 `LAN_PLAINTEXT_HTTP`。健康检查只描述监听方式、是否启用 HTTPS、非回环访问是否必须鉴权，以及上述警告，不返回令牌、证书路径或其他配置。
 
 查自己的局域网 IP（Windows）：
+
 ```bash
 ipconfig    # 找"以太网"或"WLAN"的 IPv4 地址，如 192.168.x.x
 ```
 
-> ⚠️ **127.0.0.1 永远指向"访问者自己的电脑"**——别人电脑上用 127.0.0.1 打不开你的服务，必须用你的局域网 IP。
+> ⚠️ **127.0.0.1 永远指向"访问者自己的电脑"**。别人的电脑要用你的局域网 IP，并且带上访问令牌。
+
+### 局域网 HTTPS（推荐，可选）
+
+`MMG_TLS_CERT` 和 `MMG_TLS_KEY` 必须同时设置为证书文件和私钥文件的路径。只设置其中一个，或文件不存在，服务都会拒绝启动。两份都配置好之后，服务改为 HTTPS。私钥不要提交到 git。
+
+本机开发可以用 [mkcert](https://github.com/FiloSottile/mkcert) 生成受系统信任的证书：
+
+```bash
+mkcert -install
+mkcert -key-file localhost-key.pem -cert-file localhost-cert.pem localhost 127.0.0.1 ::1 192.168.x.x
+export MMG_TLS_CERT="$PWD/localhost-cert.pem"
+export MMG_TLS_KEY="$PWD/localhost-key.pem"
+export MMG_ACCESS_TOKEN="$(openssl rand -hex 32)"
+npm run start:lan
+```
+
+然后用 `https://127.0.0.1:3088` 或 `https://<局域网 IP>:3088` 访问。变量模板见仓库根目录的 `.env.example`。服务不会自动加载该文件，需要自行导出到进程环境，例如 `set -a && source .env && set +a`。
 
 ### 开发模式（热更新）
 
@@ -182,7 +207,7 @@ MMG_VisualizeMM/
 - **后端**：Node.js + Express + `node:sqlite`（单进程，静态托管前端产物）
 - **代码执行**：Pyodide（浏览器内 Python，预装 numpy/pandas/matplotlib/scipy/sklearn）
 - **知识库**：RAG（切块 → embedding → 余弦+关键词混合检索 → 上下文注入）
-- **安全**：API Key 在 HTTPS/localhost 等安全上下文中以 AES-GCM 加密存入 localStorage；普通局域网 HTTP 会降级为明文并告警；服务端不持久化对话模型 Key
+- **安全**：默认只监听 `127.0.0.1`。局域网需 `MMG_HOST` 与 `MMG_ACCESS_TOKEN`，可选 `MMG_TLS_CERT` / `MMG_TLS_KEY`。API Key 在 HTTPS/localhost 等安全上下文中以 AES-GCM 加密存入 localStorage；普通局域网 HTTP 会降级为明文并告警；服务端不持久化对话模型 Key，也不把密钥写入请求日志
 
 ## 当前定位与许可
 

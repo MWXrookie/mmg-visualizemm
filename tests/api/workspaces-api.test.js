@@ -191,6 +191,12 @@ test('健康检查和不存在的附件返回稳定状态', async () => {
   assert.equal(health.body.ok, true)
   assert.equal(health.body.name, 'mmg-visualizemm')
   assert.equal(Number.isNaN(Date.parse(health.body.time)), false)
+  assert.deepEqual(health.body.security, {
+    lan: false,
+    https: false,
+    authRequired: false,
+    warnings: [],
+  })
 
   const missingAttachment = await request('/api/workspaces/not-found/attachments/0/data.json')
   assert.equal(missingAttachment.response.status, 404)

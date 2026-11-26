@@ -13,7 +13,7 @@
     "build": "vite build --config web/vite.config.js",
     "prebuild": "node scripts/generate/public-examples.mjs",
     "generate:examples": "node scripts/generate/public-examples.mjs",
-    "test": "node --test \"tests/**/*.test.js\"",
+    "test": "node --import ./tests/support/test-env.mjs --test \"tests/**/*.test.js\"",
     "test:unit": "node --test tests/problem-text.test.js",
     "test:api": "node --test tests/api/workspaces-api.test.js",
     "test:golden": "node --test tests/golden-fixtures.test.js",
@@ -25,6 +25,7 @@
     "check:syntax": "node -e \"const fs=require('node:fs');const {spawnSync}=require('node:child_process');const {join}=require('node:path');const files=fs.readdirSync('server').filter(name=>name.endsWith('.js')).sort();if(!files.length){console.error('no server/*.js files');process.exit(1)}for(const name of files){const file=join('server',name);console.log('check '+file);const result=spawnSync(process.execPath,['--check',file],{stdio:'inherit'});if(result.status)process.exit(result.status)}\"",
     "check": "npm run test && npm run check:syntax && npm run build",
     "start": "node --use-system-ca server/index.js",
+    "start:lan": "node --use-system-ca server/start-lan.js",
     "dev": "concurrently -n WEB,SRV -c blue,green \"npm:dev:web\" \"npm:dev:server\""
   },
   "dependencies": {

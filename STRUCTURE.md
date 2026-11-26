@@ -31,6 +31,8 @@ MMG_VisualizeMM/                                    📦 项目根目录
 │
 ├── 📦 server/
 │   ├── 📄 index.js                                 ← Express 入口：AI 中继/SSE、附件解析、工作区 SQLite、静态托管
+│   ├── 📄 lan-security.js                          ← 监听地址、局域网令牌、HTTPS 与健康检查中的安全状态
+│   ├── 📄 start-lan.js                             ← npm run start:lan：默认 MMG_HOST=0.0.0.0
 │   ├── 📄 knowledge.js                             ← 三源 RAG：切块、Embedding、本地哈希降级、混合检索与缓存
 │   └── 📄 upstream.js                              ← 对话/Embedding 上游直连与 HTTP(S) 代理传输
 │
