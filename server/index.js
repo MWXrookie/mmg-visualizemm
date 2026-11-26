@@ -538,7 +538,8 @@ const dataDir = process.env.MMG_DATA_DIR
 fs.mkdirSync(dataDir, { recursive: true })
 const db = new DatabaseSync(path.join(dataDir, 'mmg.db'))
 const WORKSPACE_BACKUP_FORMAT = 'mmg-workspace-backup'
-const WORKSPACE_SCHEMA_VERSION = 1
+const WORKSPACE_SCHEMA_VERSION = 2
+const THOUGHT_BOARD_MAX_BYTES = 2 * 1024 * 1024
 const currentDbSchemaVersion = Number(db.prepare('PRAGMA user_version').get()?.user_version || 0)
 if (currentDbSchemaVersion > WORKSPACE_SCHEMA_VERSION) {
   throw new Error(`数据库 schema 版本 ${currentDbSchemaVersion} 高于当前程序支持的版本 ${WORKSPACE_SCHEMA_VERSION}`)
@@ -553,30 +554,91 @@ db.exec(`
     attachments TEXT DEFAULT '[]',
     breakdown TEXT DEFAULT '[]',
     code TEXT DEFAULT '',
+    overview TEXT DEFAULT '',
     created_at INTEGER,
-    updated_at INTEGER
+    updated_at INTEGER,
+    problem_document TEXT DEFAULT 'null',
+    thought_board TEXT DEFAULT 'null'
   )
 `)
-// 轻量迁移：旧库补充 overview 列（整体解读缓存）
-const wsCols = db.prepare(`PRAGMA table_info(workspaces)`).all().map((c) => c.name)
-if (!wsCols.includes('overview')) {
-  db.exec(`ALTER TABLE workspaces ADD COLUMN overview TEXT DEFAULT ''`)
-}
-if (!wsCols.includes('problem_source_kind')) {
-  db.exec(`ALTER TABLE workspaces ADD COLUMN problem_source_kind TEXT DEFAULT ''`)
-}
-if (!wsCols.includes('problem_pages')) {
-  db.exec(`ALTER TABLE workspaces ADD COLUMN problem_pages TEXT DEFAULT '[]'`)
-}
-if (!wsCols.includes('problem_document')) {
-  db.exec(`ALTER TABLE workspaces ADD COLUMN problem_document TEXT DEFAULT 'null'`)
-}
+// 旧库补列与 user_version 放在同一事务里；失败时整段回滚，避免半迁移。
 if (currentDbSchemaVersion < WORKSPACE_SCHEMA_VERSION) {
-  db.exec(`PRAGMA user_version = ${WORKSPACE_SCHEMA_VERSION}`)
+  const addColumn = (columns, name, definition) => {
+    if (!columns.has(name)) db.exec(`ALTER TABLE workspaces ADD COLUMN ${name} ${definition}`)
+  }
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    const columns = new Set(db.prepare('PRAGMA table_info(workspaces)').all().map((column) => column.name))
+    addColumn(columns, 'overview', `TEXT DEFAULT ''`)
+    addColumn(columns, 'problem_source_kind', `TEXT DEFAULT ''`)
+    addColumn(columns, 'problem_pages', `TEXT DEFAULT '[]'`)
+    addColumn(columns, 'problem_document', `TEXT DEFAULT 'null'`)
+    addColumn(columns, 'thought_board', `TEXT DEFAULT 'null'`)
+    db.exec(`PRAGMA user_version = ${WORKSPACE_SCHEMA_VERSION}`)
+    db.exec('COMMIT')
+  } catch (error) {
+    try { db.exec('ROLLBACK') } catch { /* 事务已结束时忽略 */ }
+    throw error
+  }
 }
 
 function parseJsonField(s) {
   try { return JSON.parse(s || '[]') } catch { return [] }
+}
+
+function parseThoughtBoard(value) {
+  if (value == null || value === '' || value === 'null') return null
+  try {
+    const parsed = JSON.parse(value)
+    return parsed == null ? null : parsed
+  } catch {
+    return null
+  }
+}
+
+function isPlainObject(value) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
+  const proto = Object.getPrototypeOf(value)
+  return proto === Object.prototype || proto === null
+}
+
+function thoughtBoardError(code, message, status) {
+  const error = new Error(message)
+  error.code = code
+  error.status = status
+  return error
+}
+
+// 只检查“对象或 null”和序列化体积，不解释思路板内部字段。
+function serializeThoughtBoard(value) {
+  if (value === null) return 'null'
+  if (!isPlainObject(value)) throw thoughtBoardError('BAD_THOUGHT_BOARD', 'thoughtBoard 必须是对象或 null', 400)
+  let serialized
+  try {
+    serialized = JSON.stringify(value)
+  } catch {
+    throw thoughtBoardError('BAD_THOUGHT_BOARD', 'thoughtBoard 必须是对象或 null', 400)
+  }
+  if (typeof serialized !== 'string' || !serialized.startsWith('{')) {
+    throw thoughtBoardError('BAD_THOUGHT_BOARD', 'thoughtBoard 必须是对象或 null', 400)
+  }
+  if (Buffer.byteLength(serialized, 'utf8') > THOUGHT_BOARD_MAX_BYTES) {
+    throw thoughtBoardError('THOUGHT_BOARD_TOO_LARGE', 'thoughtBoard 序列化后超过 2MB', 413)
+  }
+  return serialized
+}
+
+function respondWithWorkspaceError(res, error, fallbackMessage) {
+  if (error?.code === 'BAD_THOUGHT_BOARD') {
+    return res.status(400).json({ ok: false, code: error.code, message: error.message })
+  }
+  if (error?.code === 'THOUGHT_BOARD_TOO_LARGE') {
+    return res.status(413).json({ ok: false, code: error.code, message: error.message })
+  }
+  if (typeof error?.code === 'string' && error.code.startsWith('BACKUP_')) {
+    return res.status(400).json({ ok: false, code: error.code, message: error.message })
+  }
+  return res.status(500).json({ ok: false, message: fallbackMessage })
 }
 
 function newWorkspaceId() {
@@ -595,6 +657,7 @@ function workspaceFromRow(row) {
     breakdown: parseJsonField(row.breakdown),
     code: row.code,
     overview: row.overview || '',
+    thoughtBoard: parseThoughtBoard(row.thought_board),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -632,11 +695,7 @@ function validateBackup(backup) {
     error.code = 'BACKUP_VERSION_NEWER'
     throw error
   }
-  if (version !== WORKSPACE_SCHEMA_VERSION) {
-    const error = new Error(`暂不支持 schemaVersion ${version}`)
-    error.code = 'BACKUP_VERSION_UNSUPPORTED'
-    throw error
-  }
+  // schemaVersion 1 的备份没有 thoughtBoard，仍然可以导入。
   const source = backup.workspace
   if (!source || typeof source !== 'object' || Array.isArray(source)) {
     const error = new Error('备份中缺少 workspace 对象')
@@ -660,6 +719,9 @@ function validateBackup(backup) {
     breakdown: source.breakdown || [],
     code: String(source.code || ''),
     overview: String(source.overview || ''),
+    thoughtBoard: Object.prototype.hasOwnProperty.call(source, 'thoughtBoard')
+      ? serializeThoughtBoard(source.thoughtBoard)
+      : 'null',
   }
 }
 
@@ -695,19 +757,21 @@ app.post('/api/workspaces', (req, res) => {
         : (existing?.breakdown ?? '[]'),
       code: has('code') ? String(b.code ?? '') : (existing?.code ?? ''),
       overview: has('overview') ? String(b.overview ?? '') : (existing?.overview ?? ''),
+      thought_board: has('thoughtBoard') ? serializeThoughtBoard(b.thoughtBoard) : (existing?.thought_board ?? 'null'),
     }
     const createdAt = existing ? existing.created_at : now
     db.prepare(`
-      INSERT INTO workspaces (id, title, problem_text, problem_source_kind, problem_pages, attachments, breakdown, code, overview, created_at, updated_at, problem_document)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO workspaces (id, title, problem_text, problem_source_kind, problem_pages, attachments, breakdown, code, overview, created_at, updated_at, problem_document, thought_board)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         title=excluded.title, problem_text=excluded.problem_text, problem_source_kind=excluded.problem_source_kind, problem_pages=excluded.problem_pages,
         attachments=excluded.attachments, breakdown=excluded.breakdown,
-        code=excluded.code, overview=excluded.overview, updated_at=excluded.updated_at, problem_document=excluded.problem_document
-    `).run(id, merged.title, merged.problem_text, merged.problem_source_kind, merged.problem_pages, merged.attachments, merged.breakdown, merged.code, merged.overview, createdAt, now, merged.problem_document)
+        code=excluded.code, overview=excluded.overview, updated_at=excluded.updated_at, problem_document=excluded.problem_document,
+        thought_board=excluded.thought_board
+    `).run(id, merged.title, merged.problem_text, merged.problem_source_kind, merged.problem_pages, merged.attachments, merged.breakdown, merged.code, merged.overview, createdAt, now, merged.problem_document, merged.thought_board)
     res.json({ ok: true, id })
   } catch (e) {
-    res.status(500).json({ ok: false, message: `保存失败：${e.message}` })
+    respondWithWorkspaceError(res, e, `保存失败：${e.message}`)
   }
 })
 
@@ -747,8 +811,8 @@ app.post('/api/workspaces/import', (req, res) => {
     const id = newWorkspaceId()
     const now = Date.now()
     db.prepare(`
-      INSERT INTO workspaces (id, title, problem_text, problem_source_kind, problem_pages, attachments, breakdown, code, overview, created_at, updated_at, problem_document)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO workspaces (id, title, problem_text, problem_source_kind, problem_pages, attachments, breakdown, code, overview, created_at, updated_at, problem_document, thought_board)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       data.title,
@@ -762,14 +826,12 @@ app.post('/api/workspaces/import', (req, res) => {
       now,
       now,
       JSON.stringify(data.problemDocument),
+      data.thoughtBoard,
     )
     const row = db.prepare('SELECT * FROM workspaces WHERE id = ?').get(id)
     res.status(201).json({ ok: true, id, schemaVersion: WORKSPACE_SCHEMA_VERSION, workspace: workspaceFromRow(row) })
   } catch (e) {
-    if (e.code?.startsWith('BACKUP_')) {
-      return res.status(400).json({ ok: false, code: e.code, message: e.message })
-    }
-    res.status(500).json({ ok: false, message: `导入失败：${e.message}` })
+    respondWithWorkspaceError(res, e, `导入失败：${e.message}`)
   }
 })
 
