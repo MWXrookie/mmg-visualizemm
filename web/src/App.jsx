@@ -3,17 +3,25 @@ import Workbench from './pages/Workbench.jsx'
 import Modeling from './pages/Modeling.jsx'
 import Coding from './pages/Coding.jsx'
 import Settings from './pages/Settings.jsx'
-import Examples from './pages/Examples.jsx'
+import LearningEntry from './pages/LearningEntry.jsx'
 import { loadSettings, loadTheme, saveTheme, getCurrentWsId, setCurrentWsId } from './store.js'
 import { loadWorkspace, saveWorkspace, listWorkspaces, deleteWorkspace, exportWorkspaceBackup, importWorkspaceBackup } from './api.js'
-import { IconBook, IconCompass, IconCode, IconLayers, IconGear, IconSun, IconMoon, IconEdit, IconTrash, IconMenu, IconClose } from './components/Icons.jsx'
+import { IconBook, IconCompass, IconCode, IconHome, IconGear, IconSun, IconMoon, IconEdit, IconTrash, IconMenu, IconClose } from './components/Icons.jsx'
 
 const VIEWS = [
   { id: 'workbench', label: '读题工作台', compactLabel: '1 读题', icon: <IconBook size={18} /> },
   { id: 'modeling', label: '建模思路梳理', compactLabel: '2 建模', icon: <IconCompass size={18} /> },
   { id: 'coding', label: '编程工作台', compactLabel: '3 编程', icon: <IconCode size={18} /> },
-  { id: 'examples', label: '建模范例', compactLabel: '范例', icon: <IconLayers size={18} /> },
 ]
+
+const ENTRY_VIEWS = ['home', 'university', 'secondary']
+
+function getView() {
+  const hashView = location.hash.replace(/^#\//, '')
+  if (hashView === 'examples') return 'university'
+  if (ENTRY_VIEWS.includes(hashView) || hashView === 'settings' || VIEWS.some(({ id }) => id === hashView)) return hashView
+  return 'home'
+}
 
 function workspacePayload(w) {
   return {
@@ -67,10 +75,10 @@ function persist(w, unloading = false) {
 }
 
 export default function App() {
-  const [view, setView] = useState(() => (location.hash.replace('#/', '') || 'workbench'))
+  const [view, setView] = useState(getView)
   const [settings, setSettings] = useState(null)
   const [theme, setTheme] = useState(loadTheme)
-  const [wsCollapsed, setWsCollapsed] = useState(() => !['settings'].includes(location.hash.replace('#/', '') || 'workbench'))
+  const [wsCollapsed, setWsCollapsed] = useState(() => getView() !== 'settings')
   const [wsId, setWsId] = useState(getCurrentWsId)
   const [ws, setWs] = useState(null) // 三台共享的工作区数据（题目/附件/拆解/代码）
   const [wsList, setWsList] = useState([]) // 工作区列表（侧栏切换/删除用）
@@ -126,7 +134,7 @@ export default function App() {
   // hash 路由
   useEffect(() => {
     const onHash = () => {
-      const v = location.hash.replace('#/', '') || 'workbench'
+      const v = getView()
       setView(v)
       setWsCollapsed(v !== 'settings')
       setMobileMenuOpen(false)
@@ -248,13 +256,22 @@ export default function App() {
   }
 
   /** 新建空白工作区 */
-  function newWorkspace() {
-    if (workspaceCreatingRef.current) return
+  async function newWorkspace({ fromEntry = false } = {}) {
+    if (workspaceCreatingRef.current) return false
     workspaceCreatingRef.current = true
     const trigger = document.activeElement
     setWorkspaceCreating(true)
     setToast('')
-    saveWorkspace({ title: '未命名题目' }).then((r) => {
+    try {
+      if (fromEntry) {
+        let snapshot
+        do {
+          snapshot = wsRef.current
+          if (snapshot?.id === wsIdRef.current) await persist(snapshot)
+        } while (snapshot !== wsRef.current)
+      }
+      const r = await saveWorkspace({ title: '未命名题目' })
+      loadSeqRef.current += 1
       wsIdRef.current = r.id
       wsRef.current = { id: r.id } // 异步状态提交前先对齐引用，避免紧接着的上传写进旧工作区
       setWsId(r.id)
@@ -263,14 +280,17 @@ export default function App() {
       setWs({ id: r.id }) // 立即占位：wsId 效果检测到同 id 后跳过后端加载，避免覆盖后续上传
       refreshWsList()
       window.__notify?.('已新建工作区')
-    }).catch((error) => window.__notify?.(error.message || '新建失败，请重试'))
-      .finally(() => {
-        workspaceCreatingRef.current = false
-        setWorkspaceCreating(false)
-        requestAnimationFrame(() => {
-          if (document.activeElement === document.body && trigger instanceof HTMLElement && trigger.isConnected) trigger.focus({ preventScroll: true })
-        })
+      return true
+    } catch (error) {
+      window.__notify?.(error.message || '新建失败，请重试')
+      return false
+    } finally {
+      workspaceCreatingRef.current = false
+      setWorkspaceCreating(false)
+      requestAnimationFrame(() => {
+        if (document.activeElement === document.body && trigger instanceof HTMLElement && trigger.isConnected) trigger.focus({ preventScroll: true })
       })
+    }
   }
 
   /** 重命名工作区 */
@@ -381,7 +401,8 @@ export default function App() {
   /** 切换工作区 */
   const switchSeqRef = useRef(0)
   async function switchWs(id) {
-    if (!id || id === wsIdRef.current) return
+    if (!id) return false
+    if (id === wsIdRef.current) return true
     const sequence = ++switchSeqRef.current
     setToast('正在保存并切换工作区…')
     try {
@@ -390,17 +411,29 @@ export default function App() {
       do {
         snapshot = wsRef.current
         await persist(snapshot)
-        if (sequence !== switchSeqRef.current) return
+        if (sequence !== switchSeqRef.current) return false
       } while (snapshot !== wsRef.current)
     } catch (error) {
       if (sequence === switchSeqRef.current) setToast(`${error.message}，仍留在当前工作区，请重试切换`)
-      return
+      return false
     }
     setToast('')
     wsIdRef.current = id
     setWsId(id)
     setCurrentWsId(id)
     setWs(null) // 清空当前 → wsId effect 检测到 id 变化后从后端加载
+    return true
+  }
+
+  async function startLearning() {
+    if (await newWorkspace({ fromEntry: true }) && getView() === 'university') {
+      go('workbench')
+      requestAnimationFrame(() => document.getElementById('reading-problem-input')?.focus({ preventScroll: true }))
+    }
+  }
+
+  async function resumeLearning(id) {
+    if (await switchWs(id) && getView() === 'university') go('workbench')
   }
 
   if (!settings) {
@@ -415,10 +448,13 @@ export default function App() {
     saveStatus: saveState.id === ws?.id ? saveState.status : 'idle',
     onExpandSidebar: () => setWsCollapsed(false),
   }
+  const isEntry = ENTRY_VIEWS.includes(view)
+  const resumeWorkspace = wsList.find((item) => item.id === wsId) || wsList[0]
+  const toggleTheme = () => setTheme((current) => current === 'dark' ? 'light' : 'dark')
 
   return (
-    <div className={`app-shell ${wsCollapsed && view !== 'settings' ? 'rail-only' : ''}`}>
-      <aside className={`sidebar ${mobileMenuOpen ? 'mobile-menu-open' : ''}`} onKeyDown={(event) => {
+    <div className={`app-shell ${isEntry ? 'learning-shell' : wsCollapsed && view !== 'settings' ? 'rail-only' : ''}`}>
+      {!isEntry && <aside className={`sidebar ${mobileMenuOpen ? 'mobile-menu-open' : ''}`} onKeyDown={(event) => {
         if (event.key === 'Escape' && mobileMenuOpen) {
           event.preventDefault()
           closeMobileMenu()
@@ -479,6 +515,10 @@ export default function App() {
             </div>
           )}
           <div className="sb-foot">
+            <button className="nav-item" onClick={() => go('university')} title="返回大学生学习入口" aria-label="返回大学生学习入口">
+              <span className="ic"><IconHome size={18} /></span>
+              {wsCollapsed && !mobileMenuOpen ? <span className="nav-rail-label" aria-hidden="true">入口</span> : '学习入口'}
+            </button>
             <button className={`nav-item ${view === 'settings' ? 'active' : ''}`} onClick={() => go('settings')} title="模型设置" aria-current={view === 'settings' ? 'page' : undefined}>
               <span className="ic"><IconGear size={18} /></span>
               {wsCollapsed && !mobileMenuOpen && <span className="nav-rail-label" aria-hidden="true">设置</span>}
@@ -486,7 +526,7 @@ export default function App() {
             </button>
             <button
               className="nav-item"
-              onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+              onClick={toggleTheme}
               title={theme === 'dark' ? '切换浅色' : '切换深色'}
             >
               <span className="ic">{theme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}</span>
@@ -495,17 +535,17 @@ export default function App() {
             </button>
           </div>
         </div>
-      </aside>
+      </aside>}
 
       <main className="content" inert={workspaceCreating ? '' : undefined} aria-busy={workspaceCreating} style={{ minWidth: 0, overflow: 'hidden' }}>
+        {isEntry && <LearningEntry view={view} theme={theme} onToggleTheme={toggleTheme} resumeWorkspace={resumeWorkspace} onStart={startLearning} onResume={resumeLearning} />}
         <div className={`page-view ${view === 'workbench' ? 'active' : ''}`}>
-          <Workbench {...pageProps} workspaceCreating={workspaceCreating} onNewWorkspace={newWorkspace} />
+          <Workbench {...pageProps} workspaceCreating={workspaceCreating} onNewWorkspace={() => newWorkspace()} />
         </div>
         <div className={`page-view ${view === 'modeling' ? 'active' : ''}`}>
           <Modeling {...pageProps} />
         </div>
         {view === 'coding' && <Coding {...pageProps} />}
-        {view === 'examples' && <Examples />}
         {view === 'settings' && <Settings settings={settings} setSettings={setSettings} />}
       </main>
       {workspaceCreating ? <div className="toast" role="status">正在创建新工作区，请稍候…</div>

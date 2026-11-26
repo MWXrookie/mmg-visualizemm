@@ -354,7 +354,8 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
     const selected = record.quote || record.selected || ''
     const role = record.role || '背景信息'
     const title = `${roleShortName[role] || '问题'}：${clipRoleText(selected, 20) || '待命名'}`
-    const firstBlock = (ws?.breakdown || [])[0]
+    const firstIndex = (ws?.breakdown || []).findIndex(block => block.kind !== 'question')
+    const firstBlock = (ws?.breakdown || [])[firstIndex]
     setDepositMode('new')
     setDepositDraft({
       recordIndex: index,
@@ -366,7 +367,7 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
       stepAction: '明确这条题目信息在本问题中的作用',
       stepMethod: '回到题目目标和数据，说明它会怎样影响变量、约束或评价指标。',
       targetId: firstBlock?.id || '',
-      targetIndex: (ws?.breakdown || []).length ? 0 : -1,
+      targetIndex: firstIndex,
     })
     setDepositOpen(true)
   }
@@ -384,7 +385,7 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
       title: card.title,
       idea: workflow.idea,
       stepAction: workflow.firstStep,
-      stepMethod: workflow.method,
+      stepMethod: '',
       targetId: '',
       targetIndex: -1,
     })
@@ -407,7 +408,9 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
     const title = depositDraft.title.trim() || '未命名拆解块'
     const idea = depositDraft.idea.trim()
     const stepAction = depositDraft.stepAction?.trim() || '明确这条信息在本问题中的作用'
-    const stepMethod = depositDraft.stepMethod?.trim() || '回到题目目标和数据，说明它会怎样影响变量、约束或评价指标。'
+    const stepMethod = fromCard
+      ? depositDraft.stepMethod.trim()
+      : depositDraft.stepMethod?.trim() || '回到题目目标和数据，说明它会怎样影响变量、约束或评价指标。'
     if (depositMode === 'new') {
       const block = {
         id: makeBreakdownId(),
@@ -423,7 +426,7 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
       patchWs((prev) => ({
         breakdown: (prev?.breakdown || []).map((block, index) => {
           const matchesTarget = depositDraft.targetId ? block?.id === depositDraft.targetId : index === targetIndex
-          if (!matchesTarget) return block
+          if (!matchesTarget || block.kind === 'question') return block
           const oldQuote = String(block?.quote || '').trim()
           const existingSteps = Array.isArray(block?.steps) ? block.steps : []
           const hasSameStep = existingSteps.some((step) => step?.action === stepAction && step?.method === stepMethod)
@@ -565,12 +568,16 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
       {/* 书签竖栏 */}
       <aside className="bookmarks">
         <ResizeHandle value={panelW} onWidth={(px) => { const v = px + 'px'; setPanelW(v); localStorage.setItem('mmg_panel_w_v1', v) }} />
-        <button className={`bookmark-item ${bookmark === '精读' ? 'active' : ''}`} onClick={() => setBookmark('精读')}>选段精读</button>
-        <button className={`bookmark-item ${bookmark === '卡片' ? 'active' : ''}`} onClick={() => setBookmark('卡片')}>知识卡片</button>
+        <button type="button" className={`bookmark-item ${bookmark === '精读' ? 'active' : ''}`} aria-pressed={bookmark === '精读'} onClick={() => setBookmark('精读')}>选段精读</button>
+        <button type="button" className={`bookmark-item ${bookmark === '卡片' ? 'active' : ''}`} aria-pressed={bookmark === '卡片'} onClick={() => setBookmark('卡片')}>知识卡片</button>
       </aside>
 
       {/* AI 面板 */}
       <section className="ai-panel">
+        <div className="mobile-knowledge-switch" role="group" aria-label="侧栏内容">
+          <button type="button" aria-pressed={bookmark === '精读'} onClick={() => setBookmark('精读')}>选段精读</button>
+          <button type="button" aria-pressed={bookmark === '卡片'} onClick={() => setBookmark('卡片')}>知识卡片</button>
+        </div>
         <div className="ai-panel-body">
           {bookmark === '精读' && overview && (
             <div className="card overview-card" style={{ padding: 14, marginBottom: 12 }}>
@@ -667,7 +674,7 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
                 type="button"
                 className={`deposit-mode-btn ${depositMode === 'existing' ? 'active' : ''}`}
                 onClick={() => setDepositMode('existing')}
-                disabled={!(ws?.breakdown || []).length}
+                disabled={!(ws?.breakdown || []).some(block => block.kind !== 'question')}
               >
                 写入已有拆解块
               </button>
@@ -683,7 +690,7 @@ export default function Workbench({ settings, ws, patchWs, patchWsAt, onExpandSi
                     return { ...prev, targetId: value.startsWith('index-') ? '' : value, targetIndex: index }
                   })}
                 >
-                  {(ws?.breakdown || []).map((block, index) => (
+                  {(ws?.breakdown || []).map((block, index) => block.kind !== 'question' && (
                     <option key={block.id || index} value={block.id || `index-${index}`}>{index + 1}. {block.title || '未命名拆解块'}</option>
                   ))}
                 </select>

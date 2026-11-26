@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "MMG 中学建模工作台 · 首版架构",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "viewBox": [1140, 496],
+    "views": [
+      {
+        "id": "lesson",
+        "label": "教师如何组织课堂",
+        "focus": ["teacher", "cases", "workbench"],
+        "note": "教师用独立教案布置任务、安排讨论和讲评。团队在仓库维护与教案对应的任务版本，学生打开指定任务并留下自己的建模依据。"
+      },
+      {
+        "id": "browser",
+        "label": "学生如何获得支架",
+        "focus": ["cases", "workbench", "calculator"],
+        "note": "同一页面承载五个建模环节。案例指定分步提示、知识卡片和验算方式。学生先提出方案，再计算、比较和解释。"
+      },
+      {
+        "id": "shared",
+        "label": "与大学侧共用什么",
+        "focus": ["workbench", "service", "storage", "model"],
+        "note": "沿用现有 Express、SQLite 工作区与模型中继。中学记录按任务版本保存，入口与续学按学段筛选。外部模型只接收学生主动请求的当前步骤摘录。"
+      }
+    ]
+  },
+  "components": [
+    { "id": "teacher", "type": "external", "label": "教师与独立教案", "sublabel": "布置任务 · 讨论 · 讲评", "pos": [440, 40], "size": [260, 68] },
+    { "id": "cases", "type": "frontend", "label": "随应用发布的案例", "sublabel": "数据 · 分步提示 · 知识卡片", "pos": [52, 201], "size": [250, 78] },
+    { "id": "workbench", "type": "frontend", "label": "中学学生工作台", "sublabel": "同一页面 · 五步 · 可回改", "pos": [440, 201], "size": [260, 78] },
+    { "id": "calculator", "type": "frontend", "label": "浏览器内置计算", "sublabel": "参数 · 图表 · 对照", "pos": [838, 201], "size": [250, 78] },
+    { "id": "storage", "type": "database", "label": "SQLite 工作区", "sublabel": "任务版本 · 草稿 · 修订理由", "pos": [52, 386], "size": [250, 78] },
+    { "id": "service", "type": "backend", "label": "现有 Express 服务", "sublabel": "工作区 API · 模型中继", "pos": [440, 386], "size": [260, 78] },
+    { "id": "model", "type": "external", "label": "现有外部模型服务", "sublabel": "按需生成一条追问", "pos": [838, 386], "size": [250, 78] }
+  ],
+  "connections": [
+    { "id": "assign", "from": "teacher", "to": "workbench", "label": "发任务链接", "variant": "dashed", "labelAt": [570, 154] },
+    { "id": "load", "from": "cases", "to": "workbench", "label": "加载任务", "variant": "emphasis" },
+    { "id": "calculate", "from": "workbench", "to": "calculator", "label": "按参数验算", "variant": "emphasis" },
+    { "id": "sync", "from": "workbench", "to": "service", "label": "存取草稿 · 按需追问", "labelAt": [570, 333] },
+    { "id": "persist", "from": "service", "to": "storage", "label": "持久化" },
+    { "id": "hint", "from": "service", "to": "model", "label": "最小上下文", "variant": "dashed" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "首版课堂", "items": ["高中先跑通一个三角函数案例。", "初中共用五步和记录结构，安排采购任务教师试走。"] },
+    { "dot": "violet", "title": "学生作出判断", "items": ["确认变量、假设、模型和结论。", "按任务比较观测值、条件或候选方案，写下修改理由。"] },
+    { "dot": "emerald", "title": "课堂可以继续", "items": ["随案例提供数据、卡片与静态提示。", "模型不可用时，学生仍可计算并完成回看。"] }
+  ]
+}

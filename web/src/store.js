@@ -133,17 +133,18 @@ export function saveSessionList(list) {
 /* ---------- 知识卡片收藏 ---------- */
 const FAV_KEY = 'mmg_favs_v1'
 
-export function loadFavorites() {
+export function loadFavorites(scope = 'university') {
   try {
-    return JSON.parse(localStorage.getItem(FAV_KEY)) || []
+    const value = JSON.parse(localStorage.getItem(scope === 'secondary' ? 'mmg_secondary_favs_v1' : FAV_KEY))
+    return Array.isArray(value) ? value : []
   } catch {
     return []
   }
 }
 
-export function saveFavorites(list) {
+export function saveFavorites(list, scope = 'university') {
   try {
-    localStorage.setItem(FAV_KEY, JSON.stringify(list))
+    localStorage.setItem(scope === 'secondary' ? 'mmg_secondary_favs_v1' : FAV_KEY, JSON.stringify(list))
   } catch { /* ignore */ }
 }
 

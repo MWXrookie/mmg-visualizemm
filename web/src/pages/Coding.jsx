@@ -746,7 +746,7 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
   }
 
   const wsIdNow = ws?.id
-  const breakdown = ws?.breakdown || []
+  const breakdown = useMemo(() => (ws?.breakdown || []).filter(node => node.kind !== 'question'), [ws?.breakdown])
   const attachments = ws?.attachments || []
   const dataFiles = useMemo(() => attachmentDataFiles(attachments), [attachments])
 

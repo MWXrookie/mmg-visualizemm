@@ -1,0 +1,76 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "MMG 大学自学 · 建模流程",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "legend": { "mode": "hidden" },
+    "views": [
+      {
+        "id": "read-and-plan",
+        "label": "从自己的题目开始",
+        "focus": ["problem", "abstract", "model"],
+        "note": "粘贴或上传题干，按需添加数据附件，也可以继续已保存的题目。先选一个小问，写出目标、已知条件和疑问，再确认变量、约束、假设与候选方法。"
+      },
+      {
+        "id": "compute-and-check",
+        "label": "用代码检验模型",
+        "focus": ["model", "solve", "verify"],
+        "note": "把学生确认的方案记入拆解块。自己写代码或按需生成草稿，检查后在浏览器内运行 Python。根据题型选用手算小例、实测对照、约束核对、基线或参数扰动。"
+      },
+      {
+        "id": "interpret-and-revise",
+        "label": "解释结果并带证据回改",
+        "focus": ["model", "solve", "verify", "apply", "revise"],
+        "note": "代码报错时先检查实现并重跑。得到结果后，若发现数据、假设或模型问题，写下证据并修订。回应原小问时，交代结果的单位、适用条件和局限。"
+      }
+    ]
+  },
+  "lanes": [
+    { "id": "plan", "label": "读题与建模" },
+    { "id": "compute", "label": "求解、检验与解释" },
+    { "id": "revision", "label": "依据证据修订" }
+  ],
+  "mainPath": ["problem", "abstract", "model", "solve", "verify", "apply"],
+  "semanticChecks": {
+    "allowedRoots": ["problem"],
+    "allowedTerminals": ["apply"],
+    "requiredEdges": [{ "from": "verify", "to": "revise" }, { "from": "revise", "to": "model" }]
+  },
+  "nodes": [
+    { "id": "problem", "lane": "plan", "col": 0, "type": "frontend", "label": "载入实际问题", "sublabel": "导入自己的题 · 续学", "width": 132, "height": 64 },
+    { "id": "abstract", "lane": "plan", "col": 1, "type": "frontend", "label": "抽象成数学问题", "sublabel": "选小问 · 写目标与约束", "width": 146, "height": 64 },
+    { "id": "model", "lane": "plan", "col": 2, "type": "frontend", "label": "建立模型", "sublabel": "列假设 · 比较并选方法", "width": 136, "height": 64 },
+    { "id": "solve", "lane": "compute", "col": 3, "type": "frontend", "label": "编程求解", "sublabel": "编辑代码 · 浏览器运行", "width": 136, "height": 64 },
+    { "id": "verify", "lane": "compute", "col": 4, "type": "frontend", "label": "检验结果", "sublabel": "查约束 · 对照 · 比参数", "width": 136, "height": 64 },
+    { "id": "apply", "lane": "compute", "col": 5, "type": "frontend", "label": "回到实际", "sublabel": "回应小问 · 解释局限", "width": 138, "height": 64 },
+    { "id": "revise", "lane": "revision", "col": 2, "type": "frontend", "label": "定位偏差并修订", "sublabel": "核对数据、假设和方法", "width": 136, "height": 64 }
+  ],
+  "edges": [
+    { "id": "scope", "from": "problem", "to": "abstract", "label": "圈定小问", "role": "main" },
+    { "id": "formulate", "from": "abstract", "to": "model", "label": "定义量与关系", "role": "main" },
+    { "id": "execute", "from": "model", "to": "solve", "label": "落实为代码", "role": "main", "fromSide": "right", "toSide": "top" },
+    { "id": "test", "from": "solve", "to": "verify", "label": "拿结果核对", "role": "main" },
+    { "id": "explain", "from": "verify", "to": "apply", "label": "用证据作答", "role": "main" },
+    { "id": "investigate", "from": "verify", "to": "revise", "label": "发现偏差", "variant": "dashed", "role": "branch" },
+    { "id": "rebuild", "from": "revise", "to": "model", "label": "带依据回建模", "variant": "dashed", "role": "return" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "先拿一个小问做完整",
+      "items": ["从目标、已知条件和疑问起步。", "记下关键假设和选用方法的理由。"]
+    },
+    {
+      "dot": "violet",
+      "title": "三台各尽其用",
+      "items": ["读题台核对题干和附件，建模台记录思路。", "编程台编辑和运行代码，查看输出与图表。"]
+    },
+    {
+      "dot": "emerald",
+      "title": "按问题选择检验",
+      "items": ["用手算小例、观测、约束或基线对照。", "程序报错先修实现；模型偏差带证据回改。"]
+    }
+  ]
+}

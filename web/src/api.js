@@ -1,11 +1,12 @@
 /** 后端 API 封装 */
 import { buildAttachmentContext } from './lib/attachmentContext.js'
 
-async function post(path, body) {
+async function post(path, body, signal) {
   const res = await fetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal,
   })
   const json = await res.json().catch(() => ({}))
   if (!res.ok || json.ok === false) {
@@ -26,21 +27,21 @@ export function testKey(settings) {
   })
 }
 
-export function chat(settings, messages) {
+export function chat(settings, messages, { signal } = {}) {
   return post('/api/chat', {
     baseUrl: settings.baseUrl,
     apiKey: settings.apiKey,
     model: settings.model,
     proxyUrl: settings.proxyUrl || '',
     messages,
-  })
+  }, signal)
 }
 
 /**
  * SSE 流式对话：边收边回调 onDelta(累计内容)，结束时回调 onFinish(完成原因)，返回最终完整内容。
  * 失败时抛出 Error（含 provider 的错误信息），调用方可降级为非流式重试。
  */
-export async function streamChat(settings, messages, { onDelta, onFinish } = {}) {
+export async function streamChat(settings, messages, { onDelta, onFinish, signal } = {}) {
   // 兜底超时：推理模型思考+生成可能较久；服务端 300s，前端多留余量
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 330000)
@@ -56,11 +57,11 @@ export async function streamChat(settings, messages, { onDelta, onFinish } = {})
         proxyUrl: settings.proxyUrl || '',
         messages,
       }),
-      signal: ctrl.signal,
+      signal: signal ? AbortSignal.any([signal, ctrl.signal]) : ctrl.signal,
     })
   } catch (e) {
     clearTimeout(timer)
-    if (e.name === 'AbortError') throw new Error('请求超时：模型思考或生成时间过长，请重试')
+    if (e.name === 'AbortError' && !signal?.aborted) throw new Error('请求超时：模型思考或生成时间过长，请重试')
     throw e
   }
   if (!res.ok) {
