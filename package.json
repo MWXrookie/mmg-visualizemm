@@ -22,7 +22,7 @@
     "generate:card-library": "node scripts/generate/card-library.mjs",
     "generate:golden-fixtures": "node scripts/generate/golden-original-fixtures.mjs",
     "generate:golden-open-data": "node scripts/generate/golden-open-data-fixtures.mjs",
-    "check:syntax": "node --check server/index.js && node --check server/knowledge.js && node --check server/upstream.js",
+    "check:syntax": "node -e \"const fs=require('node:fs');const {spawnSync}=require('node:child_process');const {join}=require('node:path');const files=fs.readdirSync('server').filter(name=>name.endsWith('.js')).sort();if(!files.length){console.error('no server/*.js files');process.exit(1)}for(const name of files){const file=join('server',name);console.log('check '+file);const result=spawnSync(process.execPath,['--check',file],{stdio:'inherit'});if(result.status)process.exit(result.status)}\"",
     "check": "npm run test && npm run check:syntax && npm run build",
     "start": "node --use-system-ca server/index.js",
     "dev": "concurrently -n WEB,SRV -c blue,green \"npm:dev:web\" \"npm:dev:server\""
@@ -30,7 +30,7 @@
   "dependencies": {
     "dompurify": "^3.4.14",
     "exceljs": "^4.4.0",
-    "express": "^4.21.2",
+    "express": "^4.22.3",
     "katex": "^0.18.4",
     "marked": "^18.0.11",
     "pdf-parse": "^2.4.5",

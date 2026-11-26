@@ -6,7 +6,7 @@
 
 | 包 | 版本 | 许可 | 用途 |
 |----|------|------|------|
-| express | 4.22.2 | MIT | HTTP 服务 |
+| express | 4.22.3 | MIT | HTTP 服务 |
 | exceljs | 4.4.0 | MIT | Excel 解析 |
 | pdf-parse | 2.4.5 | Apache-2.0 | PDF 文本提取 |
 
