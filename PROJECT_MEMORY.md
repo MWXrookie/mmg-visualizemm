@@ -90,7 +90,7 @@
 
 2026-11-26 思路整理台前端体验：对外名称统一为「思路整理台」。右侧编辑单张卡片。空画布有可关闭的三步引导。小问识别覆盖任务、括号编号和带任务语气的「1.」。Markdown 导出包含小问原文和上下游。分区标题使用 `--display`。多上游卡片按最深上游分列。路由级懒加载后主 JS 约 201 kB。
 
-`thoughtBoard` 随工作区保存。提交前会把过长的小墨对话截到 2MB 以内，并提示较早的记录没有写入；若服务端仍返回 413，则去掉白板字段后再保存题目和卡片。结构为 `{ version: 1, rootPosition, sourcePositions, hiddenQuestions, panel, messages, kcQuery, focusedQuestionId, inputMode }`。未确认草稿仍只在 sessionStorage。GET 返回对象时用它恢复；字段缺失或为 null 时先读本机旧键，有内容再迁移。备份导出和导入沿用服务端返回的 `thoughtBoard`。旧服务端丢弃该字段时，保存仍视为成功。
+`thoughtBoard` 随工作区保存。提交前会把过长的小墨对话截到 2MB 以内，并提示较早的记录没有写入；若服务端仍返回 413，则去掉白板字段后再保存题目和卡片。结构为 `{ version: 1, rootPosition, sourcePositions, hiddenQuestions, panel, messages, kcQuery, focusedQuestionId, inputMode }`。未确认草稿仍只在 sessionStorage。GET 返回对象时用它恢复；字段缺失或为 null 时先读本机旧键，有内容再迁移。备份导出和导入沿用服务端返回的 `thoughtBoard`。旧服务端丢弃该字段时，保存仍视为成功。局域网访问时，`/api` 请求（含离开页面的 keepalive fetch 与同步 XHR）在 `sessionStorage` 有 `mmg_lan_token` 时带 `Authorization: Bearer`；401 弹出访问口令框后重试，离页保存不弹框。
 
 ### 已完成的阶段基础
 

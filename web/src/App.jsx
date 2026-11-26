@@ -3,7 +3,7 @@ import Settings from './pages/Settings.jsx'
 import LearningEntry from './pages/LearningEntry.jsx'
 import { loadSettings, loadTheme, saveTheme, getCurrentWsId, setCurrentWsId } from './store.js'
 import { loadWorkspace, saveWorkspace, listWorkspaces, deleteWorkspace, exportWorkspaceBackup, importWorkspaceBackup } from './api.js'
-import { apiFetch, warningsFromHealth } from './lib/apiClient.js'
+import { apiFetch, unloadWorkspace, warningsFromHealth } from './lib/apiClient.js'
 import { THOUGHT_BOARD_TOO_LARGE_MESSAGE, THOUGHT_BOARD_TRUNCATED_MESSAGE, fitThoughtBoard } from './lib/thoughtBoardState.js'
 import { IconBook, IconCompass, IconCode, IconHome, IconGear, IconSun, IconMoon, IconEdit, IconTrash, IconMenu, IconClose } from './components/Icons.jsx'
 
@@ -75,30 +75,7 @@ async function sendWorkspace(payload, unloading) {
     }
     return
   }
-  const headers = { 'Content-Type': 'application/json' }
-  try {
-    const token = sessionStorage.getItem('mmg_lan_token')
-    if (token) headers.Authorization = `Bearer ${token}`
-  } catch { /* 离页时读不到口令就按未登录发送。 */ }
-  if (new TextEncoder().encode(body).byteLength <= 60 * 1024) {
-    apiFetch('/api/workspaces', {
-      method: 'POST',
-      headers,
-      body,
-      keepalive: true,
-    }).catch((error) => console.warn('[persist] 离页保存失败：', error))
-    return
-  }
-  try {
-    const xhr = new XMLHttpRequest()
-    xhr.open('POST', '/api/workspaces', false)
-    xhr.setRequestHeader('Content-Type', 'application/json')
-    if (headers.Authorization) xhr.setRequestHeader('Authorization', headers.Authorization)
-    xhr.send(body)
-    if (xhr.status < 200 || xhr.status >= 300) console.warn('[persist] 离页保存失败：HTTP', xhr.status)
-  } catch (error) {
-    console.warn('[persist] 离页保存失败：', error)
-  }
+  unloadWorkspace(body)
 }
 
 /** 常规自动保存使用普通请求；仅 pagehide 使用 keepalive 或同步兜底。过长的小墨对话先截短；仍放不下时去掉白板再保存其余内容。 */

@@ -1690,6 +1690,7 @@ test('未确认草稿按工作区恢复，刷新不应用草稿且取消后不�
     await expect(block.locator('.step-method-field')).toHaveValue('A未确认方法\n保留换行')
     await expect(block.locator('.step-method-field')).toBeFocused()
     await page.reload()
+    await expect(modeling.locator('.thought-card').filter({ hasText: '原标题' })).toBeVisible()
     await expect(modeling.getByRole('complementary', { name: '编辑卡片' })).toHaveCount(0)
     await modeling.getByRole('button', { name: '编辑卡片', exact: true }).click()
     await expect(block.locator('.bk-idea')).toHaveValue('A未确认思路')
