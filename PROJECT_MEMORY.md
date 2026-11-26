@@ -83,6 +83,7 @@
 | D-008 | 开发计划按最多 5 小时的独立开发包执行 | 控制单次额度，保持多个项目可并行推进和可验收断点 |
 | D-009 | 赛前训练作为立项范围，真实数据分析与商业化作为有条件的后续探索 | 保证本次目标可验收，避免把未经验证的行业能力或收入写成当前成果 |
 | D-010 | 正式十题既是内部评测夹具，也是用户可浏览的学习范例；公开静态目录只含可再分发题干、附件和署名 | 用户需要直接查看范例，同时隔离评分资产和许可不明的兼容赛题 |
+| D-011 | 模型与 Embedding 出站默认只接受解析后的公网 http/https；本机或私网目标必须由 `MMG_ALLOW_PRIVATE_UPSTREAM` 或 `MMG_UPSTREAM_ALLOWLIST` 放行。链路本地和云元数据始终拒绝。请求里的代理必须与服务端代理一致或同样被放行。`GET /api/knowledge/stats` 不接受查询串中的 Key 或上游地址 | 服务监听 `0.0.0.0`，任意 `baseUrl` / `proxyUrl` 会变成面向局域网的 SSRF。公网 BYOK 保持可用，本机模型和本机代理改为显式选择 |
 
 完整决策与重新评估条件见[项目治理与文档规范](docs/00-项目治理/项目治理与文档规范.md)。
 
@@ -149,6 +150,8 @@
 
 2026-11-26 生产依赖安全修补：仍使用 Express 4，锁定 `express@4.22.3`、`body-parser@1.20.9`、`proxy-addr@2.0.8`、`qs@6.16.2`，并将 `brace-expansion` 升至 1.1.22 / 2.1.8。`npm audit --omit=dev` 不再有 high/critical。仍剩 DOMPurify 3.4.14 的 low（调用的是默认 `sanitize`，未使用 IN_PLACE、SAFE_FOR_TEMPLATES 或 XHTML）以及 exceljs 传递的 uuid moderate（非破坏性修复不存在；降到 exceljs 3.4.0 会破坏当前表格解析，未采用）。`check:syntax` 改为扫描 `server/*.js`，覆盖 `pdf-layout.js`。Node 24.22.3 上 `npm run check` 54/54、四个服务端文件语法检查和生产构建通过；Playwright 默认冒烟 37 通过，12 项真实 Pyodide 显式跳过。未改 API、信任边界或 Express 大版本。
 
+2026-11-26 出站 SSRF 防护：新增 `server/outbound-policy.js`，对话、流式、测试连接和 Embedding 在连接前拒绝非 http(s)、本机、私网、链路本地和云元数据目标；`MMG_ALLOW_PRIVATE_UPSTREAM` 与 `MMG_UPSTREAM_ALLOWLIST` 为显式放行。`GET /api/knowledge/stats` 不再接受查询串中的 Key 或上游地址。静态架构 PNG 仍是先前快照，信任边界文字已写入架构说明、JSON 和 HTML。当日 `npm run check` 为 65/65、语法检查与生产构建通过；该结果会过期，新会话须重跑。
+
 2026-10-02 交互优化v2.7已交付：O0–O5全部出口通过，本包提前交付。第七轮实际活动约18分钟，累计约74/300分钟；剩余约226分钟不继续消耗。旧修复包约92分钟单独保留。下一唯一动作：等待用户对交付的具体反馈，不自动开始第三包。最终check 35/35、默认浏览器10通过/10真实Pyodide显式跳过、diff通过；四桌面组合完整操作与22张截图/指南锚点核对完成。图表放大补齐Escape、Tab和焦点返回，替身不证明真实模型/Python/数学质量；大包/CDN限制保留。证据[最终交付](docs/04-质量/records/2026-10-02-optimization-round7.md)。
 
 2026-10-02 桌面开发包最终P5通过：P0至P5全部出口完成，累计实际约92/300分钟，本包提前结束。当前工作树npm run check 34/34及语法/构建、默认npm run test:browser 9/9、diff检查通过，10项显式真实Pyodide跳过；1280/1440深浅主题三台完整流程、确认/调参/刷新、图表弹窗、键盘与减少动态效果核对，最终17张截图与指南检查完成。guide.html补齐保存/确认/环境失败操作；设计说明与索引校准。模型、运行时与图表为替身，不代表真实模型或数值质量；已知大包/CDN依赖保留，未提交/发布。本包无未完成出口，后续mmg-2无新要求保持安静，不启动新包。证据：[最终交付](docs/04-质量/records/2026-10-02-desktop-round5.md)。
@@ -205,6 +208,7 @@
 - `scripts/` 只保留可重复使用的生成/评测入口；外部模型评测必须显式提供环境变量，不读取项目 `.env.local`，也不进入默认 CI。
 - 测试工作区和 RAG 必须使用独立临时目录，不能污染真实数据。
 - 普通局域网 HTTP 不是安全上下文，不能宣传 Key“始终加密”。
+- 模型、Embedding 和代理的出站目标默认拒绝本机、私网、链路本地和云元数据。放行本机模型或本机代理需要 `MMG_ALLOW_PRIVATE_UPSTREAM=1` 或 `MMG_UPSTREAM_ALLOWLIST`。`GET /api/knowledge/stats` 不接受查询串里的 Key、Base URL 和代理。宽泛放行私网后，不要把服务暴露到不受信任的局域网。
 - 架构、数据格式、信任边界变化时，必须同步架构文档、架构 JSON/HTML/PNG、测试和记忆。
 - 仓库可能存在尚未提交的用户或 AI 变更；开始工作前先检查 `git status`，不得覆盖或清除不属于当前任务的改动。
 

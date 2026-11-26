@@ -104,7 +104,7 @@ async function callChat({ baseUrl, apiKey, model, messages, maxTokens, proxyUrl 
     })
     res = { ok: upstream.statusCode >= 200 && upstream.statusCode < 300, status: upstream.statusCode, text: await responseText(upstream) }
   } catch (e) {
-    const err = e.code === 'BAD_CONFIG' || e.code === 'PROXY_BAD_CONFIG'
+    const err = e.code === 'BAD_CONFIG' || e.code === 'PROXY_BAD_CONFIG' || e.code === 'UPSTREAM_BLOCKED'
       ? e
       : formatNetworkError(e, url)
     throw err
@@ -275,7 +275,7 @@ app.post('/api/chat/stream', async (req, res) => {
     res.write(`data: ${JSON.stringify({ done: true, finishReason })}\n\n`)
     res.end()
   } catch (e) {
-    const error = e.code === 'MODEL_ERROR' || e.code === 'INVALID_KEY' || e.code === 'QUOTA' || e.code === 'NOT_FOUND' || e.code === 'BAD_CONFIG' || e.code === 'PROXY_BAD_CONFIG'
+    const error = e.code === 'MODEL_ERROR' || e.code === 'INVALID_KEY' || e.code === 'QUOTA' || e.code === 'NOT_FOUND' || e.code === 'BAD_CONFIG' || e.code === 'PROXY_BAD_CONFIG' || e.code === 'UPSTREAM_BLOCKED'
       ? e
       : formatNetworkError(e, url)
     if (!res.headersSent) {
@@ -834,11 +834,24 @@ app.get('/api/health', (_req, res) => {
 /* ---------- 知识库（RAG） ---------- */
 import { ensureKnowledgeBase, searchKnowledge, knowledgeStats } from './knowledge.js'
 
-// 知识库状态：论文数 / 分块数（按类型）/ embedding 来源
-app.get('/api/knowledge/stats', async (_req, res) => {
+function queryText(value) {
+  if (Array.isArray(value)) return value.map((item) => String(item ?? '')).join(',')
+  return String(value ?? '')
+}
+
+// 知识库状态：论文数 / 分块数（按类型）/ embedding 来源。
+// 不接受查询串中的密钥或上游地址：密钥不能进入 URL，查询串里的 baseUrl / proxyUrl 也不能发起出站请求。
+app.get('/api/knowledge/stats', async (req, res) => {
+  const suppliedInUrl = ['apiKey', 'baseUrl', 'proxyUrl'].filter((key) => queryText(req.query[key]).trim())
+  if (suppliedInUrl.length > 0) {
+    return res.status(400).json({
+      ok: false,
+      code: 'UPSTREAM_BLOCKED',
+      message: '知识库状态不接受网址中的 apiKey、baseUrl 或 proxyUrl。密钥不能放在 URL 里；Embedding 请使用服务端环境变量，或通过 POST /api/knowledge/search 的请求体提交。',
+    })
+  }
   try {
-    const provider = { baseUrl: String(_req.query.baseUrl || ''), apiKey: String(_req.query.apiKey || ''), embedModel: String(_req.query.embedModel || ''), proxyUrl: String(_req.query.proxyUrl || '') }
-    const kb = await ensureKnowledgeBase(provider)
+    const kb = await ensureKnowledgeBase()
     res.json({ ok: true, ...knowledgeStats(), vecsReady: !!kb && kb.vecs.length === kb.chunks.length })
   } catch (e) {
     res.status(500).json({ ok: false, message: `知识库状态获取失败：${e.message}` })

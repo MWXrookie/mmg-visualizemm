@@ -112,7 +112,8 @@
       "tag": "Node.js :3088",
       "sources": [
         { "path": "server/index.js", "line": 48 },
-        { "path": "server/upstream.js", "line": 288 }
+        { "path": "server/upstream.js", "line": 270 },
+        { "path": "server/outbound-policy.js", "line": 1 }
       ]
     },
     {
@@ -338,7 +339,8 @@
       "items": [
         "安全上下文中 API Key 使用 AES-GCM；局域网 HTTP 会明文降级并告警",
         "服务端按请求中转，不持久化 Key；未选表格仍只发送前三行，已选小表限制行列和字节数",
-        "Pyodide 代码执行不离开浏览器"
+        "Pyodide 代码执行不离开浏览器",
+        "模型中继默认只连接解析后的公网 http/https；本机或内网目标需环境变量显式放行"
       ]
     }
   ]

@@ -66,7 +66,10 @@ export async function streamChat(settings, messages, { onDelta, onFinish } = {})
   if (!res.ok) {
     clearTimeout(timer)
     const json = await res.json().catch(() => ({}))
-    throw new Error(json.message || `请求失败（HTTP ${res.status}）`)
+    const err = new Error(json.message || `请求失败（HTTP ${res.status}）`)
+    err.code = json.code || ''
+    err.status = res.status
+    throw err
   }
   if (!res.body) {
     clearTimeout(timer)

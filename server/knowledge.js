@@ -23,7 +23,10 @@ const DATA_DIR = process.env.MMG_DATA_DIR
   ? path.resolve(process.env.MMG_DATA_DIR)
   : path.join(__dirname, '..', 'data')
 const CACHE_FILE = path.join(DATA_DIR, 'knowledge_cache.json')
-const ENV_FILE = path.join(__dirname, '.env.local')
+// MMG_EMBED_ENV_FILE 只用于测试隔离，避免读到开发者自己的 server/.env.local。
+const ENV_FILE = process.env.MMG_EMBED_ENV_FILE
+  ? path.resolve(process.env.MMG_EMBED_ENV_FILE)
+  : path.join(__dirname, '.env.local')
 const FORCE_LOCAL_EMBEDDING = process.env.MMG_FORCE_LOCAL_EMBEDDING === '1'
 
 /* ---------- 读取本地 embedding 配置（不硬编码 key） ---------- */
@@ -144,13 +147,23 @@ function localEmbed(text) {
  * 生成 embedding：优先千问 API（.env.local），失败降级本地。
  * 传入的 provider（浏览器 settings）作为第二优先（用户可在产品设置里配）。
  */
+const rejectedEmbedTargets = new Set()
+
+function rememberRejectedEmbedTarget(key) {
+  if (rejectedEmbedTargets.size > 64) rejectedEmbedTargets.clear()
+  rejectedEmbedTargets.add(key)
+}
+
 async function embedText(text, provider = {}) {
-  // 优先级：本地 .env.local 千问 > 浏览器传入 provider > 本地哈希
+  // 优先级：本地 .env.local 千问 > 浏览器传入 provider > 本地哈希。
+  // 被策略拒绝的地址只检查一次，避免建库时对同一内网目标重复解析。
   const candidates = []
   if (!FORCE_LOCAL_EMBEDDING && localCfg.apiKey && localCfg.baseUrl) candidates.push({ baseUrl: localCfg.baseUrl, apiKey: localCfg.apiKey, model: localCfg.embedModel, proxyUrl: localCfg.proxyUrl })
   if (!FORCE_LOCAL_EMBEDDING && provider.baseUrl && provider.apiKey) candidates.push({ baseUrl: provider.baseUrl, apiKey: provider.apiKey, model: provider.embedModel, proxyUrl: provider.proxyUrl })
   for (const c of candidates) {
     const base = (c.baseUrl || '').trim().replace(/\/+$/, '').replace(/\/chat\/completions$/, '')
+    const targetKey = `${base}\n${c.proxyUrl || ''}`
+    if (rejectedEmbedTargets.has(targetKey)) continue
     try {
       const res = await requestUpstream({
         url: `${base}/embeddings`,
@@ -166,7 +179,9 @@ async function embedText(text, provider = {}) {
         const vec = json?.data?.[0]?.embedding
         if (Array.isArray(vec) && vec.length > 0) return { vector: vec, source: 'api' }
       }
-    } catch { /* try next */ }
+    } catch (error) {
+      if (error?.code === 'UPSTREAM_BLOCKED' || error?.code === 'PROXY_BAD_CONFIG') rememberRejectedEmbedTarget(targetKey)
+    }
   }
   return { vector: localEmbed(text), source: 'local' }
 }

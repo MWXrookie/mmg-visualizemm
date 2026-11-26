@@ -135,13 +135,41 @@ EMBED_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 
 ### 网络代理（可选）
 
-如果当前网络无法直连模型服务，可在「模型设置」中填写 HTTP/HTTPS 代理，例如：
+如果当前网络无法直连模型服务，推荐在 `server/.env.local` 配置 HTTP/HTTPS 代理，然后重启服务：
 
-```text
-http://127.0.0.1:7890
+```bash
+HTTPS_PROXY=http://127.0.0.1:7890
 ```
 
-代理地址会随本地配置保存，并用于测试、对话、流式生成和知识库请求。也可以在 `server/.env.local` 中配置 `HTTPS_PROXY`、`HTTP_PROXY` 或 `ALL_PROXY`，重启服务后统一生效；设置页填写的代理优先于环境变量。代理不可用时，页面会显示代理连接的具体失败原因。
+`HTTP_PROXY`、`ALL_PROXY` 同样有效；`NO_PROXY` 可排除不走代理的主机。这样配置的代理由服务端持有，可以指向本机代理软件。
+
+设置页里的「网络代理」仍会随浏览器配置提交。它只有在下面任一条件成立时才会用于出站：
+
+- 与上面某个环境变量是同一个协议、主机和端口（请求里另写的代理账号会被忽略，沿用服务端配置）；
+- 或服务端已经用 `MMG_ALLOW_PRIVATE_UPSTREAM` / `MMG_UPSTREAM_ALLOWLIST` 放行该代理主机。
+
+未放行时，测试连接会得到 **400**，页面直接显示拒绝原因，而不会静默改走别的地址。
+
+### 出站地址限制
+
+服务监听所有网卡。对话、测试连接、流式输出和知识库 Embedding 若直接信任请求里的 `baseUrl` / `proxyUrl`，局域网里的其他程序就能让服务器去访问本机、内网或云元数据地址。
+
+默认只允许 **http/https**，并在 DNS 解析之后拒绝本机、私网、链路本地、云元数据和其它保留地址。解析结果里只要混有这类地址，整个主机名都会被拒绝；真正发起连接时只使用这次检查通过的地址。上游返回的 3xx 不会被继续跟随。
+
+公网 OpenAI 兼容服务（OpenAI、DeepSeek、通义、月之暗面、智谱等）不需要额外配置。要连接本机模型（如 Ollama、LM Studio）或在设置页填写本机代理时，在 `server/.env.local` 或启动环境中显式打开其中一种方式后重启：
+
+```bash
+# 放行本机、私网和 IPv6 本地地址。链路本地与云元数据仍然拒绝。
+# 服务若能从局域网访问，这样会重新允许访问同网段其他主机，更稳妥的是下面的名单。
+MMG_ALLOW_PRIVATE_UPSTREAM=1
+
+# 只放行列出的主机。可以写可选端口；不写端口则该主机的任意端口都可使用。
+MMG_UPSTREAM_ALLOWLIST=127.0.0.1,localhost
+```
+
+`MMG_ALLOW_PRIVATE_UPSTREAM` 接受 `1`、`true`、`yes`、`on`。名单多项用英文逗号分隔，例如 `127.0.0.1:11434,ollama.local`。
+
+被拒绝时接口返回 **400** 和 `code: "UPSTREAM_BLOCKED"`，`message` 为可直接展示的中文说明。`GET /api/knowledge/stats` 不再接受查询串中的 `apiKey`、`baseUrl` 或 `proxyUrl`（密钥不能出现在 URL 里）。知识检索若收到未放行的 Embedding 地址，会跳过该地址并继续使用本地哈希向量，不会向该地址发起连接。
 
 ---
 
