@@ -1,61 +1,59 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { marked } from 'marked'
 import { streamChat, chat, attachSummary, retrieveKnowledge, formatKnowledgeContext } from '../api.js'
-import { KnowledgeLibrary, KnowledgeCard, findConceptMatches, CARD_BY_ID, getCardWorkflow } from './Cards.jsx'
-import MD, { sanitize } from '../components/MD.jsx'
+import { loadKnowledgeCards } from '../lib/loadKnowledgeCards.js'
+import MD from '../components/MD.jsx'
 import AttachmentList from '../components/AttachmentList.jsx'
-import ResizeHandle from '../components/ResizeHandle.jsx'
-import { IconMenu, IconDownload, IconArrowLeft, IconFile, IconTable, IconSparkles, IconLayers, IconSearch, IconEdit, IconChevronRight, IconChevronDown, IconLink, IconClose, IconSend, IconClock, IconPlus } from '../components/Icons.jsx'
-import { EXPERT_CORE, SANITY_CHECK } from '../lib/modelingExpert.js'
+import { IconMenu, IconDownload, IconArrowLeft, IconFile, IconTable, IconSparkles, IconLayers, IconSearch, IconEdit, IconChevronRight, IconLink, IconClose, IconSend, IconPlus, IconTrash } from '../components/Icons.jsx'
+import { EXPERT_CORE } from '../lib/modelingExpert.js'
 import ProblemTextView from '../components/ProblemTextView.jsx'
+import ThoughtBoard from './ThoughtBoard.jsx'
+import ThoughtQuoteFollowUp from './ThoughtQuoteFollowUp.jsx'
+import { buildThoughtProblem, canLinkThoughtNode, focusThoughtQuestion, formatThoughtExport, thoughtAncestors, thoughtParents, THOUGHT_AREAS, THOUGHT_NODE_TYPES, withThoughtParents } from '../lib/thoughtProblem.js'
+import { cacheThoughtBoard, emptyThoughtBoard, normalizeThoughtBoard, readLegacyThoughtBoard, resolveThoughtBoard } from '../lib/thoughtBoardState.js'
 
-const MODIFY_SYSTEM =
-  '你是数学建模思路梳理助手，采用**苏格拉底式引导**：新手需要自己说出思路才能真正学会建模。用户在「建模思路梳理台」上工作，每个拆解块对应一个问题，包含：稳定块 id、标题、可选题目依据(quote)、一句话思路(idea)、步骤 steps[{action,method}]。action 是“要怎么做”，method 是“怎么实现”，可以写方法、数据、计算过程或判断标准。\n' +
-  '用户会发来一句中文消息，请先判断意图：\n' +
-  '【A. 寻求思路/方法】（如「怎么建模」「帮我梳理一下」「这个块该怎么做」「下一步怎么办」）→ 进入**引导对话**，严格按这个节奏，一次只推进一步：\n' +
-  '  第1步：**只指出题目信号，不列任何方法**。比如"我注意到题目有分组数据+时间维度+多个指标"——用一两句点出信号，然后**反问 1-2 个问题**（如"你打算把哪一项作为你要预测/优化的目标？""这些分组之间你怀疑有差异吗？"）。\n' +
-  '  第2步：**等用户回答**。根据用户的回答，**只给出对应那一个方向的方法建议**（一次只给一个，不列一整套），并说明为什么适合。\n' +
-  '  第3步：再反问下一个关键问题，循环推进。\n' +
-  '  【节奏铁律】① 不要一次性给出"基础版/提高版/冲优版"或一长串方法列表——用户没回答前只反问、不列方法。② 每个关键决策（选什么方法、怎么分组、怎么验证）都必须由用户说出或明确选择，你只提供信号、倾向与理由。③ 连续追问时一次只问 1-2 个问题。\n' +
-  '  【上文追问】如果用户问"刚才说的"、"第一个知识卡片"、"上面的噪声/滑块"、"这个是什么意思"等，先根据对话历史和【当前对话中已展示的知识卡片】直接解释所指内容，不要重新猜测卡片来源，也不要把演示里的概念替换成论文库里的另一个同名概念。解释类追问不必强行反问。\n' +
-  '  【沉淀为拆解块】当一轮引导后用户思路已明确（用户说出了方法/步骤），**主动询问**："要把这个思路整理成拆解块吗？"用户同意或直接说"写进拆解块"后，**切换为输出 JSON**（格式见意图 B，blockId 填稳定块 id），把用户确认的思路沉淀为 title/quote/idea/steps。\n' +
-  '【B. 明确修改/新建拆解块】（如「拆解块2 改为…」「补充数据步骤」「标题改成…」「写进拆解块」「把思路整理成拆解块」）→ 直接执行：判断目标拆解块，优先使用上下文中的稳定块 id；如果用户按人类编号指代，也将对应的稳定块 id 原样填入 blockId。新建块时 blockId 填 "new"。给出修改后的完整 title/quote/idea/steps，然后输出 JSON：\n' +
-  '{"blockId":"b1720000000-0","patch":{"title":"新标题","quote":"可选题目依据","idea":"一句话思路","steps":[{"action":"要怎么做","method":"怎么实现"}]}}\n' +
-  '输出要求：这是用户下达的**执行指令**（不是思路引导请求），直接执行即可，**不要反问、不要引导、不要解释思路**。先可以写一句话确认你理解了指令（如「好的，我来补充数据处理步骤」），紧接着输出上面的 JSON 对象（可以放在 ```json 代码块里，也可以裸输出）。严禁输出除此之外的其它内容，严禁用自然语言描述修改结果（那会占满输出、导致 JSON 被截断）。\n' +
-  'JSON 要求：patch 完整（title/quote/idea/steps 都要给；idea 必须是一句话，不要 Markdown 长文；steps 可为空数组）；全部中文；blockId 必须使用上下文提供的稳定 id 或 "new"，不要自行改写稳定 id。示例：用户说「把拆解块2 补充数据步骤」→ 使用上下文中拆解块2的稳定 id，输出 {"blockId":"对应稳定id","patch":{"title":"数据处理","quote":"清洗并构造特征","idea":"先清洗并整理附件数据，再构造可供模型使用的特征。","steps":[{"action":"读取并检查数据","method":"用 pandas 读取附件，检查字段、缺失值和重复行。"},{"action":"清洗缺失值","method":"按字段含义选择删除或填补，并记录处理数量。"}]}}\n' +
-  EXPERT_CORE
+const TUTOR_NAME = '小墨'
+
+
+const SECRETARY_SYSTEM = [
+  '你是小墨，数学建模工作台里可以随时提问的秘书。跟随用户当前的话题，也可以回答与当前题目无关的问题。',
+  '概念、术语、推导和一般事实可以直接解释。也可以回顾对话、提取要点、比较用户已有想法的依据，或帮忙归纳和润色。不需要在每个回答后追问。',
+  '用户在决定当前建模问题的方案、变量、假设或验证方向时，给出观察线索或适用条件，必要时问一个开放式问题。不要列可选方案，不要给出推荐选项，也不要代替用户选定答案。',
+  '用自然语言回复。题干、附件、节点、知识卡和历史是参考上下文。节点的记录与编辑由用户在思路整理台完成，不生成修改指令、节点补丁或整套卡片关系。',
+  '针对节点的提问中，每条上游连线是用户标记的关系。区分已知条件、暂时假设和检验记录。上游如果有多个，分别说明它们与当前想法的关系；保留冲突和不确定性，不把假设当作已经验证的事实。',
+].join('\n')
 
 const IDEA_GEN_GUIDE =
   '你是数学建模思路引导助手，采用**苏格拉底式提问法**——让用户自己说出思路，而不是替他想好完整方案。\n' +
-  '用户正在编辑一个拆解块，请根据标题与题目依据：\n' +
+  '用户正在编辑一张卡片，请根据标题与题目依据：\n' +
   '1) 先提出 2-3 个关键引导问题（例如：目标到底是什么？有哪些约束/限制？附件数据能支撑哪些分析？），标为「请你先想清楚」\n' +
   '2) 最后给出一句**思路草案**，用一句话概括方向，关键处留空或用「…」让用户自己填。\n' +
   '只输出这一句话，不要 Markdown、不要标题、不要解释文字，80 字以内，全部中文。\n' +
   EXPERT_CORE
 
 const IDEA_GEN_DIRECT =
-  '你是数学建模思路梳理助手。用户正在编辑一个拆解块，需要你写一句可直接使用的「思路」。\n' +
-  '根据拆解块的标题与题目依据，概括解决方向以及关键判断。\n' +
+  '你是数学建模思路整理助手。用户正在编辑一张卡片，需要你写一句可直接使用的内容。\n' +
+  '根据卡片的标题与题目依据，概括解决方向以及关键判断。\n' +
   '要求：只输出一句中文，不要 Markdown、不要标题、不要任何解释文字，控制在 80 字以内。'
-
-function extractJson(text) {
-  if (!text) return null
-  let t = text.trim()
-  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/)
-  if (fence) t = fence[1].trim()
-  const start = t.indexOf('{')
-  const end = t.lastIndexOf('}')
-  if (start >= 0 && end > start) {
-    try { return JSON.parse(t.slice(start, end + 1)) } catch { /* fallthrough */ }
-  }
-  try { return JSON.parse(t) } catch { return null }
-}
 
 const now = () => new Date().toTimeString().slice(0, 5)
 
 function clipContext(text, max = 1800) {
   const value = String(text || '').trim()
   return value.length > max ? `${value.slice(0, max)}…` : value
+}
+
+function buildTutorWorkspaceContext(problemText, node, nodes, attachments) {
+  const scopeNodes = node ? [node, ...thoughtAncestors(nodes, [node.id])] : nodes
+  const included = new Set(scopeNodes.map(item => item.id))
+  const blocksDesc = scopeNodes.map(b => {
+    const parents = thoughtParents(b).filter(id => id === null || included.has(id))
+    return `【${THOUGHT_NODE_TYPES[b.kind]?.label || '思路'}｜稳定id=${b.id}｜直接上游=${parents.map(id => id ?? '题目根节点').join('、') || '无'}】标题：${b.title}\n题目依据：${b.quote || '（无）'}\n内容：${b.idea || '（无）'}\n步骤：${b.steps.map(s => `要怎么做：${s.action}；怎么实现：${s.method}`).join('；') || '（无）'}`
+  }).join('\n\n')
+  const summary = attachSummary(attachments)
+  const problemCtx = problemText.trim() ? `【完整题目】\n${problemText}\n\n` : ''
+  const scope = node ? `【本轮针对的节点】${node.title}（稳定id=${node.id}）。用户说“这个思路”时指此节点。\n\n` : ''
+  const heading = node ? '当前节点与沿实际连线找到的上游' : '当前思路整理台'
+  return `${problemCtx}${scope}${heading}：\n${blocksDesc || '（暂无节点）'}\n\n${summary ? `数据附件摘要：\n${summary}\n\n` : ''}`
 }
 
 /** 把已显示的对话转成下一轮请求的标准 role，保留用户的指代上下文。 */
@@ -74,7 +72,8 @@ function buildConversationHistory(messages, maxMessages = 12, maxChars = 9000) {
 }
 
 /** 把已经展示过的卡片原文传回模型，支持“第一个卡片/上面的噪声”这类追问。 */
-function buildCardContext(matchesByMessage, currentText = '') {
+function buildCardContext(matchesByMessage, currentText = '', library) {
+  if (!library?.CARD_BY_ID) return ''
   const seen = new Set()
   const ids = []
   for (const matches of matchesByMessage || []) {
@@ -85,7 +84,7 @@ function buildCardContext(matchesByMessage, currentText = '') {
       }
     }
   }
-  for (const match of findConceptMatches(currentText)) {
+  for (const match of library.findConceptMatches(currentText)) {
     if (!seen.has(match.id)) {
       seen.add(match.id)
       ids.push(match.id)
@@ -93,11 +92,10 @@ function buildCardContext(matchesByMessage, currentText = '') {
   }
   const selectedIds = ids.length > 8 ? [...ids.slice(0, 4), ...ids.slice(-4)] : ids
   const cards = selectedIds.map((id, index) => {
-    const card = CARD_BY_ID.get(id)
+    const card = library.CARD_BY_ID.get(id)
     if (!card) return ''
     const demoContext = [card.demoGuide, card.aiContext].filter(Boolean).join('；')
-    const workflow = getCardWorkflow(card)
-    return `【界面知识卡片 ${index + 1}】\n标题：${card.title}\n标签：${card.tag}\n一句话定义：${clipContext(card.definition || card.concept, 420) || '（无）'}\n小白批注：${clipContext(card.note, 420) || '（无）'}\n什么时候用：${clipContext(card.when, 420) || '（无）'}\n题目信号：${clipContext(workflow?.signal, 360) || '（无）'}\n第一步怎么做：${clipContext(workflow?.firstStep, 360) || '（无）'}\n怎么实现：${clipContext(workflow?.method, 420) || '（无）'}\n注意事项：${clipContext(card.cautions, 420) || '（无）'}\n演示说明：${clipContext(demoContext, 520) || '（卡片没有额外演示说明）'}\n来源摘要：${clipContext(card.sourceBrief, 260) || '（无）'}\n完整来源：${clipContext(card.src, 360) || '（无）'}`
+    return `【界面知识卡片 ${index + 1}】\n标题：${card.title}\n标签：${card.tag}\n一句话定义：${clipContext(card.definition || card.concept, 420) || '（无）'}\n概念解释：${clipContext(card.note, 420) || '（无）'}\n什么时候用：${clipContext(card.when, 420) || '（无）'}\n注意事项：${clipContext(card.cautions, 420) || '（无）'}\n互动示例：${clipContext(demoContext, 520) || '（卡片没有额外演示说明）'}\n来源摘要：${clipContext(card.sourceBrief, 260) || '（无）'}\n完整来源：${clipContext(card.src, 360) || '（无）'}`
   }).filter(Boolean)
   return cards.length
     ? `\n\n【当前对话中已展示的知识卡片（优先于外部检索）】\n${cards.join('\n\n')}\n【知识卡片上下文结束】`
@@ -108,18 +106,8 @@ function isCardFollowUp(text) {
   return /第[一二三四五六七八九十0-9]+个|上面|前面|刚才|这个|这里|你说的|知识卡片|噪声|滑块|展开|第一张|第二张/.test(text || '')
 }
 
-/** 读取面板宽度：仅接受带单位的合法 CSS 长度，防止旧版无单位值（如 600）导致网格塌陷 */
-function loadPanelW() {
-  try {
-    const raw = localStorage.getItem('mmg_panel_w_v1')
-    if (raw && /^(?:[0-9]+px|[0-9]+%)$/.test(raw)) return raw
-    if (raw) localStorage.removeItem('mmg_panel_w_v1')
-  } catch { /* ignore */ }
-  return '36%'
-}
-
-const MODELING_PANEL_STATE_KEY = 'mmg_modeling_panel_state_v1'
 const MODELING_DRAFT_KEY = 'mmg_modeling_draft_v1'
+const THOUGHT_GUIDE_KEY = 'mmg_thought_guide_dismissed_v1'
 
 function loadModelingDraft(wsId, blocks) {
   try {
@@ -133,31 +121,14 @@ function loadModelingDraft(wsId, blocks) {
   } catch { return null }
 }
 
-function loadModelingPanelState(wsId) {
-  if (!wsId) return null
-  try {
-    const raw = localStorage.getItem(`${MODELING_PANEL_STATE_KEY}:${wsId}`)
-    if (!raw) return null
-    const state = JSON.parse(raw)
-    return {
-      panel: state.panel === 'kc' ? 'kc' : 'chat',
-      msgs: Array.isArray(state.msgs) ? state.msgs : [],
-      kcQuery: typeof state.kcQuery === 'string' ? state.kcQuery : '',
-    }
-  } catch {
-    return null
+function boardPanel(board) {
+  return {
+    panel: board?.panel === 'kc' ? 'kc' : 'chat',
+    msgs: Array.isArray(board?.messages) ? board.messages : [],
+    kcQuery: typeof board?.kcQuery === 'string' ? board.kcQuery : '',
+    focusedQuestionId: board?.focusedQuestionId || null,
+    hiddenQuestions: Array.isArray(board?.hiddenQuestions) ? board.hiddenQuestions : [],
   }
-}
-
-function saveModelingPanelState(wsId, state) {
-  if (!wsId) return
-  try {
-    localStorage.setItem(`${MODELING_PANEL_STATE_KEY}:${wsId}`, JSON.stringify({
-      panel: state.panel,
-      msgs: state.msgs,
-      kcQuery: state.kcQuery,
-    }))
-  } catch { /* ignore local cache failures */ }
 }
 
 function normalizeStep(step) {
@@ -168,14 +139,19 @@ function normalizeStep(step) {
 }
 
 function normalizeBlock(block) {
-  return {
+  const { x, y } = block?.position || {}
+  return withThoughtParents({
     id: typeof block?.id === 'string' && block.id ? block.id : nid(),
-    title: typeof block?.title === 'string' ? block.title : '未命名拆解块',
+    title: typeof block?.title === 'string' ? block.title : '未命名卡片',
     quote: typeof block?.quote === 'string' ? block.quote : '',
     idea: typeof block?.idea === 'string' ? block.idea : (typeof block?.body === 'string' ? block.body : ''),
     steps: Array.isArray(block?.steps) ? block.steps.map(normalizeStep) : [],
     refs: Array.isArray(block?.refs) ? block.refs.filter((r) => typeof r === 'string') : [],
-  }
+    ...(Object.hasOwn(THOUGHT_NODE_TYPES, block?.kind) ? { kind: block.kind } : {}),
+    ...(Number.isSafeInteger(block?.questionNumber) && block.questionNumber > 0 ? { questionNumber: block.questionNumber } : {}),
+    ...(typeof block?.questionId === 'string' && block.questionId ? { questionId: block.questionId } : {}),
+    ...(Number.isFinite(x) && Number.isFinite(y) ? { position: { x, y } } : {}),
+  }, thoughtParents(block || {}))
 }
 
 function normalizeBlocks(raw) {
@@ -207,48 +183,125 @@ const nid = () => `b${Date.now()}-${uid++}`
 export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSidebar }) {
   const problemText = ws?.problemText || ''
   const attachments = ws?.attachments || []
-  const initialPanelState = useRef(loadModelingPanelState(ws?.id))
+  const initialBoard = useRef(resolveThoughtBoard(ws))
+  const initialPanelState = useRef(boardPanel(initialBoard.current))
   const [blocks, setBlocks] = useState([])
+  const problem = useMemo(() => buildThoughtProblem(problemText, ws?.problemSourceKind, ws?.problemPages), [problemText, ws?.problemSourceKind, ws?.problemPages])
+  const [typeMenu, setTypeMenu] = useState(undefined)
+  const [focusedQuestionId, setFocusedQuestionId] = useState(() => initialPanelState.current?.focusedQuestionId || null)
+  const boardActions = useRef(null)
+  const addNodeButton = useRef(null)
   const [blocksWsId, setBlocksWsId] = useState(null)
   const publishedBlocks = useRef(null)
   const [openSet, setOpenSet] = useState(() => new Set())
   const [panel, setPanel] = useState(() => initialPanelState.current?.panel || 'chat') // chat | kc
-  const [msgs, setMsgs] = useState(() => initialPanelState.current?.msgs || [])
+  const [history, setHistory] = useState(() => initialPanelState.current?.msgs || [])
+  const [hiddenQuestions, setHiddenQuestions] = useState(() => initialPanelState.current?.hiddenQuestions || [])
+  const [chatNodeId, setChatNodeId] = useState(null)
+  const [floating, setFloating] = useState(false)
+  const [selectedId, setSelectedId] = useState(null)
+  const [organizerOpen, setOrganizerOpen] = useState(false)
+  const [inspectorId, setInspectorId] = useState(null)
+  const organizerTrigger = useRef(null)
+  const organizerButton = useRef(null)
+  const organizerHeading = useRef(null)
+  const organizerSelect = useRef(null)
+  const deleteDialog = useRef(null)
+  const deleteTrigger = useRef(null)
+  const [removalId, setRemovalId] = useState(null)
+  const [requestNodeId, setRequestNodeId] = useState(undefined)
+  const floatingTrigger = useRef(null)
+  const pendingFirstNode = useRef(null)
+  const chatDrafts = useRef(new Map())
+  const activeChat = useRef(chatNodeId)
+  const incomingBlocks = useRef(null)
+  const msgs = useMemo(() => history.filter(message => (message.nodeId || null) === chatNodeId), [history, chatNodeId])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [streaming, setStreaming] = useState('') // AI 对话流式输出（实时显示，与 Workbench/Coding 一致）
   const [error, setError] = useState('')
-  const [preview, setPreview] = useState(null) // {targetId, isNew, patch}
+  const [preview, setPreview] = useState(null) // {patch}
   const [relateId, setRelateId] = useState(null)
   const [editingId, setEditingId] = useState(null)
   const [draft, setDraft] = useState(null)
   const [pendingEdit, setPendingEdit] = useState(null)
   const editSwitchDialog = useRef(null)
   const lastDraftInput = useRef(null)
-  const decompRef = useRef(null)
+  const boardMain = useRef(null)
   const removedBlockFocus = useRef(null)
   const [draftCacheOk, setDraftCacheOk] = useState(true)
   const draftSession = useRef(0)
   const [kcQuery, setKcQuery] = useState(() => initialPanelState.current?.kcQuery || '')
   const [ctxOpen, setCtxOpen] = useState(false)
-  const [panelW, setPanelW] = useState(loadPanelW)
+  const [knowledge, setKnowledge] = useState(null)
+  const [guideDismissed, setGuideDismissed] = useState(() => {
+    try { return localStorage.getItem(THOUGHT_GUIDE_KEY) === '1' } catch { return false }
+  })
+  const knowledgeRequest = useRef(null)
+  const layoutRef = useRef({
+    rootPosition: initialBoard.current.rootPosition,
+    sourcePositions: initialBoard.current.sourcePositions,
+    inputMode: initialBoard.current.inputMode,
+  })
+  const publishedBoard = useRef(JSON.stringify(initialBoard.current))
   const chatRef = useRef(null)
   const composerInput = useRef(null)
   const restoringPanelStateRef = useRef(false)
 
   const wsIdNow = ws?.id
+  const boardNodes = useMemo(() => [...problem.questions, ...(blocksWsId === wsIdNow ? blocks : [])], [problem.questions, blocksWsId, wsIdNow, blocks])
+  const hiddenSourceIds = useMemo(() => new Set(problem.questions.filter(node =>
+    hiddenQuestions.some(hidden => hidden.id === node.id && hidden.quote === node.quote)
+  ).map(node => node.id)), [problem.questions, hiddenQuestions])
+  const visibleBoardNodes = boardNodes.filter(node => !hiddenSourceIds.has(node.id))
+  const questions = visibleBoardNodes.filter(node => node.kind === 'question')
+  const activeQuestion = questions.find(node => node.id === focusedQuestionId)
+  const focusedCardIds = activeQuestion
+    ? new Set(focusThoughtQuestion(visibleBoardNodes, activeQuestion.id).map(node => node.id))
+    : null
   const activeWorkspace = useRef(wsIdNow)
   activeWorkspace.current = wsIdNow
   const aiRequest = useRef(0)
 
-  // 工作区切换 / 首次载入 → 载入拆解块；等 ws 真正到位后再同步，避免空壳覆盖已存在数据
+  function ensureKnowledge() {
+    if (!knowledgeRequest.current) {
+      knowledgeRequest.current = loadKnowledgeCards().then((mod) => {
+        setKnowledge(mod)
+        return mod
+      }).catch((error) => {
+        knowledgeRequest.current = null
+        throw error
+      })
+    }
+    return knowledgeRequest.current
+  }
+
+  function dismissGuide() {
+    setGuideDismissed(true)
+    try { localStorage.setItem(THOUGHT_GUIDE_KEY, '1') } catch { /* 引导可以下次再出现。 */ }
+  }
+
+  // 工作区切换 / 首次载入 → 载入卡片；等 ws 真正到位后再同步，避免空壳覆盖已存在数据
   useEffect(() => {
     if (!wsIdNow || !ws || ws.id !== wsIdNow) return
     const b = normalizeBlocks(ws.breakdown)
-    const saved = loadModelingPanelState(wsIdNow)
+    const resolved = resolveThoughtBoard(ws)
+    const saved = boardPanel(resolved)
+    layoutRef.current = {
+      rootPosition: resolved.rootPosition,
+      sourcePositions: resolved.sourcePositions,
+      inputMode: resolved.inputMode,
+    }
+    publishedBoard.current = JSON.stringify(resolved)
+    cacheThoughtBoard(wsIdNow, resolved)
+    const legacy = readLegacyThoughtBoard(wsIdNow)
+    if (!normalizeThoughtBoard(ws.thoughtBoard) && JSON.stringify(legacy) !== JSON.stringify(emptyThoughtBoard())) {
+      patchWsAt?.(wsIdNow, { thoughtBoard: resolved })
+    }
     const savedDraft = loadModelingDraft(wsIdNow, b)
     restoringPanelStateRef.current = true
     setBlocks(b)
+    incomingBlocks.current = ws.breakdown
     aiRequest.current += 1
     setBusy(false)
     draftSession.current += 1
@@ -259,9 +312,33 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
     setOpenSet(new Set([...(b.length ? [b[0].id] : []), ...(savedDraft ? [savedDraft.id] : [])]))
     setPreview(null); setError(''); setStreaming('')
     setPanel(saved?.panel || 'chat')
-    setMsgs(saved?.msgs || [])
+    setHistory(saved?.msgs || [])
+    setHiddenQuestions(saved?.hiddenQuestions || [])
+    const pendingQuestion = pendingFirstNode.current === focusedQuestionId && b.some(node => node.id === focusedQuestionId)
+    setFocusedQuestionId(saved?.focusedQuestionId || (pendingQuestion ? focusedQuestionId : null))
+    chatDrafts.current.clear()
+    activeChat.current = null
+    setRequestNodeId(undefined); setChatNodeId(null); setInput('')
+    setFloating(false)
+    setOrganizerOpen(false)
+    organizerTrigger.current = null
+    setRemovalId(null)
+    setTypeMenu(undefined)
+    setSelectedId(savedDraft?.id || (b.some(node => node.id === pendingFirstNode.current) ? pendingFirstNode.current : null))
+    pendingFirstNode.current = null
+    setInspectorId(savedDraft?.id || null)
     setKcQuery(saved?.kcQuery || '')
   }, [wsIdNow, ws?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!wsIdNow || blocksWsId !== wsIdNow || incomingBlocks.current === ws.breakdown) return
+    incomingBlocks.current = ws.breakdown
+    const next = normalizeBlocks(ws.breakdown)
+    const value = JSON.stringify(next)
+    if (publishedBlocks.current?.value === value) return
+    publishedBlocks.current = { id: wsIdNow, value }
+    setBlocks(next)
+  }, [wsIdNow, ws?.breakdown, blocksWsId])
 
   // 草稿仅在当前标签页按工作区暂存；不写入已确认的 breakdown。
   useLayoutEffect(() => {
@@ -281,14 +358,38 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
     return () => removeEventListener('beforeunload', warn)
   }, [draftCacheOk, editingId])
 
-  // 保留思路梳理台右栏的对话、知识卡片 tab 和搜索状态。
+  function publishThoughtBoard(layoutPatch) {
+    if (layoutPatch) layoutRef.current = { ...layoutRef.current, ...layoutPatch }
+    if (!wsIdNow || blocksWsId !== wsIdNow) return
+    const board = normalizeThoughtBoard({
+      version: 1,
+      ...layoutRef.current,
+      panel,
+      messages: history,
+      kcQuery,
+      focusedQuestionId,
+      hiddenQuestions,
+    })
+    if (!board) return
+    cacheThoughtBoard(wsIdNow, board)
+    const serialized = JSON.stringify(board)
+    if (publishedBoard.current === serialized) return
+    publishedBoard.current = serialized
+    patchWsAt?.(wsIdNow, { thoughtBoard: board })
+  }
+
+  // 保留思路整理台的对话、面板和布局。未确认草稿仍只留在 sessionStorage。
   useEffect(() => {
     if (restoringPanelStateRef.current) {
       restoringPanelStateRef.current = false
       return
     }
-    saveModelingPanelState(wsIdNow, { panel, msgs, kcQuery })
-  }, [wsIdNow, panel, msgs, kcQuery])
+    publishThoughtBoard()
+  }, [wsIdNow, blocksWsId, panel, history, kcQuery, hiddenQuestions, focusedQuestionId])
+
+  useEffect(() => {
+    if ((floating && panel === 'kc') || history.some(message => message.role === 'ai')) ensureKnowledge()
+  }, [floating, panel, history])
 
   // 已确认块立即同步到三台共享状态；父层仍负责网络保存防抖。
   // 所属工作区与内容签名避免初始空状态覆盖载入块，以及同内容重复发布。
@@ -309,7 +410,7 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
 
   useEffect(() => {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight
-  }, [msgs])
+  }, [msgs, streaming, floating])
 
   function toggleOpen(id) {
     setOpenSet((prev) => {
@@ -319,41 +420,188 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
     })
   }
 
-  function addBlock() {
+  function addBlock(kind, focusNewQuestion = false) {
     const id = nid()
-    setBlocks((prev) => [...prev, { id, title: `拆解块 ${prev.length + 1}（未命名）`, quote: '', idea: '', steps: [{ action: '', method: '' }], refs: [] }])
+    const position = boardActions.current?.findNewPosition(kind)
+    const add = prev => {
+      const questionNumber = kind === 'question' ? Math.max(0, ...problem.questions.map(node => node.questionNumber), ...prev.map(node => node.questionNumber || 0)) + 1 : null
+      const title = questionNumber ? `问题 ${questionNumber}` : (kind && kind !== 'note' ? THOUGHT_NODE_TYPES[kind].label : `思路 ${prev.filter(node => node.kind !== 'question').length + 1}`)
+      const question = questionNumber ? { questionNumber } : activeQuestion ? { questionId: activeQuestion.id } : {}
+      return [...prev, { id, title, quote: '', idea: '', steps: [], refs: [], unlinked: true, kind, position, ...question }]
+    }
+    if (kind === 'question' && (focusNewQuestion || activeQuestion)) setFocusedQuestionId(id)
+    if (wsIdNow) setBlocks(add)
+    else {
+      pendingFirstNode.current = id
+      patchWs(current => ({ breakdown: add(current.breakdown || []) }))
+    }
+    setSelectedId(id)
+    if (organizerOpen && !editingId) setInspectorId(id)
     setOpenSet((prev) => new Set([...prev, id]))
   }
 
-  function removeBlock(id) {
-    removedBlockFocus.current = { wsId: wsIdNow, index: blocks.findIndex((block) => block.id === id) }
-    setBlocks((prev) => prev.filter((b) => b.id !== id))
-    setOpenSet((prev) => {
-      const next = new Set(prev)
-      next.delete(id)
-      return next
+  function moveNode(id, position, positions) {
+    setBlocks(prev => prev.map(node => ({ ...node, position: node.id === id ? position : positions.get(node.id) })))
+  }
+
+  function updateNodeLink(parentId, childId, disconnect = false) {
+    const positions = boardActions.current?.keepPositions()
+    setBlocks(prev => {
+      const child = prev.find(node => node.id === childId)
+      if (!child) return prev
+      const parents = thoughtParents(child)
+      if (disconnect ? !parents.includes(parentId) : !canLinkThoughtNode([...problem.questions, ...prev], parentId, childId)) return prev
+      const next = disconnect ? parents.filter(id => id !== parentId) : [...parents, parentId]
+      return prev.map(node => {
+        const placed = { ...node, position: node.position || positions?.get(node.id) }
+        return node.id === childId ? withThoughtParents(placed, next) : placed
+      })
     })
   }
 
+  function closeNodeTypes(restoreFocus = false) {
+    if (restoreFocus) typeMenu?.focus({ preventScroll: true })
+    setTypeMenu(undefined)
+  }
+
+  function openOrganizer(trigger) {
+    if (trigger) organizerTrigger.current = trigger
+    closeNodeTypes()
+    if (matchMedia('(max-width: 900px)').matches) setFloating(false)
+    setOrganizerOpen(true)
+  }
+
+  function closeOrganizer() {
+    setOrganizerOpen(false)
+    closePreview()
+    const trigger = organizerTrigger.current
+    const target = trigger?.isConnected ? trigger : organizerButton.current
+    target?.focus({ preventScroll: true })
+  }
+
+  function toggleOrganizer(trigger) {
+    if (organizerOpen) return closeOrganizer()
+    openOrganizer(trigger)
+    const node = visibleBoardNodes.find(item => item.id === (editingId || selectedId || inspectorId))
+    if (node) viewOrganizerNode(node)
+  }
+
+  function viewOrganizerNode(node, skipGuard = false) {
+    if (!skipGuard && guardEditSwitch(node, 'view')) return
+    if (editingId && editingId !== node.id) {
+      draftSession.current += 1
+      setEditingId(null)
+      setDraft(null)
+    }
+    setSelectedId(node.id)
+    setInspectorId(node.id)
+    setOpenSet(prev => new Set([...prev, node.id]))
+  }
+
+  function changeQuestion(id) {
+    closeNodeTypes()
+    setFocusedQuestionId(id)
+    setSelectedId(id)
+  }
+
+  function editBoardNode(node, trigger) {
+    openOrganizer(trigger)
+    if (node.sourceQuestion) viewOrganizerNode(node)
+    else startEdit(node)
+  }
+
   useEffect(() => {
+    if (organizerOpen && !editingId) organizerHeading.current?.focus({ preventScroll: true })
+  }, [organizerOpen])
+
+  function removeNode(id) {
+    const node = visibleBoardNodes.find(item => item.id === id)
+    if (!node || blocksWsId !== wsIdNow) return
+    const fromOrganizer = Boolean(deleteTrigger.current?.closest('.thought-organizer'))
+    const currentView = focusedCardIds && !fromOrganizer ? visibleBoardNodes.filter(item => focusedCardIds.has(item.id)) : visibleBoardNodes
+    const remaining = currentView.filter(item => item.id !== id)
+    const index = currentView.indexOf(node)
+    const next = remaining.find(item => thoughtParents(item).includes(id))
+      || remaining.find(item => thoughtParents(node).includes(item.id))
+      || remaining[Math.min(index, remaining.length - 1)]
+    removedBlockFocus.current = { wsId: wsIdNow, hasNext: Boolean(next), fromOrganizer }
+    if (selectedId === id || !selectedId) setSelectedId(next?.id || null)
+    if (inspectorId === id) setInspectorId(next?.id || null)
+    if (next) setOpenSet(prev => new Set([...prev, next.id]))
+    if (activeQuestion?.id === id) {
+      setFocusedQuestionId(null)
+      setSelectedId(null)
+    }
+    if (node.sourceQuestion) {
+      setHiddenQuestions(prev => [...prev, { id, quote: node.quote }])
+      return
+    }
+
+    const deletingDraft = editingId === id
+    const positions = boardActions.current?.keepPositions()
+    setBlocks(prev => prev.filter(item => item.id !== id).map(item => {
+      const { questionId, ...remaining } = item
+      const placed = { ...remaining, position: item.position || positions?.get(item.id), ...(questionId && questionId !== id ? { questionId } : {}) }
+      return withThoughtParents(placed, thoughtParents(item).filter(parentId => parentId !== id))
+    }))
+    if (deletingDraft) {
+      draftSession.current += 1
+      lastDraftInput.current = null
+      setEditingId(null)
+      setDraft(null)
+    }
+    chatDrafts.current.delete(id)
+    if (chatNodeId === id) {
+      setFloating(false)
+      activeChat.current = null
+      setChatNodeId(null)
+      setInput(chatDrafts.current.get(null) || '')
+    }
+    if (requestNodeId === id || (deletingDraft && requestNodeId === undefined)) {
+      aiRequest.current += 1
+      setRequestNodeId(undefined)
+      setBusy(false); setStreaming(''); setError('')
+    }
+    setHistory(prev => prev.filter(message => message.nodeId !== id))
+    setOpenSet((prev) => {
+      const open = new Set(prev)
+      open.delete(id)
+      return open
+    })
+  }
+
+  function askToRemove(node, trigger) {
+    deleteTrigger.current = trigger
+    setRemovalId(node.id)
+  }
+
+  function cancelRemoval() {
+    deleteDialog.current?.close()
+    setRemovalId(null)
+    deleteTrigger.current?.focus({ preventScroll: true })
+  }
+
+  function confirmRemoval() {
+    removeNode(removalId)
+    setRemovalId(null)
+  }
+
+  useLayoutEffect(() => {
+    const dialog = deleteDialog.current
+    if (removalId && !dialog?.open) dialog?.showModal()
+    if (!removalId && dialog?.open) dialog.close()
+
     const pending = removedBlockFocus.current
     if (!pending) return
     removedBlockFocus.current = null
     if (pending.wsId !== wsIdNow || blocksWsId !== wsIdNow) return
-    const remaining = decompRef.current?.querySelectorAll('.decomp-block:not(.new-block-preview)')
-    const neighbor = remaining?.[Math.min(pending.index, remaining.length - 1)]
-    const target = neighbor?.querySelector('.block-head button[title="编辑"]:not(:disabled), .block-head input')
-      || decompRef.current?.querySelector('.new-block, .decomp-empty button')
-    target?.scrollIntoView({ block: 'nearest' })
+    const target = pending.fromOrganizer
+      ? (organizerSelect.current || organizerHeading.current)
+      : pending.hasNext
+        ? boardMain.current?.querySelector('.thought-viewport')
+        : addNodeButton.current
     target?.focus({ preventScroll: true })
-  }, [blocks, blocksWsId, wsIdNow])
-
-  function updateStep(blockId, si, patch) {
-    setBlocks((prev) => prev.map((blk) => (blk.id === blockId ? {
-      ...blk,
-      steps: (blk.steps || []).map((s, i) => (i === si ? { ...normalizeStep(s), ...patch } : normalizeStep(s))),
-    } : blk)))
-  }
+  }, [removalId, blocksWsId, wsIdNow])
 
   useEffect(() => {
     const dialog = editSwitchDialog.current
@@ -361,12 +609,12 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
     if (!pendingEdit && dialog?.open) dialog.close()
   }, [pendingEdit])
 
-  function guardEditSwitch(b, addStep) {
+  function guardEditSwitch(b, action) {
     if (!editingId || editingId === b.id || !draft) return false
     const original = blocks.find((block) => block.id === editingId)
     const content = (value) => JSON.stringify({ title: value.title, quote: value.quote || '', idea: value.idea || '', steps: (value.steps || []).map(normalizeStep) })
     if (!original || (content(original) === content(draft) && !draft.aiSuggestion)) return false
-    setPendingEdit({ id: b.id, addStep })
+    setPendingEdit({ id: b.id, action })
     return true
   }
 
@@ -379,17 +627,18 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
   }
 
   function finishEditSwitch(save) {
-    const target = blocks.find((block) => block.id === pendingEdit?.id)
+    const target = boardNodes.find(node => node.id === pendingEdit?.id)
     if (!target) return resumeDraft()
     if (save) commitEdit()
-    const addStep = pendingEdit.addStep
+    const { action } = pendingEdit
     setPendingEdit(null)
-    if (addStep) startAddStep(target, true)
+    if (action === 'view') viewOrganizerNode(target, true)
+    else if (action === 'add-step') startAddStep(target, true)
     else startEdit(target, true)
   }
 
   function startAddStep(b, skipGuard = false) {
-    if (!skipGuard && guardEditSwitch(b, true)) return
+    if (!skipGuard && guardEditSwitch(b, 'add-step')) return
     draftSession.current += 1
     setEditingId(b.id)
     setDraft({
@@ -403,7 +652,9 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
   }
 
   function startEdit(b, skipGuard = false) {
-    if (!skipGuard && guardEditSwitch(b, false)) return
+    if (!skipGuard && guardEditSwitch(b, 'edit')) return
+    setSelectedId(b.id); setInspectorId(b.id)
+    if (editingId === b.id && draft) return
     draftSession.current += 1
     setEditingId(b.id)
     setDraft({ title: b.title, quote: b.quote || '', idea: b.idea || '', steps: (b.steps || []).map(normalizeStep) })
@@ -417,110 +668,106 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
     const steps = nextSteps.length ? nextSteps : [{ action: '', method: '' }]
     setBlocks((prev) => prev.map((b) => (b.id === editingId ? { ...b, title: draft.title || b.title, quote: draft.quote, idea: draft.idea, steps } : b)))
     setEditingId(null); setDraft(null)
-    window.__notify?.('拆解块修改已应用，正在保存…')
+    window.__notify?.('卡片修改已应用，正在保存…')
   }
 
-  /** AI 指令 → 修改预览 */
+  function openChat(node, trigger) {
+    closeNodeTypes()
+    if (matchMedia('(max-width: 900px)').matches) setOrganizerOpen(false)
+    const nodeId = node?.id || null
+    if (activeChat.current !== nodeId) {
+      chatDrafts.current.set(activeChat.current, input)
+      setInput(chatDrafts.current.get(nodeId) || '')
+      activeChat.current = nodeId
+      setChatNodeId(nodeId)
+    }
+    if (node) setSelectedId(node.id)
+    floatingTrigger.current = trigger
+    setPanel('chat')
+    setFloating(true)
+  }
+
+  function closeFloating() {
+    setFloating(false)
+    floatingTrigger.current?.focus({ preventScroll: true })
+  }
+
+  useEffect(() => {
+    if (floating && panel === 'chat') composerInput.current?.focus({ preventScroll: true })
+  }, [floating, panel, chatNodeId])
+
+  function handleComposerKeyDown(event) {
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault()
+      sendInstruction()
+    }
+  }
+
+  /** 小墨对话 */
   async function sendInstruction() {
     const text = input.trim()
     if (!text || busy) return
+    setRequestNodeId(chatNodeId)
     if (!settings.apiKey) return setError('请先在「模型设置」配置 API Key')
     const request = ++aiRequest.current
     const owner = wsIdNow
     const isCurrent = () => aiRequest.current === request && activeWorkspace.current === owner
+    const append = message => setHistory(prev => [...prev, { ...message, ...(chatNodeId ? { nodeId: chatNodeId } : {}) }])
     setBusy(true); setError(''); setInput(''); setStreaming('')
-    setMsgs((prev) => [...prev, { role: 'user', text, time: now() }])
+    composerInput.current?.focus({ preventScroll: true })
+    append({ role: 'user', text, time: now() })
 
-    const blocksDesc = blocks.map((b, i) => `【拆解块${i + 1}｜稳定id=${b.id}】标题：${b.title}\n题目依据：${b.quote || '（无）'}\n一句话思路：${b.idea || '（无）'}\n步骤：${b.steps.map((s) => `要怎么做：${s.action}；怎么实现：${s.method}`).join('；') || '（无）'}`).join('\n\n')
-    const summary = attachSummary(attachments)
-    // 题目全文注入：让 AI 能读到完整题干（不只附件摘要），避免"无法复述题干"
-    const problemCtx = problemText.trim() ? `【完整题目】\n${problemText}\n\n` : ''
-    const userMsg = `${problemCtx}当前拆解块：\n${blocksDesc || '（暂无拆解块）'}\n\n${summary ? `数据附件摘要：\n${summary}\n\n` : ''}用户指令：「${text}」`
-    const conversationHistory = buildConversationHistory(msgs)
-    const cardContext = buildCardContext(recallMatchesByMessage, text)
-
-    // 流式主尝试 + 降级：流式失败/空返回时，改用非流式简化请求重试一次（去掉 RAG 上下文，减小失败面）
+    const node = boardNodes.find(b => b.id === chatNodeId)
+    const userMsg = `${buildTutorWorkspaceContext(problemText, node, visibleBoardNodes, attachments)}用户消息：「${text}」`
+    const conversationHistory = [
+      ...(node ? buildConversationHistory(history.filter(message => !message.nodeId), 4, 2400) : []),
+      ...buildConversationHistory(msgs),
+    ]
     let content = ''
-    let degraded = false
     try {
+      let library = knowledge
+      if (isCardFollowUp(text) || history.some(message => message.role === 'ai')) {
+        try { library = await ensureKnowledge() } catch { library = null }
+      }
+      const recalled = library ? history.filter(message => (message.nodeId || null) === chatNodeId).reduce((seen, message) => {
+        if (message.role !== 'ai') return [...seen, []]
+        const used = new Set(seen.flat().map(item => item.id))
+        const matches = library.findConceptMatches(message.recallText || message.text).filter(item => !used.has(item.id)).slice(0, 3)
+        return [...seen, matches]
+      }, []) : recallMatchesByMessage
+      const cardContext = buildCardContext(recalled, text, library)
       // 追问界面中已有卡片时，优先使用卡片上下文，避免泛关键词 RAG 把“噪声”带到无关的图像处理条目。
       const hits = isCardFollowUp(text) && cardContext ? [] : await retrieveKnowledge(text, settings, 3)
       if (!isCurrent()) return
       const kbContext = formatKnowledgeContext(hits)
       const contextMessages = [
-        { role: 'system', content: MODIFY_SYSTEM + cardContext + kbContext },
+        { role: 'system', content: SECRETARY_SYSTEM + cardContext + kbContext },
         ...conversationHistory,
         { role: 'user', content: userMsg },
       ]
       try {
         await streamChat(settings, contextMessages, { onDelta: (t) => { content = t; if (isCurrent()) setStreaming(t) } })
-      } catch (e) {
-        degraded = true
-      }
+      } catch { /* Retry below if the stream produced no text. */ }
       if (!isCurrent()) return
       if (!content.trim()) {
         // 流式返回空（模型未输出）：非流式重试
-        degraded = true
         const r = await chat(settings, contextMessages)
         content = r.content || ''
       }
       if (!isCurrent()) return
-      const parsed = extractJson(content)
-      const patch = parsed?.patch && typeof parsed.patch === 'object' ? normalizeBlockPatch(parsed.patch) : null
-      if (parsed && (typeof parsed.blockId === 'string' || Number.isInteger(parsed.blockId)) && patch) {
-        const isNew = parsed.blockId === 'new' || (Number.isInteger(parsed.blockId) && parsed.blockId === blocks.length + 1)
-        const legacyIndex = Number.isInteger(parsed.blockId) ? parsed.blockId - 1 : -1
-        const targetId = isNew ? null : (typeof parsed.blockId === 'string' ? parsed.blockId : blocks[legacyIndex]?.id)
-        const target = targetId ? blocks.find((b) => b.id === targetId) : null
-        if (!isNew && !target) {
-          // AI 指向不存在的块：明确提示而不是静默落到第 1 块（避免误改）
-          setMsgs((prev) => [...prev, {
-            role: 'ai', time: now(),
-            text: `AI 指向的拆解块不存在（目标：${parsed.blockId}，当前共 ${blocks.length} 块），请重试或把指令写得更明确（如「把拆解块 2 改为…」）。`,
-            recallText: text,
-          }])
-        } else {
-          setPreview({ targetId, isNew, patch })
-          // 友好提示而非 JSON 原文：具体修改在拆解块的"修改预览"卡片里展示
-          setMsgs((prev) => [...prev, {
-            role: 'ai', time: now(),
-            text: `✅ 已生成${isNew ? '新拆解块' : `拆解块 ${target ? blocks.indexOf(target) + 1 : ''}`}的修改预览（标题：${patch.title || '（未命名）'}），请在左侧检查后点击「${isNew ? '确认新建' : '确认写入'}」。`,
-            preview: true,
-            historyText: [
-              `已生成${isNew ? '新拆解块' : '拆解块'}的修改预览。`,
-              `标题：${patch.title || '（未命名）'}`,
-              `题目依据：${patch.quote || '（无）'}`,
-              `一句话思路：${patch.idea || '（无）'}`,
-              `步骤：${(patch.steps || []).map((s) => `要怎么做：${s.action}；怎么实现：${s.method}`).join('；') || '（无）'}`,
-            ].join('\n'),
-            recallText: [text, patch.title, patch.quote, patch.idea, ...(patch.steps || []).map((s) => `${s.action} ${s.method}`)].filter(Boolean).join('\n'),
-          }])
-        }
-      } else {
-        // 非 JSON：可能是意图 A 的苏格拉底反问、或模型没有按 JSON 格式输出
-        const trimmed = (content || '').trim()
-        if (trimmed) {
-          // 展示 AI 原文（可能是反问，也可能是 JSON 格式跑偏——给用户可诊断的信息）
-          setMsgs((prev) => [...prev, { role: 'ai', time: now(), text: trimmed, recallText: `${text}\n${trimmed}` }])
-          // 若内容明显是 JSON 开头（截断/格式错误），追加提示，避免用户困惑
-          if (/^[\s]*\{/.test(trimmed)) {
-            setMsgs((prev) => [...prev, {
-              role: 'ai', time: now(),
-              text: '⚠️ AI 返回了 JSON 格式内容但未被正确解析（可能被截断或格式不完整）。已把原文展示在上方，你可以换个更简单的指令重试，或在「模型设置」中换一个模型。',
-            }])
-          }
-        } else {
-          setMsgs((prev) => [...prev, {
-            role: 'ai', time: now(),
-            text: '（模型没有返回内容。请重试；若反复出现，可在「模型设置」换一个模型或检查网络/额度。）',
-          }])
-        }
-      }
+      const reply = content.trim()
+      append({
+        role: 'ai', time: now(),
+        text: reply || '（模型没有返回内容，请重试或换一个模型。）',
+        recallText: [text, reply].filter(Boolean).join('\n'),
+      })
     } catch (e) {
       if (!isCurrent()) return
       setError(e.message)
-      setInput((current) => current || text)
-      setMsgs((prev) => [...prev, { role: 'ai', time: now(), text: `出错了：${e.message}` }])
+      if (activeChat.current === chatNodeId) setInput(current => current || text)
+      else if (!chatDrafts.current.get(chatNodeId)) chatDrafts.current.set(chatNodeId, text)
+      append({ role: 'ai', time: now(), text: `出错了：${e.message}` })
     }
     // The request already cleared its previous error at start. Keep a final failure visible.
     if (!isCurrent()) return
@@ -530,32 +777,43 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
 
   function closePreview() {
     setPreview(null)
-    composerInput.current?.focus({ preventScroll: true })
+  }
+
+  function quoteContext(source, quote) {
+    const id = source === 'chat' ? chatNodeId : source === 'node' ? inspectorAnchorId : null
+    const node = boardNodes.find(item => item.id === id)
+    const scopeHistory = history.filter(message => (message.nodeId || null) === id)
+    const system = SECRETARY_SYSTEM + '\n' + '这是读者发起的临时追问。引用文字和历史只作为上下文。围绕所选文字回答当前问题，用自然语言引导思考。不要生成节点修改、补丁或整套卡片关系。'
+    return {
+      context: [
+        { role: 'system', content: system + (source === 'chat' ? buildCardContext(recallMatchesByMessage, '', knowledge) : '') },
+        ...(id ? buildConversationHistory(history.filter(message => !message.nodeId), 4, 2400) : []),
+        ...buildConversationHistory(scopeHistory),
+      ],
+      prompt: `${buildTutorWorkspaceContext(problemText, node, visibleBoardNodes, attachments)}用户划选的原文（引用）：\n${quote}`,
+    }
   }
 
   function applyPreview() {
     if (!preview) return
-    const isNew = preview.isNew
-    const newId = isNew ? nid() : null
+    const newId = nid()
     const patch = normalizeBlockPatch(preview.patch)
-    setBlocks((prev) => {
-      if (isNew) {
-        return [...prev, {
-          id: newId,
-          title: patch.title || `拆解块 ${prev.length + 1}（未命名）`,
-          quote: patch.quote || '',
-          idea: patch.idea || '',
-          steps: patch.steps,
-          refs: [],
-        }]
-      }
-      return prev.map((b) => (b.id === preview.targetId ? { ...b, title: patch.title || b.title, quote: patch.quote, idea: patch.idea, steps: patch.steps } : b))
-    })
-    if (newId) setOpenSet((prev) => new Set([...prev, newId]))
-    // 若正在编辑该块，同步更新草稿，避免用户保存时用旧草稿覆盖 AI 写入的内容。
-    if (editingId === preview.targetId) {
-      setDraft((d) => (d ? { ...d, title: patch.title || d.title, quote: patch.quote, idea: patch.idea, steps: patch.steps } : d))
+    const position = boardActions.current?.findNewPosition()
+    setBlocks(prev => [...prev, {
+      id: newId,
+      title: patch.title || `思路 ${prev.length + 1}`,
+      quote: patch.quote,
+      idea: patch.idea,
+      steps: patch.steps,
+      refs: [],
+      unlinked: true,
+      position,
+    }])
+    if (!editingId) {
+      setSelectedId(newId)
+      setInspectorId(newId)
     }
+    setOpenSet(prev => new Set([...prev, newId]))
     closePreview()
   }
 
@@ -567,9 +825,10 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
     const owner = wsIdNow
     const isRequestCurrent = () => aiRequest.current === request && activeWorkspace.current === owner
     const isCurrent = () => isRequestCurrent() && draftSession.current === session
+    setRequestNodeId(undefined)
     setBusy(true); setError(''); setStreaming('')
     const sysContent = settings.guideMode !== false ? IDEA_GEN_GUIDE : IDEA_GEN_DIRECT
-    const userContent = `拆解块标题：${block.title}\n题目依据：${block.quote}\n题目背景：${problemText.trim() || '（无）'}`
+    const userContent = `卡片标题：${block.title}\n题目依据：${block.quote}\n题目背景：${problemText.trim() || '（无）'}`
     const messages = [
       { role: 'system', content: sysContent },
       { role: 'user', content: userContent },
@@ -610,40 +869,37 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
     setRelateId(null)
   }
 
-  /** 将知识卡片的行动摘要放入左侧待确认的新拆解块预览。 */
-  function addCardToBreakdown(card) {
+  /** 将知识卡片的行动摘要放入待确认的新节点预览。 */
+  async function addCardToBreakdown(card) {
+    let getCardWorkflow
+    try {
+      ({ getCardWorkflow } = await ensureKnowledge())
+    } catch {
+      setError('知识卡片暂时打不开，请稍后再试')
+      return
+    }
     const workflow = getCardWorkflow(card)
     if (!workflow) return
     setPreview({
-      targetId: null,
-      isNew: true,
       patch: {
         title: card.title,
         quote: '',
         idea: workflow.idea,
-        steps: [{ action: workflow.firstStep, method: workflow.method }],
+        steps: [{ action: workflow.firstStep, method: '' }],
       },
     })
-    window.__notify?.('已生成知识卡片拆解块预览，请在左侧确认')
+    setFloating(false)
+    openOrganizer()
   }
 
-  /** 导出思路为 Markdown */
+  /** 导出思路为 Markdown，包含自动识别的小问原文和上下游。 */
   function exportIdea() {
-    const md = [
-      `# 建模思路梳理 · ${new Date().toLocaleString('zh-CN')}`,
-      '',
-      `> 题目：${(ws?.title || '未命名')}`,
-      ...blocks.flatMap((b, i) => [
-        `## ${i + 1}. ${b.title}`,
-        '',
-        ...(b.quote ? [`依据：${b.quote}`] : []),
-        ...(b.idea ? ['', `思路：${b.idea}`] : []),
-        '',
-        ...b.steps.map((s) => `- **要怎么做：** ${s.action}\n  **怎么实现：** ${s.method}`),
-        ...(b.refs?.length ? ['', `关联：${b.refs.join('、')}`] : []),
-        '',
-      ]),
-    ].join('\n')
+    const md = formatThoughtExport({
+      title: ws?.title || '未命名',
+      questions: problem.questions,
+      cards: blocks,
+      when: new Date().toLocaleString('zh-CN'),
+    })
     const blob = new Blob(['\ufeff' + md], { type: 'text/markdown;charset=utf-8' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
@@ -655,27 +911,52 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
 
   const doneTables = attachments.filter((a) => a.status === 'done' && a.type === 'table')
   const recallMatchesByMessage = useMemo(() => {
+    if (!knowledge) return msgs.map(() => [])
     const seen = new Set()
     return msgs.map((message) => {
       if (message.role !== 'ai') return []
-      const matches = findConceptMatches(message.recallText || message.text)
+      const matches = knowledge.findConceptMatches(message.recallText || message.text)
         .filter((item) => !seen.has(item.id))
         .slice(0, 3)
       matches.forEach((item) => seen.add(item.id))
       return matches
     })
-  }, [msgs])
+  }, [msgs, knowledge])
 
-  const quickPrompts = useMemo(() => {
-    if (!blocks.length) return ['先帮我识别题目的目标和约束', '这道题可以怎样拆成几个问题？']
-    const next = blocks.find((block) => getBlockStatus(block).status !== '已完成')
-    if (!next) return ['帮我检查各块之间的逻辑是否连贯', '下一步如何验证模型？']
-    const index = blocks.indexOf(next) + 1
-    return [`帮我梳理拆解块 ${index} 的下一步`, `给拆解块 ${index} 补充数据思路`, '下一步如何验证模型？']
-  }, [blocks])
+
+  const inspectorAnchorId = preview ? null : inspectorId
+  const organizerNode = visibleBoardNodes.find(node => node.id === inspectorId)
+  const removalNode = visibleBoardNodes.find(node => node.id === removalId)
+  const removalChildren = removalNode ? blocks.filter(node => thoughtParents(node).includes(removalId)).length : 0
+  const organizerParents = organizerNode && !organizerNode.sourceQuestion
+    ? thoughtParents(organizerNode).flatMap(id => {
+        const title = id === null ? '当前题目' : boardNodes.find(node => node.id === id)?.title
+        return title ? [{ id, title }] : []
+      })
+    : []
+  const sourceQuestion = problem.questions.find(node => node.id === inspectorId)
+  const chatNode = boardNodes.find(node => node.id === chatNodeId)
+  const chatBusy = busy && requestNodeId === chatNodeId
+  const recognitionMiss = Boolean(problemText.trim()) && problem.questions.length === 0
+  const showGuide = Boolean(wsIdNow && blocksWsId === wsIdNow && blocks.length === 0 && !guideDismissed)
 
   return (
-    <div className="ws mdl" style={{ '--panel-w': panelW }}>
+    <div className="ws mdl thought-workspace">
+      <dialog ref={deleteDialog} className="draft-switch-dialog" aria-labelledby="delete-thought-title" aria-describedby="delete-thought-description"
+        onCancel={event => { event.preventDefault(); cancelRemoval() }}>
+        <h2 id="delete-thought-title">{removalNode?.sourceQuestion ? '从画布移除小问' : '删除节点'}</h2>
+        <p id="delete-thought-description">
+          {removalNode?.sourceQuestion ? `移除「${removalNode.title}」后，题干原文和已连的其他节点仍可查看。在「题干与附件」里可以恢复这张卡片和它的连线。` : <>
+            确定删除「{removalNode?.title}」？此操作无法撤销。
+            {removalChildren > 0 && ` ${removalChildren} 张下游卡片会保留，仅移除它们与此节点的连线。`}
+            {history.some(message => message.nodeId === removalId) && ' 此节点的小墨对话也会清除。'}
+          </>}
+        </p>
+        <div className="draft-switch-actions">
+          <button type="button" className="btn btn-ghost btn-sm" autoFocus onClick={cancelRemoval}>取消</button>
+          <button type="button" className="btn btn-ghost btn-sm thought-delete" onClick={confirmRemoval}>{removalNode?.sourceQuestion ? '确认移除' : '确认删除'}</button>
+        </div>
+      </dialog>
       <dialog ref={editSwitchDialog} className="draft-switch-dialog" aria-labelledby="draft-switch-title" onCancel={(event) => { event.preventDefault(); resumeDraft() }} onKeyDown={(event) => {
         if (event.key !== 'Tab') return
         const buttons = event.currentTarget.querySelectorAll('button')
@@ -699,228 +980,252 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
         <button className="rail-btn rail-back" onClick={() => { location.hash = '#/workbench' }} title="返回读题工作台"><IconArrowLeft size={16} /></button>
       </aside>
 
-      {/* 主区：拆解块 */}
-      <section className="ws-main">
-        <div className="ws-main-head">
-          <div className="prob-switch">
-            <button className="prob-tab active">问题 1</button>
-          </div>
-          <div className="m-actions">
-            <button className="btn btn-ghost btn-sm" onClick={exportIdea}>导出思路</button>
-            <button className="btn btn-primary btn-sm" onClick={() => { location.hash = '#/coding' }} disabled={!wsIdNow}>去编程台 <IconChevronRight size={13} /></button>
-          </div>
-        </div>
 
-        <div className="ws-body">
-          {/* 题干 + 附件上下文（来自读题工作台，可折叠） */}
-          <div className="ctx-card">
-            <button className="ctx-toggle" aria-expanded={ctxOpen} onClick={() => setCtxOpen(!ctxOpen)}>
-              <span className="ctx-label"><IconFile size={14} /> 题干与附件</span>
-              <span className="hint ctx-title" title={ws?.title || '未命名题目'}>{ws?.title || '未命名题目'}</span>
-              <span className="hint ctx-count">附件 {attachments.length} 个</span>
-              <span className="ctx-chev">{ctxOpen ? '▲ 收起' : '▼ 展开'}</span>
-            </button>
-            {ctxOpen && (
-              <div className="ctx-body">
-                {problemText || ws?.problemDocument ? (
-                  <ProblemTextView text={problemText} sourceKind={ws?.problemSourceKind || ''} pages={Array.isArray(ws?.problemPages) ? ws.problemPages : []} document={ws?.problemDocument} />
-                ) : (
-                  <div className="hint" style={{ padding: '8px 2px' }}>暂无题干，请先在读题工作台上传。</div>
-                )}
-                <AttachmentList attachments={attachments} onRemove={(id) => patchWs((prev) => ({ attachments: (prev?.attachments || []).filter((a) => a.id !== id) }))} />
-                {attachments.length === 0 && problemText && (
-                  <div className="hint" style={{ padding: '8px 2px' }}>暂无附件。</div>
-                )}
+      <section ref={boardMain} className={`ws-main thought-main${organizerOpen ? ' has-organizer' : ''}`}>
+        <header className="thought-header">
+          <h1>思路整理台</h1>
+          <div className="thought-header-actions">
+            <button type="button" className="btn btn-ghost btn-sm" aria-expanded={ctxOpen} onClick={() => setCtxOpen(value => !value)}><IconFile size={14} /> 题干与附件</button>
+            <button ref={organizerButton} type="button" className="btn btn-ghost btn-sm thought-organizer-trigger"
+              aria-expanded={organizerOpen} aria-controls={organizerOpen ? 'thought-organizer' : undefined}
+              onClick={event => toggleOrganizer(event.currentTarget)}><IconEdit size={14} /> 编辑卡片</button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={exportIdea}>导出思路</button>
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => { location.hash = '#/coding' }} disabled={!wsIdNow}>去编程台 <IconChevronRight size={13} /></button>
+          </div>
+        </header>
+
+        {ctxOpen && <aside className="thought-context" aria-label="题干与附件">
+          <div className="thought-overlay-head"><strong>题干与附件</strong><button className="ico-btn" type="button" aria-label="关闭题干与附件" onClick={() => setCtxOpen(false)}><IconClose size={16} /></button></div>
+          <div className="ctx-body" data-thought-quote="problem" tabIndex={-1}>
+            {hiddenSourceIds.size > 0 && <div className="thought-restore-questions">
+              {problem.questions.filter(node => hiddenSourceIds.has(node.id)).map(node => (
+                <button key={node.id} type="button" className="btn btn-ghost btn-sm" onClick={() => {
+                  setHiddenQuestions(prev => prev.filter(hidden => hidden.id !== node.id || hidden.quote !== node.quote))
+                }}>恢复 {node.title}</button>
+              ))}
+            </div>}
+            {problemText || ws?.problemDocument ? (
+              <ProblemTextView text={problemText} sourceKind={ws?.problemSourceKind || ''} pages={ws.problemPages || []} document={ws.problemDocument} />
+            ) : <p className="hint">暂无题干。</p>}
+            <AttachmentList attachments={attachments} onRemove={id => patchWs(prev => ({ attachments: (prev?.attachments || []).filter(a => a.id !== id) }))} />
+          </div>
+        </aside>}
+
+        <div className="thought-stage">
+          <div className="thought-surface">
+            <nav className="thought-question-nav" aria-label="小问导航">
+              <div className="thought-question-tabs" role="group" aria-label="画布范围">
+                <button type="button" className="btn btn-ghost btn-sm" aria-pressed={!activeQuestion}
+                  onClick={() => changeQuestion(null)}>全题</button>
+                {questions.map(question => (
+                  <button key={question.id} type="button" className="btn btn-ghost btn-sm" title={question.title}
+                    aria-label={`聚焦 ${question.title}`} aria-pressed={activeQuestion?.id === question.id}
+                    onClick={() => changeQuestion(question.id)}>{question.title}</button>
+                ))}
               </div>
-            )}
-          </div>
-
-          {error && <div className="alert error" role="alert">{error}</div>}
-
-          <div className="mdl-intro">
-            <div className="mdl-intro-copy">
-              <div className="eyebrow">思路拆解 · Problem Breakdown</div>
-              <h1 className="doc-title">建模思路梳理台</h1>
-              <p className="sub-title">把题目拆成可判断、可验证的几个问题，再逐块补齐。</p>
+              <button type="button" className="btn btn-ghost btn-sm thought-new-question" aria-label="新增小问"
+                onClick={() => { closeNodeTypes(); addBlock('question', true) }}><IconPlus size={14} /> 小问</button>
+            </nav>
+            <div className="thought-question-brief">
+              <p className={activeQuestion ? undefined : 'thought-question-hint'}>{activeQuestion
+                ? activeQuestion.idea || '写下这道小问要回答的内容。'
+                : recognitionMiss ? '未自动拆出小问，可手动添加。' : questions.length ? '选一道小问打开梳理区，也可以先记一条全题便签。' : '添加小问开启分区，也可以先记一条思路。'}</p>
+              {activeQuestion && <button type="button" className="btn btn-ghost btn-sm" onClick={event => editBoardNode(activeQuestion, event.currentTarget)}>
+                {activeQuestion.sourceQuestion ? '查看小问' : '编辑小问'}
+              </button>}
+            </div>
+            <ThoughtBoard key={wsIdNow || 'empty'} ref={boardActions} workspaceId={wsIdNow} nodes={boardNodes} hiddenSourceIds={hiddenSourceIds}
+              activeQuestionId={activeQuestion?.id} focusedCardIds={focusedCardIds} onCreateNode={addBlock} onFocusQuestion={changeQuestion}
+              title={problem.title || ws?.title || '未命名题目'} summary={problem.summary}
+              questionCount={questions.length} selectedId={selectedId} organizerOpen={organizerOpen}
+              recognitionMiss={recognitionMiss} showGuide={showGuide} onDismissGuide={dismissGuide}
+              initialBoard={resolveThoughtBoard(ws)} onBoardChange={publishThoughtBoard}
+              onSelect={id => {
+                closeNodeTypes()
+                const node = organizerOpen && boardNodes.find(item => item.id === id)
+                if (node) viewOrganizerNode(node)
+                else setSelectedId(id)
+              }}
+              onConnect={updateNodeLink}
+              onMove={moveNode} onEdit={editBoardNode} onAsk={openChat} onRemove={askToRemove} />
+            <div className="thought-tools">
+              <button ref={addNodeButton} type="button" className="btn btn-ghost" aria-haspopup="dialog" aria-expanded={Boolean(typeMenu)} aria-label="添加节点"
+                onClick={event => typeMenu ? closeNodeTypes() : setTypeMenu(event.currentTarget)}><IconPlus size={16} /> 节点</button>
+              <button type="button" className="btn btn-ghost" onClick={event => {
+                closeNodeTypes()
+                if (matchMedia('(max-width: 900px)').matches) setOrganizerOpen(false)
+                floatingTrigger.current = event.currentTarget
+                setPanel('kc')
+                setFloating(true)
+              }} aria-expanded={floating && panel === 'kc'}><IconLayers size={16} /> 知识卡片</button>
+              <button type="button" className="btn btn-primary" onClick={event => openChat(null, event.currentTarget)} aria-expanded={floating && panel === 'chat' && !chatNodeId}><IconSparkles size={16} /> {TUTOR_NAME}</button>
             </div>
           </div>
 
-          <div className="decomp-toolbar">
-            <div className="decomp-heading"><span>拆解块</span><span className="decomp-count">{blocks.length}</span></div>
-            {blocks.length > 1 && (
-              <div className="decomp-view-actions">
-                <button type="button" className="view-action" onClick={() => setOpenSet(new Set(blocks.map((block) => block.id)))}>全部展开</button>
-                <button type="button" className="view-action" onClick={() => setOpenSet(new Set())}>全部收起</button>
+          {organizerOpen && <aside id="thought-organizer" className="thought-organizer" aria-labelledby="thought-organizer-title"
+            onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); closeOrganizer() } }}>
+            <header className="thought-overlay-head">
+              <h2 id="thought-organizer-title" ref={organizerHeading} tabIndex={-1}>编辑卡片</h2>
+              <div className="thought-organizer-actions">
+                {organizerNode && !preview && (
+                  <button type="button" className="btn btn-ghost btn-sm thought-delete" onClick={event => askToRemove(organizerNode, event.currentTarget)}>
+                    <IconTrash size={14} /> {organizerNode.sourceQuestion ? '移除小问' : '删除节点'}
+                  </button>
+                )}
+                <button type="button" className="ico-btn" aria-label="关闭编辑卡片" onClick={closeOrganizer}><IconClose size={16} /></button>
               </div>
-            )}
-          </div>
-          <div ref={decompRef} className="decomp" onBlurCapture={(event) => {
-            if (editingId && event.target.matches('input, textarea')) lastDraftInput.current = event.target
-          }}>
-            {blocks.length === 0 && (
-              <div className="decomp-empty">
-                <div className="decomp-empty-mark">01</div>
-                <div>
-                  <strong>先建立第一个拆解块</strong>
-                  <p>可以从目标、数据、方法或验证中的任意一个问题开始。</p>
-                </div>
-                <button type="button" className="btn btn-primary btn-sm" onClick={addBlock}>新建拆解块</button>
-              </div>
-            )}
-            {(blocksWsId === wsIdNow ? blocks : []).map((b, i) => (
-            <Block
-                key={`${blocksWsId}:${b.id}`}
-                b={b}
-                index={i}
-                open={openSet.has(b.id)}
-                preview={preview && preview.targetId === b.id ? preview.patch : null}
-                editing={editingId === b.id}
-                draft={draft}
-                draftCacheOk={draftCacheOk}
-                setDraft={setDraft}
-                onToggle={() => toggleOpen(b.id)}
-                onEdit={() => startEdit(b)}
-                onCommitEdit={commitEdit}
-                onCancelEdit={() => { draftSession.current += 1; setEditingId(null); setDraft(null) }}
-                onRelate={() => setRelateId(b.id)}
-                onRemove={() => {
-                  if (window.confirm(`确定删除“${b.title}”吗？删除后无法恢复。`)) removeBlock(b.id)
-                }}
-                onAddStep={() => startAddStep(b)}
-                onApply={applyPreview}
-                onCancelPreview={closePreview}
-                onAiIdea={() => aiWriteIdea({ ...b, ...draft }, setDraft)}
-                aiBusy={busy}
-                onUpdateStep={(si, patch) => updateStep(b.id, si, patch)}
-              />
-            ))}
-            {preview?.isNew && (
-              <div className="decomp-block open new-block-preview">
-                <div className="block-head">
-                  <span className="block-no">＋</span>
-                  <span className="block-title">新拆解块 · {preview.patch.title || '（未命名）'}</span>
-                </div>
-                <div className="block-body">
-                  <div className="body-inner">
-                    <div className="bd">
-                      <div className="modify-preview">
-                        <div className="mp-head"><span className="pulse" />新建预览 · 待确认</div>
-                        <div className="mp-body">
-                          <div className="preview-field"><span className="preview-label">标题</span><strong>{preview.patch.title || '（未命名）'}</strong></div>
-                          {preview.patch.quote && <div className="preview-field"><span className="preview-label">依据</span><div className="preview-copy">{preview.patch.quote}</div></div>}
-                          {preview.patch.idea && <div className="preview-field"><span className="preview-label">思路</span><div className="preview-copy">{preview.patch.idea}</div></div>}
-                          {preview.patch.steps?.length > 0 && (
-                            <div className="preview-field"><span className="preview-label">步骤</span><ol className="preview-steps">{preview.patch.steps.map((s, si) => <li key={si}><span>{si + 1}</span><div><strong>{s.action || '未填写动作'}</strong>{s.method && <small>{s.method}</small>}</div></li>)}</ol></div>
-                          )}
-                        </div>
-                        <div className="mp-ops">
-                          <button className="btn btn-ghost btn-sm" onClick={closePreview}>取消</button>
-                          <button className="btn btn-primary btn-sm" onClick={applyPreview}>确认新建</button>
+            </header>
+            {visibleBoardNodes.length > 0 && !preview && <div className="thought-organizer-node">
+              <label htmlFor="thought-organizer-node">当前节点</label>
+              <select ref={organizerSelect} id="thought-organizer-node" aria-label="整理节点" value={organizerNode?.id || ''}
+                onChange={event => {
+                  const node = boardNodes.find(item => item.id === event.target.value)
+                  if (node) viewOrganizerNode(node)
+                }}>
+                <option value="" disabled>选择节点</option>
+                {visibleBoardNodes.map(node => <option key={node.id} value={node.id}>{node.title}</option>)}
+              </select>
+            </div>}
+            <div className="thought-inspector-body decomp" data-thought-quote="node" tabIndex={-1} onBlurCapture={event => {
+              if (editingId && event.target.matches('input, textarea')) lastDraftInput.current = event.target
+            }}>
+              {error && requestNodeId === undefined && <div className="alert error" role="alert">{error}</div>}
+              {!organizerNode && !preview && <p className="thought-organizer-empty">{visibleBoardNodes.length ? '从画布或上方列表选择要整理的节点。' : '在画布添加节点后，可以在这里整理内容。'}</p>}
+              {sourceQuestion && !preview && <div className="thought-question-source">
+                <p>{sourceQuestion.quote || '题干标出了这个小问，暂无可显示的正文。'}</p>
+              </div>}
+              {organizerNode && !organizerNode.sourceQuestion && !preview && <div className="thought-node-properties">
+                {organizerNode.kind !== 'question' && <label>
+                  节点类型
+                  <select aria-label="节点类型" value={organizerNode.kind || 'note'} onChange={event => {
+                    const kind = event.target.value
+                    setBlocks(prev => prev.map(node => node.id === organizerNode.id ? { ...node, kind } : node))
+                  }}>
+                    {Object.entries(THOUGHT_NODE_TYPES).filter(([kind]) => kind !== 'question').map(([kind, type]) => (
+                      <option key={kind} value={kind}>{type.label}</option>
+                    ))}
+                  </select>
+                </label>}
+                {organizerParents.length > 0 && <ul aria-label="上游连线">
+                  {organizerParents.map(parent => <li key={parent.id ?? 'root'}>
+                    <span>{parent.title}</span>
+                    <button type="button" className="btn btn-ghost btn-sm"
+                      aria-label={organizerParents.length === 1 ? '断开上级' : `断开 ${parent.title}`}
+                      onClick={() => {
+                        updateNodeLink(parent.id, organizerNode.id, true)
+                        organizerSelect.current?.focus({ preventScroll: true })
+                      }}>断开</button>
+                  </li>)}
+                </ul>}
+              </div>}
+              {!preview && blocksWsId === wsIdNow && blocks.map((b, i) => b.id === inspectorId && (
+                <Block
+                  key={`${blocksWsId}:${b.id}`}
+                  b={b}
+                  index={i}
+                  open={openSet.has(b.id)}
+                  editing={editingId === b.id}
+                  draft={draft}
+                  draftCacheOk={draftCacheOk}
+                  setDraft={setDraft}
+                  onToggle={() => toggleOpen(b.id)}
+                  onEdit={() => startEdit(b)}
+                  onCommitEdit={commitEdit}
+                  onCancelEdit={() => { draftSession.current += 1; setEditingId(null); setDraft(null) }}
+                  onRelate={() => setRelateId(b.id)}
+                  onAddStep={() => startAddStep(b)}
+                  onAiIdea={() => aiWriteIdea({ ...b, ...draft }, setDraft)}
+                  aiBusy={busy}
+                />
+              ))}
+              {preview && (
+                <div className="decomp-block open new-block-preview">
+                  <div className="block-head">
+                    <span className="block-no">＋</span>
+                    <span className="block-title">新节点 · {preview.patch.title || '（未命名）'}</span>
+                  </div>
+                  <div className="block-body">
+                    <div className="body-inner">
+                      <div className="bd">
+                        <div className="modify-preview">
+                          <div className="mp-head"><span className="pulse" />新建预览 · 待确认</div>
+                          <div className="mp-body">
+                            <div className="preview-field"><span className="preview-label">标题</span><strong>{preview.patch.title || '（未命名）'}</strong></div>
+                            {preview.patch.quote && <div className="preview-field"><span className="preview-label">依据</span><div className="preview-copy">{preview.patch.quote}</div></div>}
+                            {preview.patch.idea && <div className="preview-field"><span className="preview-label">思路</span><div className="preview-copy">{preview.patch.idea}</div></div>}
+                            {preview.patch.steps?.length > 0 && (
+                              <div className="preview-field"><span className="preview-label">步骤</span><ol className="preview-steps">{preview.patch.steps.map((s, si) => <li key={si}><span>{si + 1}</span><div><strong>{s.action || '未填写动作'}</strong>{s.method && <small>{s.method}</small>}</div></li>)}</ol></div>
+                            )}
+                          </div>
+                          <div className="mp-ops">
+                            <button className="btn btn-ghost btn-sm" onClick={closePreview}>取消</button>
+                            <button className="btn btn-primary btn-sm" onClick={applyPreview}>确认新建</button>
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
-            {blocks.length > 0 && <button className="new-block" onClick={addBlock}><IconPlus size={15} /> 新建拆解块</button>}
-          </div>
+              )}
+
+            </div>
+          </aside>}
         </div>
-      </section>
 
-      {/* 书签竖栏 */}
-      <aside className="bookmarks">
-        <ResizeHandle value={panelW} onWidth={(px) => { const v = px + 'px'; setPanelW(v); localStorage.setItem('mmg_panel_w_v1', v) }} />
-        <button className={`bookmark-item ${panel === 'chat' ? 'active' : ''}`} onClick={() => setPanel('chat')}>对话</button>
-        <button className={`bookmark-item ${panel === 'kc' ? 'active' : ''}`} onClick={() => setPanel('kc')}>知识卡片</button>
-      </aside>
+        {typeMenu && <ThoughtTypePicker trigger={typeMenu} onClose={() => closeNodeTypes(true)}
+          onChoose={kind => { closeNodeTypes(true); addBlock(kind) }} />}
 
-      {/* AI 面板 */}
-      <section className="ai-panel">
-        {panel === 'chat' ? (
-          <>
-            <header className="ai-head">
-              <div className="ai-head-copy">
-                <div className="ai-title"><span className="ai-brand"><IconSparkles size={14} /></span>AI 助手 <span className={`suffix ai-phase ${error ? 'failed' : busy ? 'working' : ''}`} role="status">· {busy ? (streaming ? '回复中' : '等待回复') : error ? '请求失败' : '就绪'}</span></div>
-                <span className="ai-head-note">{msgs.length ? `已交流 ${msgs.length} 轮` : '等待你的下一步判断'}</span>
+        {floating && <section className="ai-panel thought-floating" role="dialog" aria-label={panel === 'chat' ? TUTOR_NAME : '知识卡片'}
+          onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); closeFloating() } }}>
+          <header className="thought-overlay-head">
+            <div className="ai-head-copy">
+              <div className="ai-title">
+                <span className="ai-brand">{panel === 'chat' ? <IconSparkles size={14} /> : <IconLayers size={14} />}</span>
+                {panel === 'chat' ? TUTOR_NAME : '知识卡片'}
+                {panel === 'chat' && <span className={`suffix ai-phase ${error && requestNodeId === chatNodeId ? 'failed' : ''}`} role="status">
+                  {chatBusy ? (streaming ? '回复中' : '等待回复') : busy ? '另一段操作进行中' : error && requestNodeId === chatNodeId ? '请求失败' : '就绪'}
+                </span>}
               </div>
-            </header>
-            <div className="chat" ref={chatRef}>
-              {msgs.length === 0 && (
-                <div className="chat-empty">
-                  <div className="chat-empty-mark"><IconSparkles size={18} /></div>
-                  <strong>从一个判断开始</strong>
-                  <span>你说出当前想确认的点，我会陪你逐步推进。</span>
-                  <div className="quick-prompts quick-prompts-empty">
-                    {quickPrompts.map((prompt) => <button type="button" key={prompt} onClick={() => setInput(prompt)}>{prompt}</button>)}
-                  </div>
-                </div>
-              )}
-              {msgs.map((m, i) => {
-                const recallMatches = recallMatchesByMessage[i] || []
-                return (
-                <div key={i} className={`msg ${m.role}`}>
-                  <span className="avatar">{m.role === 'ai' ? <IconSparkles size={14} /> : '我'}</span>
+              {panel === 'chat' && <span className="thought-chat-scope">{chatNode ? `自由问答 · ${chatNode.title}` : '自由问答 · 工作区对话'}</span>}
+            </div>
+            <button className="ico-btn" type="button" aria-label="关闭浮窗" onClick={closeFloating}><IconClose size={16} /></button>
+          </header>
+          {panel === 'chat' ? <>
+            <div className="chat" ref={chatRef} data-thought-quote="chat" tabIndex={-1}>
+              {msgs.map((message, index) => (
+                <div key={index} className={'msg ' + message.role}>
+                  <span className="avatar">{message.role === 'ai' ? <IconSparkles size={14} /> : '我'}</span>
                   <div className="bubble">
-                    {/* AI 回复用 MD 渲染（Markdown 生效，sanitize 防 XSS）；用户消息保持纯文本 */}
-                    {m.role === 'ai' ? <MD text={m.text} /> : <div className="t">{m.text}</div>}
-                    {m.preview && <div className="chip-ref">已生成本地修改预览</div>}
-                    {m.role === 'ai' && <ConceptCards matches={recallMatches} />}
-                    <div className="msg-time">{m.time}</div>
+                    {message.role === 'ai' ? <MD text={message.text} /> : <div className="t">{message.text}</div>}
+                    {message.role === 'ai' && <ConceptCards matches={recallMatchesByMessage[index]} Card={knowledge?.KnowledgeCard} />}
+                    <div className="msg-time">{message.time}</div>
                   </div>
                 </div>
-                )
-              })}
-              {busy && (
-                <div className="msg ai">
-                  <span className="avatar"><IconSparkles size={14} /></span>
-                  <div className="bubble">
-                    {streaming ? (
-                      // JSON 输出时不展示原文，显示友好进度；自然语言则实时渲染
-                      streaming.trim().startsWith('{') ? (
-                        <div className="t" style={{ color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 6 }}><IconClock size={13} /> AI 正在生成修改方案…</div>
-                      ) : (
-                        <MD text={streaming} />
-                      )
-                    ) : (
-                      <span className="thinking"><i /><i /><i /></span>
-                    )}
-                  </div>
-                </div>
-              )}
+              ))}
+              {chatBusy && <div className="msg ai">
+                <span className="avatar"><IconSparkles size={14} /></span>
+                <div className="bubble">{streaming ? <MD text={streaming} /> : <span className="thinking"><i /><i /><i /></span>}</div>
+              </div>}
             </div>
             <div className="composer-wrap">
-              {msgs.length > 0 && (
-                <div className="quick-prompts" aria-label="快捷提问">
-                  {quickPrompts.map((prompt) => <button type="button" key={prompt} onClick={() => setInput(prompt)}>{prompt}</button>)}
-                </div>
-              )}
+              {error && requestNodeId === chatNodeId && <div className="alert error" role="alert">{error}</div>}
               <div className="composer">
-              <textarea ref={composerInput}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendInstruction() } }}
-                placeholder="输入指令，AI 会就地给出修改预览…"
-                rows="1"
-              />
-              <button className="send-btn" onClick={sendInstruction} disabled={busy || !input.trim()} title="发送"><IconSend size={16} /></button>
+                <textarea ref={composerInput} value={input} onChange={event => setInput(event.target.value)} onKeyDown={handleComposerKeyDown}
+                  aria-label="建模对话" placeholder="想问什么都可以…" rows={1} />
+                <button type="button" className="send-btn" onClick={sendInstruction} disabled={busy || !input.trim()} aria-busy={chatBusy} title="发送">
+                  {chatBusy ? <span className="send-progress" aria-hidden="true" /> : <IconSend size={16} />}
+                </button>
               </div>
+              <a className="thought-model" href="#/settings" title="打开模型设置">当前模型 · {settings.model || '未配置'}</a>
             </div>
-          </>
-        ) : (
-          <>
-            <header className="ai-head">
-              <div className="ai-title"><span className="ai-brand"><IconLayers size={14} /></span>知识卡片</div>
-            </header>
+          </> : (
             <div className="kp">
-              <div className="kp-search">
-                <span><IconSearch size={14} /></span>
-                <input value={kcQuery} onChange={(e) => setKcQuery(e.target.value)} placeholder="搜索知识卡片…" />
-              </div>
-              <KnowledgeLibrary query={kcQuery} onAddToBreakdown={addCardToBreakdown} />
+              <div className="kp-search"><span><IconSearch size={14} /></span><input value={kcQuery} onChange={event => setKcQuery(event.target.value)} placeholder="搜索知识卡片…" /></div>
+              {knowledge ? <knowledge.KnowledgeLibrary query={kcQuery} onAddToBreakdown={addCardToBreakdown} /> : <p className="hint">正在打开知识卡片…</p>}
             </div>
-          </>
-        )}
+          )}
+        </section>}
+        <ThoughtQuoteFollowUp key={`quote:${wsIdNow || 'empty'}`} host={boardMain} settings={settings} getContext={quoteContext} />
       </section>
 
       {/* 关联附件弹窗 */}
@@ -928,7 +1233,7 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
         <div className="scrim" onClick={() => setRelateId(null)}>
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
             <h2>关联附件数据</h2>
-            <div className="sub">把附件挂到该拆解块上，生成代码时会一并注入数据。</div>
+            <div className="sub">把附件挂到这张卡片上，生成代码时会一并注入数据。</div>
             {doneTables.length === 0 && <div className="hint">暂无已解析附件，请先在读题工作台上传。</div>}
             {doneTables.map((a) => (
               <button key={a.id} type="button" className="check-opt" onClick={() => linkAttachment(relateId, a.name)}>
@@ -946,13 +1251,63 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
   )
 }
 
-/** AI 消息中命中建模概念时，就地内嵌知识卡片（联动） */
-function ConceptCards({ matches = [] }) {
-  if (!matches.length) return null
+function ThoughtTypePicker({ trigger, onClose, onChoose }) {
+  const panel = useRef(null)
+
+  useLayoutEffect(() => {
+    const menu = panel.current
+    const workspace = menu.parentElement
+    const header = workspace.querySelector('.thought-header')
+    const tools = workspace.querySelector('.thought-tools')
+    const place = () => {
+      const host = workspace.getBoundingClientRect()
+      const anchor = trigger.getBoundingClientRect()
+      const minY = header.offsetHeight + 8
+      const maxY = tools.getBoundingClientRect().top - host.top - menu.offsetHeight - 8
+      const left = anchor.right - host.left - menu.offsetWidth
+      const above = anchor.top - host.top - menu.offsetHeight - 7
+      menu.style.left = `${Math.max(8, Math.min(left, host.width - menu.offsetWidth - 8))}px`
+      menu.style.top = `${Math.max(minY, Math.min(above, maxY))}px`
+    }
+    place()
+    menu.querySelector('.thought-type-options button')?.focus({ preventScroll: true })
+    const resize = new ResizeObserver(place)
+    resize.observe(workspace)
+    resize.observe(menu)
+    return () => resize.disconnect()
+  }, [trigger])
+
+  return (
+    <div ref={panel} className="thought-type-menu" role="dialog" aria-label="节点类型"
+      onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); onClose() } }}>
+      <div className="thought-type-heading">
+        <strong>添加节点</strong>
+        <button type="button" className="ico-btn" aria-label="关闭节点类型" onClick={onClose}><IconClose size={15} /></button>
+      </div>
+      <p className="thought-type-hint">卡片可以独立保留，需要表达关系时再拖动圆点连线。</p>
+      <div className="thought-type-options">
+        {[...THOUGHT_AREAS, { id: 'other', label: '其他', kinds: ['note', 'question'] }].map(area => (
+          <div key={area.id} className="thought-type-group" role="group" aria-label={area.label}>
+            <small>{area.label}</small>
+            {area.kinds.map(kind => {
+              const option = THOUGHT_NODE_TYPES[kind]
+              return <button key={kind} type="button" aria-label={option.label} onClick={() => onChoose(kind)}>
+                <strong>{option.label}</strong><span>{option.field}</span>
+              </button>
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ConceptCards({ matches = [], Card }) {
+  if (!matches.length || !Card) return null
   return (
     <div className="concept-recall-list">
       {matches.map((match) => (
-        <KnowledgeCard
+        <Card
           key={match.id}
           cardId={match.id}
           variant="summary"
@@ -964,184 +1319,7 @@ function ConceptCards({ matches = [] }) {
   )
 }
 
-function LegacyBlock({ b, index, open, preview, editing, draft, setDraft, onToggle, onEdit, onCommitEdit, onCancelEdit, onRelate, onRemove, onApply, onCancelPreview, onAiBody, aiBusy, onUpdateStep }) {
-  // 步骤展开状态：默认只展开第一步，减少初始密度；新增步骤自动展开到新增加的那一步
-  const prevStepCount = useRef(b.steps.length)
-  const [openSteps, setOpenSteps] = useState(() => (b.steps.length > 0 ? new Set([0]) : new Set()))
-  const [editStep, setEditStep] = useState(null) // 正在填写思路的步骤索引
-  const [stepDraft, setStepDraft] = useState('') // 步骤思路草稿
-  useEffect(() => {
-    setOpenSteps((prev) => {
-      const next = new Set(prev)
-      for (let i = prevStepCount.current; i < b.steps.length; i++) next.add(i)
-      return next
-    })
-    prevStepCount.current = b.steps.length
-  }, [b.steps.length]) // eslint-disable-line react-hooks/exhaustive-deps
-  function toggleStep(i) {
-    setOpenSteps((prev) => {
-      const next = new Set(prev)
-      next.has(i) ? next.delete(i) : next.add(i)
-      return next
-    })
-  }
-  function startEditStep(i, desc) {
-    setEditStep(i)
-    setStepDraft(desc || '')
-  }
-  function saveStep(i) {
-    onUpdateStep(i, stepDraft.trim())
-    setEditStep(null)
-    setStepDraft('')
-  }
-  const progress = getBlockProgress(b)
-  return (
-    <article className={`decomp-block ${open ? 'open' : ''} status-${progress.status === '已完成' ? 'done' : progress.status === '进行中' ? 'active' : 'idle'}`}>
-      <div className="block-head">
-        <button className="block-title-btn" onClick={onToggle} aria-expanded={open}>
-          <span className="block-no">{index + 1}</span>
-          <span className="block-title-wrap">
-            <span className="block-title">{b.title}</span>
-            <span className={`block-status status-${progress.status === '已完成' ? 'done' : progress.status === '进行中' ? 'active' : 'idle'}`}>
-              <span className="block-status-dot" aria-hidden="true" />{progress.status}
-            </span>
-          </span>
-        </button>
-        <span className="block-ops">
-          <button className="ico-btn" title="编辑" onClick={onEdit}><IconEdit size={14} /></button>
-          <button className="ico-btn block-toggle" title={open ? '收起' : '展开'} onClick={onToggle} aria-expanded={open}><IconChevronRight size={14} /></button>
-        </span>
-      </div>
-      <div className="block-body">
-        <div className="body-inner">
-          <div className="bd">
-            {editing ? (
-              <>
-                <input className="bk-input" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder="拆解块标题" />
-                <textarea className="bk-textarea" value={draft.quote} onChange={(e) => setDraft({ ...draft, quote: e.target.value })} placeholder="核心说明（一句话概括这块要做什么）" rows={2} />
-                <div className="bk-label">思路正文 · 支持 Markdown（自由书写）</div>
-                <textarea
-                  className="bk-textarea bk-md"
-                  value={draft.body}
-                  onChange={(e) => setDraft({ ...draft, body: e.target.value })}
-                  placeholder={'用 Markdown 自由表达思路，例如：\n**目标**：最小化总成本\n\n- 步骤一：读取数据\n- 步骤二：构造特征\n\n> 引用题干："车辆更新须满足…"'}
-                  rows={6}
-                />
-                  <div className="bk-md-hint"><IconSparkles size={12} /> 支持 Markdown：`**加粗**` · `- 列表` · `&gt; 引用` · `# 标题` · `` `代码` `` · `![图](url)`</div>
-                <div className="bk-ai-row">
-                  <button className="btn btn-ghost btn-sm" onClick={onAiBody} disabled={aiBusy} title="让 AI 根据标题与核心说明生成思路正文，填入下方输入框">
-                    {aiBusy ? <><IconSparkles size={13} /> AI 生成中…</> : <><IconSparkles size={13} /> AI 帮我写思路</>}
-                  </button>
-                </div>
-                <div className="bk-label">步骤标题（有序列表，每步展开后可分别填写思路）</div>
-                <textarea className="bk-textarea" value={draft.stepsText} onChange={(e) => setDraft({ ...draft, stepsText: e.target.value })} placeholder="每行一个步骤标题（如：数据预处理 / 建模 / 验证）。每步的思路在下方展开区分别填写。" rows={3} />
-                <div className="bk-edit-actions">
-                  <button className="btn btn-ghost btn-sm" onClick={onCancelEdit}>取消</button>
-                  <button className="btn btn-primary btn-sm" onClick={onCommitEdit}>保存</button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="block-progress-summary">
-                  <div className="block-progress-copy"><span>完成度</span><strong>{progress.ratio}%</strong><span className="block-progress-detail">{progress.filledSteps}/{progress.totalSteps} 个步骤已补充</span></div>
-                  <div className="block-progress-track" aria-label={`${progress.ratio}% 完成`}><span style={{ width: `${progress.ratio}%` }} /></div>
-                </div>
-                {b.quote && (
-                  <div className="block-quote">
-                    <span className="bk-tag tag-accent">核心</span>
-                    <MD text={b.quote} />
-                  </div>
-                )}
-                {b.body && (
-                  <div className="block-body-md">
-                    <span className="bk-tag tag-primary">思路</span>
-                    <MD text={b.body} />
-                  </div>
-                )}
-                {b.steps.length > 0 && (
-                  <div className="block-steps">
-                    <span className="bk-tag">步骤</span>
-                    <ol className="step-list">
-                      {b.steps.map((s, si) => {
-                        const sOpen = openSteps.has(si)
-                        return (
-                          <li key={si} className={`step-item ${sOpen ? 'open' : ''}`}>
-                            <button className="step-head" onClick={() => toggleStep(si)} aria-expanded={sOpen}>
-                              <span className="step-no">{si + 1}</span>
-                              <span className="step-title">{s.label}</span>
-                              <span className={`step-chev ${sOpen ? 'open' : ''}`}><IconChevronDown size={14} /></span>
-                            </button>
-                            {sOpen && (
-                              <div className="step-body">
-                                {editStep === si ? (
-                                  <>
-                                    <textarea
-                                      className="step-edit"
-                                      value={stepDraft}
-                                      onChange={(e) => setStepDraft(e.target.value)}
-                                      placeholder={'在此填写该步骤的思路（支持 Markdown）：\n**做法**：…\n- 要点一\n- 要点二\n> 引用/假设…'}
-                                      rows={4}
-                                      autoFocus
-                                    />
-                                    <div className="step-edit-actions">
-                                      <button className="btn btn-ghost btn-sm" onClick={() => setEditStep(null)}>取消</button>
-                                      <button className="btn btn-primary btn-sm" onClick={() => saveStep(si)}>保存思路</button>
-                                    </div>
-                                  </>
-                                ) : (
-                                  <>
-                                    {s.desc ? <MD text={s.desc} /> : <span className="hint">（此步骤暂无思路，点击「填写思路」补充）</span>}
-                                    <button className="step-edit-btn" onClick={() => startEditStep(si, s.desc)}>
-                                      <IconEdit size={12} /> {s.desc ? '编辑思路' : '填写思路'}
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            )}
-                          </li>
-                        )
-                      })}
-                    </ol>
-                  </div>
-                )}
-                {b.refs?.length > 0 && (
-                  <div className="block-refs">{b.refs.map((r) => <span key={r} className="ref-chip"><IconTable size={12} /> {r}</span>)}</div>
-                )}
-                <div className="row-ops">
-                  <button className="link-btn" onClick={onEdit}><IconEdit size={13} /> 编辑</button>
-                  <button className="link-btn" onClick={onRelate}><IconLink size={13} /> 关联</button>
-                  <button className="link-btn" onClick={onToggle}>{open ? '▲ 收起' : '▼ 展开'}</button>
-                  <button className="link-btn danger" onClick={onRemove}><IconClose size={13} /> 删除</button>
-                </div>
-              </>
-            )}
-
-            {preview && (
-              <div className="modify-preview">
-                <div className="mp-head"><span className="pulse" />修改预览 · 待确认</div>
-                <div className="mp-body">
-                  <div className="preview-field"><span className="preview-label">标题</span><strong>{preview.title || b.title}</strong></div>
-                  {(preview.quote || b.quote) && <div className="preview-field"><span className="preview-label">核心</span><div className="preview-copy">{preview.quote || b.quote}</div></div>}
-                  {preview.body && <div className="preview-field"><span className="preview-label">思路</span><div className="preview-copy"><MD text={preview.body} /></div></div>}
-                  {preview.steps?.length > 0 && (
-                    <div className="preview-field"><span className="preview-label">步骤</span><ol className="preview-steps">{preview.steps.map((s, si) => <li key={si}><span>{si + 1}</span><div><strong>{s.label}</strong>{s.desc && <small>{s.desc}</small>}</div></li>)}</ol></div>
-                  )}
-                </div>
-                <div className="mp-ops">
-                  <button className="btn btn-ghost btn-sm" onClick={onCancelPreview}>取消</button>
-                  <button className="btn btn-primary btn-sm" onClick={onApply}>确认写入</button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </article>
-  )
-}
-
-function Block({ b, index, open, preview, editing, draft, draftCacheOk, setDraft, onToggle, onEdit, onCommitEdit, onCancelEdit, onRelate, onRemove, onAddStep, onApply, onCancelPreview, onAiIdea, aiBusy }) {
-  const [moreOpen, setMoreOpen] = useState(false)
+function Block({ b, index, open, editing, draft, draftCacheOk, setDraft, onToggle, onEdit, onCommitEdit, onCancelEdit, onRelate, onAddStep, onAiIdea, aiBusy }) {
   const [activeStep, setActiveStep] = useState(null)
   const stepsSection = useRef(null)
   const stepInput = useRef(null)
@@ -1181,6 +1359,7 @@ function Block({ b, index, open, preview, editing, draft, draftCacheOk, setDraft
     wasEditing.current = editing
   }, [editing])
   const steps = (b.steps || []).map(normalizeStep)
+  const nodeType = b.kind === 'question' ? { label: '小问内容', field: '写下这个小问要回答的内容' } : THOUGHT_NODE_TYPES[b.kind]
   const status = getBlockStatus(b)
   const statusClass = status.status === '已完成' ? 'done' : status.status === '进行中' ? 'active' : 'idle'
 
@@ -1220,21 +1399,21 @@ function Block({ b, index, open, preview, editing, draft, draftCacheOk, setDraft
       <div className="block-head">
         {editing ? (
           <div className="block-title-btn block-inline-editor">
-            <span className="block-no">{index + 1}</span>
+            <span className="block-no">卡</span>
             <div className="block-inline-fields">
-              <label className="sr-only" htmlFor={`block-title-${b.id}`}>拆解块标题</label>
-              <input id={`block-title-${b.id}`} className="bk-input" value={draft?.title || ''} onChange={(e) => updateDraft({ title: e.target.value })} placeholder="拆解块标题" />
-              <label className="bk-label" htmlFor={`block-idea-${b.id}`}>思路 <span>用一句话说清解决方向</span></label>
-              <textarea ref={ideaInput} id={`block-idea-${b.id}`} autoFocus={!Number.isInteger(draft?.focusStep)} className="bk-textarea bk-idea" value={draft?.idea || ''} onChange={(e) => updateDraft({ idea: e.target.value })} placeholder="先写一句你打算怎样解决这个问题" rows={2} />
+              <label className="sr-only" htmlFor={`block-title-${b.id}`}>卡片标题</label>
+              <input id={`block-title-${b.id}`} className="bk-input" value={draft?.title || ''} onChange={(e) => updateDraft({ title: e.target.value })} placeholder="卡片标题" />
+              <label className="bk-label" htmlFor={`block-idea-${b.id}`}>{nodeType?.label || '思路'} <span>{nodeType?.field || '用一句话说清解决方向'}</span></label>
+              <textarea ref={ideaInput} id={`block-idea-${b.id}`} autoFocus={!Number.isInteger(draft?.focusStep)} className="bk-textarea bk-idea" value={draft?.idea || ''} onChange={(e) => updateDraft({ idea: e.target.value })} placeholder={nodeType?.field || '先写一句你打算怎样解决这个问题'} rows={2} />
               <div className="bk-edit-actions">
-                <button className="btn btn-primary btn-sm" onClick={onCommitEdit}>保存拆解块</button>
+                <button className="btn btn-primary btn-sm" onClick={onCommitEdit}>保存卡片</button>
                 <button className="btn btn-ghost btn-sm" onClick={onCancelEdit}>取消</button>
                 <span className="block-draft-note" role="status">{!draftCacheOk ? '草稿暂存失败，请在离开前保存' : draftChanged ? '有未应用修改 · 本标签页已暂存' : '编辑中 · 内容尚未修改'}</span>
               </div>
             </div>
           </div>
         ) : <button className="block-title-btn" onClick={onToggle} aria-expanded={open}>
-          <span className="block-no">{index + 1}</span>
+          <span className="block-no">卡</span>
           <span className="block-title-wrap">
             <span className="block-title">{b.title}</span>
             <span className="block-idea-preview">{b.idea || '还没有一句话思路'}</span>
@@ -1313,9 +1492,9 @@ function Block({ b, index, open, preview, editing, draft, draftCacheOk, setDraft
                 </div>
                 <button type="button" className="add-step-btn" onClick={addDraftStep}><IconPlus size={14} /> 添加步骤</button>
                 <div className="bk-edit-actions block-step-actions">
-                  <span className="block-draft-note">步骤修改随整个拆解块一起保存</span>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={onCancelEdit}>取消整块编辑</button>
-                  <button type="button" className="btn btn-primary btn-sm" onClick={onCommitEdit}>保存整个拆解块</button>
+                  <span className="block-draft-note">步骤和这张卡片一起保存</span>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={onCancelEdit}>取消编辑</button>
+                  <button type="button" className="btn btn-primary btn-sm" onClick={onCommitEdit}>保存这张卡片</button>
                 </div>
                 </details>
 
@@ -1366,35 +1545,10 @@ function Block({ b, index, open, preview, editing, draft, draftCacheOk, setDraft
                   <button className="link-btn" onClick={onAddStep}><IconPlus size={13} /> 添加步骤</button>
                   <button className="link-btn" onClick={onRelate}><IconLink size={13} /> 关联数据</button>
                   <button className="link-btn" onClick={onEdit}><IconEdit size={13} /> 编辑</button>
-                  <span className="more-wrap">
-                    <button className="link-btn" onClick={() => setMoreOpen((value) => !value)} aria-expanded={moreOpen}>更多 <IconChevronDown size={13} /></button>
-                    {moreOpen && (
-                      <span className="more-menu">
-                        <button type="button" className="more-menu-item danger" onClick={() => { setMoreOpen(false); onRemove() }}><IconClose size={13} /> 删除拆解块</button>
-                      </span>
-                    )}
-                  </span>
                 </div>
               </>
             )}
 
-            {preview && (
-              <div className="modify-preview">
-                <div className="mp-head"><span className="pulse" />修改预览 · 待确认</div>
-                <div className="mp-body">
-                  <div className="preview-field"><span className="preview-label">标题</span><strong>{preview.title || b.title}</strong></div>
-                  {preview.quote && <div className="preview-field"><span className="preview-label">依据</span><div className="preview-copy">{preview.quote}</div></div>}
-                  {preview.idea && <div className="preview-field"><span className="preview-label">思路</span><div className="preview-copy">{preview.idea}</div></div>}
-                  {preview.steps?.length > 0 && (
-                    <div className="preview-field"><span className="preview-label">步骤</span><ol className="preview-steps">{preview.steps.map((step, stepIndex) => <li key={stepIndex}><span>{stepIndex + 1}</span><div><strong>{step.action || '未填写动作'}</strong>{step.method && <small>{step.method}</small>}</div></li>)}</ol></div>
-                  )}
-                </div>
-                <div className="mp-ops">
-                  <button className="btn btn-ghost btn-sm" onClick={onCancelPreview}>取消</button>
-                  <button className="btn btn-primary btn-sm" onClick={onApply}>确认写入</button>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>

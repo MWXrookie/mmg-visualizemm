@@ -38,8 +38,6 @@ for (const raw of blocks) {
     demoGuide: grab('demoGuide'),
     aiContext: grab('aiContext'),
     sourceBrief: grab('sourceBrief'),
-    try: grab('try'),
-    freq: grab('freq'),
     src: grab('src'),
   })
 }
@@ -56,7 +54,7 @@ const lines = [
   '# 知识卡片库 · 概念速查（结构化）',
   '',
   '> 本文件是知识库的「知识卡片」数据源（type=card）。',
-  '> 来源：产品内全部知识卡片的文字内容（Cards.jsx）。',
+  '> 来源：大学通用建模知识卡（Cards.jsx）。',
   '> 检索时卡片权重次于方法库、高于论文全文。',
   '',
   '---',
@@ -73,8 +71,6 @@ for (const card of cards) {
   if (card.demoGuide) lines.push(`- 演示说明：${card.demoGuide}`)
   if (card.aiContext) lines.push(`- 演示解释：${card.aiContext}`)
   if (card.sourceBrief) lines.push(`- 来源摘要：${card.sourceBrief}`)
-  if (card.try) lines.push(`- 试一试：${card.try}`)
-  if (card.freq) lines.push(`- 频率：${card.freq}`)
   if (card.src) lines.push(`- 来源：${card.src}`)
   lines.push('', '---', '')
 }
@@ -82,4 +78,3 @@ for (const card of cards) {
 fs.writeFileSync(outPath, lines.join('\n'))
 console.log(`已生成 ${outPath}`)
 console.log(`卡片数量：${cards.length}`)
-console.log(`无"试一试"（纯内容型）：${cards.filter((card) => !card.try).length} 张`)

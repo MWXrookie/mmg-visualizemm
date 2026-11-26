@@ -1,22 +1,37 @@
-import React, { useEffect, useRef, useState } from 'react'
-import Workbench from './pages/Workbench.jsx'
-import Modeling from './pages/Modeling.jsx'
-import Coding from './pages/Coding.jsx'
+import React, { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import Settings from './pages/Settings.jsx'
-import Examples from './pages/Examples.jsx'
+import LearningEntry from './pages/LearningEntry.jsx'
 import { loadSettings, loadTheme, saveTheme, getCurrentWsId, setCurrentWsId } from './store.js'
 import { loadWorkspace, saveWorkspace, listWorkspaces, deleteWorkspace, exportWorkspaceBackup, importWorkspaceBackup } from './api.js'
-import { IconBook, IconCompass, IconCode, IconLayers, IconGear, IconSun, IconMoon, IconEdit, IconTrash, IconMenu, IconClose } from './components/Icons.jsx'
+import { apiFetch, unloadWorkspace, warningsFromHealth } from './lib/apiClient.js'
+import { THOUGHT_BOARD_TOO_LARGE_MESSAGE, THOUGHT_BOARD_TRUNCATED_MESSAGE, fitThoughtBoard } from './lib/thoughtBoardState.js'
+import { IconBook, IconCompass, IconCode, IconHome, IconGear, IconSun, IconMoon, IconEdit, IconTrash, IconMenu, IconClose } from './components/Icons.jsx'
+
+const Workbench = lazy(() => import('./pages/Workbench.jsx'))
+const Modeling = lazy(() => import('./pages/Modeling.jsx'))
+const Coding = lazy(() => import('./pages/Coding.jsx'))
 
 const VIEWS = [
   { id: 'workbench', label: '读题工作台', compactLabel: '1 读题', icon: <IconBook size={18} /> },
-  { id: 'modeling', label: '建模思路梳理', compactLabel: '2 建模', icon: <IconCompass size={18} /> },
+  { id: 'modeling', label: '思路整理台', compactLabel: '2 思路', icon: <IconCompass size={18} /> },
   { id: 'coding', label: '编程工作台', compactLabel: '3 编程', icon: <IconCode size={18} /> },
-  { id: 'examples', label: '建模范例', compactLabel: '范例', icon: <IconLayers size={18} /> },
 ]
 
+function PageFallback({ label }) {
+  return <div className="page-fallback" role="status">正在打开{label}…</div>
+}
+
+const ENTRY_VIEWS = ['home', 'university', 'secondary']
+
+function getView() {
+  const hashView = location.hash.replace(/^#\//, '')
+  if (hashView === 'examples') return 'university'
+  if (ENTRY_VIEWS.includes(hashView) || hashView === 'settings' || VIEWS.some(({ id }) => id === hashView)) return hashView
+  return 'home'
+}
+
 function workspacePayload(w) {
-  return {
+  const payload = {
     id: w.id,
     title: w.title || '',
     problemText: w.problemText || '',
@@ -28,49 +43,68 @@ function workspacePayload(w) {
     overview: w.overview || '',
     code: w.code || '',
   }
+  const fitted = fitThoughtBoard(w.thoughtBoard)
+  if (fitted.board && !fitted.omitted) payload.thoughtBoard = fitted.board
+  return { payload, boardOmitted: fitted.omitted && !!w.thoughtBoard, truncated: fitted.truncated, fittedBoard: fitted.board }
 }
 
-/** 常规自动保存使用普通请求；仅 pagehide 使用 keepalive 或同步兜底。 */
-function persist(w, unloading = false) {
-  if (!w || !w.id) return
-  const body = JSON.stringify(workspacePayload(w))
+async function sendWorkspace(payload, unloading) {
+  const body = JSON.stringify(payload)
   if (!unloading) {
-    return fetch('/api/workspaces', {
+    const response = await apiFetch('/api/workspaces', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body,
-    }).then(async (response) => {
-      if (!response.ok) throw new Error(`保存失败：HTTP ${response.status}`)
-      const result = await response.json()
-      if (result.ok === false) throw new Error(result.error || '保存未成功')
     })
-  }
-  // keepalive 请求体有约 64KB 上限，大工作区在 pagehide 时直接走同步兜底。
-  if (new TextEncoder().encode(body).byteLength <= 60 * 1024) {
-    fetch('/api/workspaces', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body,
-      keepalive: true,
-    }).catch((error) => console.warn('[persist] 离页保存失败：', error))
+    const result = await response.json().catch(() => ({}))
+    if (response.status === 413 && result.code === 'THOUGHT_BOARD_TOO_LARGE') {
+      const error = new Error(THOUGHT_BOARD_TOO_LARGE_MESSAGE)
+      error.code = 'THOUGHT_BOARD_TOO_LARGE'
+      throw error
+    }
+    if (response.status === 400 && result.code === 'BAD_THOUGHT_BOARD') {
+      const error = new Error('白板内容无法保存，题目、卡片和代码仍会保存。')
+      error.code = 'BAD_THOUGHT_BOARD'
+      throw error
+    }
+    if (!response.ok || result.ok === false) {
+      const error = new Error(result.message || result.error || `保存失败：HTTP ${response.status}`)
+      error.code = result.code || ''
+      error.status = response.status
+      throw error
+    }
     return
   }
-  try {
-    const xhr = new XMLHttpRequest()
-    xhr.open('POST', '/api/workspaces', false)
-    xhr.setRequestHeader('Content-Type', 'application/json')
-    xhr.send(body)
-    if (xhr.status < 200 || xhr.status >= 300) console.warn('[persist] 离页保存失败：HTTP', xhr.status)
-  } catch (error) {
-    console.warn('[persist] 离页保存失败：', error)
+  unloadWorkspace(body)
+}
+
+/** 常规自动保存使用普通请求；仅 pagehide 使用 keepalive 或同步兜底。过长的小墨对话先截短；仍放不下时去掉白板再保存其余内容。 */
+function persist(w, unloading = false) {
+  if (!w || !w.id) return
+  const prepared = workspacePayload(w)
+  const notify = (message) => {
+    if (!unloading) globalThis.__notifyBoardLimit?.(message)
   }
+  if (prepared.truncated && prepared.payload.thoughtBoard) {
+    notify(THOUGHT_BOARD_TRUNCATED_MESSAGE)
+    if (!unloading) globalThis.__applyFittedThoughtBoard?.(prepared.payload.thoughtBoard)
+  }
+  if (prepared.boardOmitted) notify(THOUGHT_BOARD_TOO_LARGE_MESSAGE)
+  const saving = sendWorkspace(prepared.payload, unloading)
+  if (unloading || !saving) return saving
+  return saving.catch(async (error) => {
+    if ((error.code !== 'THOUGHT_BOARD_TOO_LARGE' && error.code !== 'BAD_THOUGHT_BOARD') || !prepared.payload.thoughtBoard) throw error
+    notify(error.code === 'BAD_THOUGHT_BOARD' ? error.message : THOUGHT_BOARD_TOO_LARGE_MESSAGE)
+    const { thoughtBoard, ...rest } = prepared.payload
+    await sendWorkspace(rest, false)
+  })
 }
 
 export default function App() {
-  const [view, setView] = useState(() => (location.hash.replace('#/', '') || 'workbench'))
+  const [view, setView] = useState(getView)
   const [settings, setSettings] = useState(null)
   const [theme, setTheme] = useState(loadTheme)
-  const [wsCollapsed, setWsCollapsed] = useState(() => !['settings'].includes(location.hash.replace('#/', '') || 'workbench'))
+  const [wsCollapsed, setWsCollapsed] = useState(() => getView() !== 'settings')
   const [wsId, setWsId] = useState(getCurrentWsId)
   const [ws, setWs] = useState(null) // 三台共享的工作区数据（题目/附件/拆解/代码）
   const [wsList, setWsList] = useState([]) // 工作区列表（侧栏切换/删除用）
@@ -82,6 +116,12 @@ export default function App() {
   const [workspaceCreating, setWorkspaceCreating] = useState(false)
   const workspaceCreatingRef = useRef(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [openedViews, setOpenedViews] = useState(() => new Set([getView()]))
+  const [securityWarnings, setSecurityWarnings] = useState([])
+  const [boardWarning, setBoardWarning] = useState('')
+  const [authPrompt, setAuthPrompt] = useState(null)
+  const authInput = useRef(null)
+  if (!openedViews.has(view)) setOpenedViews(prev => new Set(prev).add(view))
   const mobileMenuButton = useRef(null)
 
   function closeMobileMenu() {
@@ -100,7 +140,15 @@ export default function App() {
   // 全局通知入口（供各页面调用：window.__notify('...')）
   useEffect(() => {
     window.__notify = (msg) => setToast(msg)
-    return () => { delete window.__notify }
+    window.__notifyBoardLimit = (msg) => setBoardWarning(msg)
+    window.__applyFittedThoughtBoard = (board) => setWs((prev) => (prev ? { ...prev, thoughtBoard: board } : prev))
+    window.__lanAuthPrompt = ({ code, message, finish }) => setAuthPrompt({ code, message, finish })
+    return () => {
+      delete window.__notify
+      delete window.__notifyBoardLimit
+      delete window.__applyFittedThoughtBoard
+      delete window.__lanAuthPrompt
+    }
   }, [])
   useEffect(() => {
     if (!toast) return
@@ -119,6 +167,14 @@ export default function App() {
 
   useEffect(() => { loadSettings().then(setSettings) }, [])
   useEffect(() => {
+    let live = true
+    apiFetch('/api/health')
+      .then((response) => response.json().catch(() => ({})))
+      .then((health) => { if (live) setSecurityWarnings(warningsFromHealth(health)) })
+      .catch(() => { if (live) setSecurityWarnings(warningsFromHealth(null)) })
+    return () => { live = false }
+  }, [])
+  useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
     saveTheme(theme)
   }, [theme])
@@ -126,7 +182,7 @@ export default function App() {
   // hash 路由
   useEffect(() => {
     const onHash = () => {
-      const v = location.hash.replace('#/', '') || 'workbench'
+      const v = getView()
       setView(v)
       setWsCollapsed(v !== 'settings')
       setMobileMenuOpen(false)
@@ -175,10 +231,13 @@ export default function App() {
         await persist(ws)
         if (!current) return
         setSaveState({ id: ws.id, status: 'saved' })
-        setToast((previous) => previous === '拆解块修改已应用，正在保存…' ? '拆解块已保存到工作区' : previous)
+        setToast((previous) => previous === '卡片修改已应用，正在保存…' ? '卡片已保存到工作区' : previous)
       } catch (error) {
         console.warn('[persist] 保存失败：', error)
-        if (current) setSaveState({ id: ws.id, status: 'error' })
+        if (current) {
+          setSaveState({ id: ws.id, status: 'error' })
+          if (error.code === 'AUTH_RATE_LIMITED' && error.message) setToast(error.message)
+        }
       }
     }, delay)
     // A late acknowledgement must not describe a newer revision or another workspace.
@@ -248,13 +307,22 @@ export default function App() {
   }
 
   /** 新建空白工作区 */
-  function newWorkspace() {
-    if (workspaceCreatingRef.current) return
+  async function newWorkspace({ fromEntry = false } = {}) {
+    if (workspaceCreatingRef.current) return false
     workspaceCreatingRef.current = true
     const trigger = document.activeElement
     setWorkspaceCreating(true)
     setToast('')
-    saveWorkspace({ title: '未命名题目' }).then((r) => {
+    try {
+      if (fromEntry) {
+        let snapshot
+        do {
+          snapshot = wsRef.current
+          if (snapshot?.id === wsIdRef.current) await persist(snapshot)
+        } while (snapshot !== wsRef.current)
+      }
+      const r = await saveWorkspace({ title: '未命名题目' })
+      loadSeqRef.current += 1
       wsIdRef.current = r.id
       wsRef.current = { id: r.id } // 异步状态提交前先对齐引用，避免紧接着的上传写进旧工作区
       setWsId(r.id)
@@ -263,14 +331,17 @@ export default function App() {
       setWs({ id: r.id }) // 立即占位：wsId 效果检测到同 id 后跳过后端加载，避免覆盖后续上传
       refreshWsList()
       window.__notify?.('已新建工作区')
-    }).catch((error) => window.__notify?.(error.message || '新建失败，请重试'))
-      .finally(() => {
-        workspaceCreatingRef.current = false
-        setWorkspaceCreating(false)
-        requestAnimationFrame(() => {
-          if (document.activeElement === document.body && trigger instanceof HTMLElement && trigger.isConnected) trigger.focus({ preventScroll: true })
-        })
+      return true
+    } catch (error) {
+      window.__notify?.(error.message || '新建失败，请重试')
+      return false
+    } finally {
+      workspaceCreatingRef.current = false
+      setWorkspaceCreating(false)
+      requestAnimationFrame(() => {
+        if (document.activeElement === document.body && trigger instanceof HTMLElement && trigger.isConnected) trigger.focus({ preventScroll: true })
       })
+    }
   }
 
   /** 重命名工作区 */
@@ -291,7 +362,9 @@ export default function App() {
     setBackupBusy(true)
     try {
       // 先显式保存最新状态，避免导出尚在 800ms 防抖队列中的旧版本。
-      await saveWorkspace(workspacePayload(current))
+      const prepared = workspacePayload(current)
+      if (prepared.boardOmitted) window.__notifyBoardLimit?.(THOUGHT_BOARD_TOO_LARGE_MESSAGE)
+      await saveWorkspace(prepared.payload)
       const backup = await exportWorkspaceBackup(current.id)
       const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json;charset=utf-8' })
       const url = URL.createObjectURL(blob)
@@ -381,7 +454,8 @@ export default function App() {
   /** 切换工作区 */
   const switchSeqRef = useRef(0)
   async function switchWs(id) {
-    if (!id || id === wsIdRef.current) return
+    if (!id) return false
+    if (id === wsIdRef.current) return true
     const sequence = ++switchSeqRef.current
     setToast('正在保存并切换工作区…')
     try {
@@ -390,17 +464,29 @@ export default function App() {
       do {
         snapshot = wsRef.current
         await persist(snapshot)
-        if (sequence !== switchSeqRef.current) return
+        if (sequence !== switchSeqRef.current) return false
       } while (snapshot !== wsRef.current)
     } catch (error) {
       if (sequence === switchSeqRef.current) setToast(`${error.message}，仍留在当前工作区，请重试切换`)
-      return
+      return false
     }
     setToast('')
     wsIdRef.current = id
     setWsId(id)
     setCurrentWsId(id)
     setWs(null) // 清空当前 → wsId effect 检测到 id 变化后从后端加载
+    return true
+  }
+
+  async function startLearning() {
+    if (await newWorkspace({ fromEntry: true }) && getView() === 'university') {
+      go('workbench')
+      requestAnimationFrame(() => document.getElementById('reading-problem-input')?.focus({ preventScroll: true }))
+    }
+  }
+
+  async function resumeLearning(id) {
+    if (await switchWs(id) && getView() === 'university') go('workbench')
   }
 
   if (!settings) {
@@ -415,10 +501,13 @@ export default function App() {
     saveStatus: saveState.id === ws?.id ? saveState.status : 'idle',
     onExpandSidebar: () => setWsCollapsed(false),
   }
+  const isEntry = ENTRY_VIEWS.includes(view)
+  const resumeWorkspace = wsList.find((item) => item.id === wsId) || wsList[0]
+  const toggleTheme = () => setTheme((current) => current === 'dark' ? 'light' : 'dark')
 
   return (
-    <div className={`app-shell ${wsCollapsed && view !== 'settings' ? 'rail-only' : ''}`}>
-      <aside className={`sidebar ${mobileMenuOpen ? 'mobile-menu-open' : ''}`} onKeyDown={(event) => {
+    <div className={`app-shell ${isEntry ? 'learning-shell' : wsCollapsed && view !== 'settings' ? 'rail-only' : ''}`}>
+      {!isEntry && <aside className={`sidebar ${mobileMenuOpen ? 'mobile-menu-open' : ''}`} onKeyDown={(event) => {
         if (event.key === 'Escape' && mobileMenuOpen) {
           event.preventDefault()
           closeMobileMenu()
@@ -479,6 +568,10 @@ export default function App() {
             </div>
           )}
           <div className="sb-foot">
+            <button className="nav-item" onClick={() => go('university')} title="返回大学生学习入口" aria-label="返回大学生学习入口">
+              <span className="ic"><IconHome size={18} /></span>
+              {wsCollapsed && !mobileMenuOpen ? <span className="nav-rail-label" aria-hidden="true">入口</span> : '学习入口'}
+            </button>
             <button className={`nav-item ${view === 'settings' ? 'active' : ''}`} onClick={() => go('settings')} title="模型设置" aria-current={view === 'settings' ? 'page' : undefined}>
               <span className="ic"><IconGear size={18} /></span>
               {wsCollapsed && !mobileMenuOpen && <span className="nav-rail-label" aria-hidden="true">设置</span>}
@@ -486,7 +579,7 @@ export default function App() {
             </button>
             <button
               className="nav-item"
-              onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+              onClick={toggleTheme}
               title={theme === 'dark' ? '切换浅色' : '切换深色'}
             >
               <span className="ic">{theme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}</span>
@@ -495,23 +588,49 @@ export default function App() {
             </button>
           </div>
         </div>
-      </aside>
+      </aside>}
 
       <main className="content" inert={workspaceCreating ? '' : undefined} aria-busy={workspaceCreating} style={{ minWidth: 0, overflow: 'hidden' }}>
-        <div className={`page-view ${view === 'workbench' ? 'active' : ''}`}>
-          <Workbench {...pageProps} workspaceCreating={workspaceCreating} onNewWorkspace={newWorkspace} />
-        </div>
-        <div className={`page-view ${view === 'modeling' ? 'active' : ''}`}>
-          <Modeling {...pageProps} />
-        </div>
-        {view === 'coding' && <Coding {...pageProps} />}
-        {view === 'examples' && <Examples />}
-        {view === 'settings' && <Settings settings={settings} setSettings={setSettings} />}
+        {isEntry && <LearningEntry view={view} theme={theme} onToggleTheme={toggleTheme} resumeWorkspace={resumeWorkspace} onStart={startLearning} onResume={resumeLearning} />}
+        {openedViews.has('workbench') && <Suspense fallback={view === 'workbench' ? <PageFallback label="读题工作台" /> : null}>
+          <div className={`page-view ${view === 'workbench' ? 'active' : ''}`}>
+            <Workbench {...pageProps} workspaceCreating={workspaceCreating} onNewWorkspace={() => newWorkspace()} />
+          </div>
+        </Suspense>}
+        {openedViews.has('modeling') && <Suspense fallback={view === 'modeling' ? <PageFallback label="思路整理台" /> : null}>
+          <div className={`page-view ${view === 'modeling' ? 'active' : ''}`}>
+            <Modeling {...pageProps} />
+          </div>
+        </Suspense>}
+        {view === 'coding' && <Suspense fallback={<PageFallback label="编程工作台" />}>
+          <Coding {...pageProps} />
+        </Suspense>}
+        {view === 'settings' && <Settings settings={settings} setSettings={setSettings} securityWarnings={securityWarnings} />}
       </main>
+      {boardWarning && <div className="toast save-error" role="alert"><span>{boardWarning}</span><button type="button" onClick={() => setBoardWarning('')}>知道了</button></div>}
       {workspaceCreating ? <div className="toast" role="status">正在创建新工作区，请稍候…</div>
         : saveState.id === ws?.id && saveState.status === 'error'
           ? <div className="toast save-error" role="status"><span>工作区保存失败，当前修改仍保留</span><button type="button" onClick={() => setSaveRetry((count) => count + 1)}>重试保存</button></div>
           : toast && <div className="toast" role="status">{toast}</div>}
+      {authPrompt && (
+        <div className="scrim">
+          <form className="sheet" role="dialog" aria-modal="true" aria-labelledby="lan-auth-title" onSubmit={(event) => {
+            event.preventDefault()
+            const value = authInput.current?.value || ''
+            const finish = authPrompt.finish
+            setAuthPrompt(null)
+            finish(value)
+          }}>
+            <h2 id="lan-auth-title">访问口令</h2>
+            <p className="sub">{authPrompt.code === 'AUTH_INVALID' ? '口令不正确，请重新输入。' : (authPrompt.message || '请输入访问口令。')}</p>
+            <input ref={authInput} className="bk-input" type="password" aria-label="访问口令" autoFocus autoComplete="current-password" style={{ width: '100%' }} />
+            <div className="sheet-actions">
+              <button type="button" className="btn btn-ghost" onClick={() => { const finish = authPrompt.finish; setAuthPrompt(null); finish('') }}>取消</button>
+              <button type="submit" className="btn btn-primary">确认</button>
+            </div>
+          </form>
+        </div>
+      )}
       {wsDialog && (
         <div className="scrim" onClick={() => setWsDialog(null)}>
           <div className="sheet" onClick={(e) => e.stopPropagation()}>

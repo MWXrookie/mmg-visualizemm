@@ -1,0 +1,60 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "MMG 中学课堂 · 从现实问题到解释与检验",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "legend": { "mode": "hidden" },
+    "views": [
+      {
+        "id": "student",
+        "label": "学生的建模判断",
+        "focus": ["problem", "abstract", "model", "solve", "verify", "apply"],
+        "note": "先明确要解决的问题，再定义变量和假设、提出模型。计算后先检查证据，最后用现实语言解释结论、适用条件及局限。"
+      },
+      {
+        "id": "revision",
+        "label": "检验发现问题怎么办",
+        "focus": ["abstract", "model", "solve", "verify", "revise"],
+        "note": "对照实测值、约束或备选方案。发现差异时，先定位数据、假设、参数或模型结构，再回到对应步骤，保留修改前后的依据。"
+      }
+    ]
+  },
+  "lanes": [
+    { "id": "classroom", "label": "教师组织课堂" },
+    { "id": "student", "label": "学生作出判断" },
+    { "id": "revision", "label": "依据证据修订" }
+  ],
+  "mainPath": ["assign", "problem", "abstract", "model", "solve", "verify", "apply"],
+  "semanticChecks": {
+    "allowedRoots": ["assign"],
+    "allowedTerminals": ["apply"],
+    "requiredEdges": [{ "from": "verify", "to": "revise" }, { "from": "revise", "to": "abstract" }]
+  },
+  "nodes": [
+    { "id": "assign", "lane": "classroom", "col": 0, "type": "external", "label": "课前确定任务", "sublabel": "备好数据和任务单", "width": 130, "height": 62 },
+    { "id": "problem", "lane": "student", "col": 0, "type": "frontend", "label": "实际问题", "sublabel": "明确要回答什么", "width": 130, "height": 64 },
+    { "id": "abstract", "lane": "student", "col": 1, "type": "frontend", "label": "抽象成数学问题", "sublabel": "选量 · 核数据 · 提假设", "width": 150, "height": 64 },
+    { "id": "model", "lane": "student", "col": 2, "type": "frontend", "label": "建立模型", "sublabel": "说明关系和选择理由", "width": 132, "height": 64 },
+    { "id": "solve", "lane": "student", "col": 3, "type": "frontend", "label": "模型求解", "sublabel": "手算或按参数计算", "width": 130, "height": 64 },
+    { "id": "verify", "lane": "student", "col": 4, "type": "frontend", "label": "检验结果", "sublabel": "观测值 · 约束 · 方案", "width": 140, "height": 64 },
+    { "id": "apply", "lane": "student", "col": 5, "type": "frontend", "label": "回到实际", "sublabel": "作答 · 说明条件和局限", "width": 145, "height": 64 },
+    { "id": "revise", "lane": "revision", "col": 3, "type": "frontend", "label": "定位并修改", "sublabel": "记录偏差及修订理由", "width": 140, "height": 64 }
+  ],
+  "edges": [
+    { "id": "open", "from": "assign", "to": "problem", "label": "课堂布置", "role": "main" },
+    { "id": "extract", "from": "problem", "to": "abstract", "label": "提取条件", "role": "main" },
+    { "id": "formulate", "from": "abstract", "to": "model", "label": "表达关系", "role": "main" },
+    { "id": "evaluate", "from": "model", "to": "solve", "label": "代入或比较", "role": "main" },
+    { "id": "check", "from": "solve", "to": "verify", "label": "拿证据对照", "role": "main" },
+    { "id": "explain", "from": "verify", "to": "apply", "label": "写结论及边界", "role": "main" },
+    { "id": "diagnose", "from": "verify", "to": "revise", "label": "发现偏差", "variant": "dashed", "role": "branch" },
+    { "id": "retry", "from": "revise", "to": "abstract", "label": "回查数据或假设", "variant": "dashed", "role": "return" }
+  ],
+  "cards": [
+    { "dot": "violet", "title": "高中 · 潮汐预测", "items": ["识别周期并解释参数，比较预测与观测。", "说明模型是否足以支持给定时段的判断。"] },
+    { "dot": "cyan", "title": "初中 · 班级采购", "items": ["比较两份报价，画表或手算。", "把所选方案带回人数、预算和计价条件。"] },
+    { "dot": "emerald", "title": "工具随环节出现", "items": ["按需打开提示、卡片和图表。", "保存学生的选择、证据和修改理由。"] }
+  ]
+}

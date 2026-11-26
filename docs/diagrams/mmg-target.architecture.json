@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "MMG 工作台目标架构",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "viewBox": [1300, 570],
+    "views": [
+      {
+        "id": "sections",
+        "label": "双分区入口",
+        "focus": ["home", "university", "secondary"],
+        "note": "统一主页分流。大学生导入自己的题目或继续已有题目。中学组与负责人共同确定任务和学习流程。"
+      },
+      {
+        "id": "university-learning",
+        "label": "大学学习闭环",
+        "focus": ["university", "workspace", "verification", "reflection"],
+        "note": "学生导入题目后选一个小问，整理目标、已知条件和疑问，再和 AI 讨论假设与方法。运行代码后可以修订模型并比较结果。"
+      },
+      {
+        "id": "shared-foundation",
+        "label": "共用技术底座",
+        "focus": ["workspace", "verification", "services", "storage", "python"],
+        "note": "两个分区共用附件解析、模型调用、检索、工作区存储和浏览器计算。学习内容与引导由各分区维护。"
+      }
+    ]
+  },
+  "components": [
+    { "id": "home", "type": "frontend", "label": "统一主页", "sublabel": "选择学习分区", "pos": [42, 216], "size": [154, 72] },
+    { "id": "secondary", "type": "frontend", "label": "中学学习分区", "sublabel": "初高中内容待讨论", "pos": [290, 62], "size": [178, 72] },
+    {
+      "id": "university", "type": "frontend", "label": "大学生学习入口", "sublabel": "导入自己的题 · 继续学习", "pos": [290, 216], "size": [178, 72]
+    },
+    {
+      "id": "workspace", "type": "frontend", "label": "建模工作区", "sublabel": "选小问 · 读题 · 讨论方法", "pos": [558, 216], "size": [178, 72]
+    },
+    {
+      "id": "verification", "type": "frontend", "label": "编程验证", "sublabel": "编辑代码 · 运行 · 看结果", "pos": [824, 216], "size": [178, 72]
+    },
+    { "id": "reflection", "type": "frontend", "label": "回看与修订", "sublabel": "对照关键结果 · 解释变化", "pos": [1086, 216], "size": [178, 72] },
+    {
+      "id": "services", "type": "backend", "label": "Express 共用服务", "sublabel": "附件解析 · 模型中继 · 检索", "pos": [451, 418], "size": [196, 72]
+    },
+    {
+      "id": "storage", "type": "database", "label": "SQLite 工作区", "sublabel": "题目 · 决策 · 验证记录", "pos": [738, 418], "size": [176, 72]
+    },
+    {
+      "id": "python", "type": "frontend", "label": "浏览器计算", "sublabel": "Pyodide 运行 Python", "pos": [1004, 418], "size": [192, 72]
+    }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "大学生分区", "wraps": ["university", "workspace", "verification", "reflection"], "pad": 19 },
+    { "kind": "region", "label": "两组共用底座", "wraps": ["services", "storage", "python"], "pad": 23 }
+  ],
+  "connections": [
+    { "id": "home-to-university", "from": "home", "to": "university", "fromSide": "right", "toSide": "left", "label": "大学生", "variant": "emphasis" },
+    { "id": "home-to-secondary", "from": "home", "to": "secondary", "fromSide": "top", "toSide": "left", "label": "中学生" },
+    { "id": "start-workspace", "from": "university", "to": "workspace", "label": "打开工作区", "variant": "emphasis" },
+    { "id": "validate-model", "from": "workspace", "to": "verification", "label": "验证所选方案", "variant": "emphasis" },
+    { "id": "explain-results", "from": "verification", "to": "reflection", "label": "比较结果", "variant": "emphasis" },
+    { "id": "revise-model", "from": "reflection", "to": "workspace", "fromSide": "top", "toSide": "top", "via": [[1175, 152], [647, 152]], "label": "带着验证结果修订假设或方法", "variant": "dashed" },
+    { "id": "use-services", "from": "workspace", "to": "services", "fromSide": "bottom", "toSide": "top", "label": "读写工作区 · 调用模型" },
+    { "id": "persist-work", "from": "services", "to": "storage", "label": "保存与恢复" },
+    { "id": "execute-python", "from": "verification", "to": "python", "fromSide": "bottom", "toSide": "top", "label": "代码和数据 → 输出与图表" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "带自己的题目开始",
+      "items": [
+        "粘贴或上传题干，按需添加数据附件。",
+        "先选一个小问，写下目标、已知条件和卡住的地方。",
+        "用划线精读、AI 整体解读或知识卡片核对理解。"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "两组协作",
+      "items": [
+        "两组共享一个应用，学习内容和引导由各组维护。",
+        "每组一人设计并验收，一人用 AI 实现。"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "2027 年大学分区节点",
+      "items": [
+        "1–2 月定入口和自带题引导，3–4 月打通学习闭环。",
+        "5–6 月开展大学生试用，按真实卡点调整。"
+      ]
+    }
+  ]
+}

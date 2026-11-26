@@ -1,11 +1,13 @@
 /** 后端 API 封装 */
 import { buildAttachmentContext } from './lib/attachmentContext.js'
+import { apiFetch } from './lib/apiClient.js'
 
-async function post(path, body) {
-  const res = await fetch(path, {
+async function post(path, body, signal) {
+  const res = await apiFetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal,
   })
   const json = await res.json().catch(() => ({}))
   if (!res.ok || json.ok === false) {
@@ -26,27 +28,27 @@ export function testKey(settings) {
   })
 }
 
-export function chat(settings, messages) {
+export function chat(settings, messages, { signal } = {}) {
   return post('/api/chat', {
     baseUrl: settings.baseUrl,
     apiKey: settings.apiKey,
     model: settings.model,
     proxyUrl: settings.proxyUrl || '',
     messages,
-  })
+  }, signal)
 }
 
 /**
  * SSE 流式对话：边收边回调 onDelta(累计内容)，结束时回调 onFinish(完成原因)，返回最终完整内容。
  * 失败时抛出 Error（含 provider 的错误信息），调用方可降级为非流式重试。
  */
-export async function streamChat(settings, messages, { onDelta, onFinish } = {}) {
+export async function streamChat(settings, messages, { onDelta, onFinish, signal } = {}) {
   // 兜底超时：推理模型思考+生成可能较久；服务端 300s，前端多留余量
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 330000)
   let res
   try {
-    res = await fetch('/api/chat/stream', {
+    res = await apiFetch('/api/chat/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -56,11 +58,11 @@ export async function streamChat(settings, messages, { onDelta, onFinish } = {})
         proxyUrl: settings.proxyUrl || '',
         messages,
       }),
-      signal: ctrl.signal,
+      signal: signal ? AbortSignal.any([signal, ctrl.signal]) : ctrl.signal,
     })
   } catch (e) {
     clearTimeout(timer)
-    if (e.name === 'AbortError') throw new Error('请求超时：模型思考或生成时间过长，请重试')
+    if (e.name === 'AbortError' && !signal?.aborted) throw new Error('请求超时：模型思考或生成时间过长，请重试')
     throw e
   }
   if (!res.ok) {
@@ -118,7 +120,7 @@ export async function parseFile(file, { preserveOriginal = false } = {}) {
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 120000) // 大表（数十 MB）解析较慢，120s 兜底超时
   try {
-    const res = await fetch('/api/parse', {
+    const res = await apiFetch('/api/parse', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: file.name, data: b64 }),
@@ -146,7 +148,7 @@ export function attachSummary(attachments) {
 
 /** 列出工作区（轻量：id/标题/时间） */
 export async function listWorkspaces() {
-  const res = await fetch('/api/workspaces')
+  const res = await apiFetch('/api/workspaces')
   const json = await res.json().catch(() => ({}))
   if (!res.ok || json.ok === false) throw new Error(json.message || '读取工作区失败')
   return json.workspaces || []
@@ -157,9 +159,9 @@ export async function saveWorkspace(ws) {
   return post('/api/workspaces', ws)
 }
 
-/** 读取工作区（含题目/附件/拆解块/代码） */
+/** 读取工作区（含题目/附件/卡片/代码） */
 export async function loadWorkspace(id) {
-  const res = await fetch(`/api/workspaces/${id}`)
+  const res = await apiFetch(`/api/workspaces/${id}`)
   const json = await res.json().catch(() => ({}))
   if (!res.ok || json.ok === false) throw new Error(json.message || '读取工作区失败')
   return json.workspace
@@ -167,7 +169,7 @@ export async function loadWorkspace(id) {
 
 /** 删除工作区 */
 export async function deleteWorkspace(id) {
-  const res = await fetch(`/api/workspaces/${id}`, { method: 'DELETE' })
+  const res = await apiFetch(`/api/workspaces/${id}`, { method: 'DELETE' })
   const json = await res.json().catch(() => ({}))
   if (!res.ok || json.ok === false) throw new Error(json.message || '删除工作区失败')
   return json
@@ -175,7 +177,7 @@ export async function deleteWorkspace(id) {
 
 /** 导出带 schemaVersion 的完整工作区备份（不含 API Key / 模型设置）。 */
 export async function exportWorkspaceBackup(id) {
-  const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}/backup`)
+  const res = await apiFetch(`/api/workspaces/${encodeURIComponent(id)}/backup`)
   const json = await res.json().catch(() => ({}))
   if (!res.ok || json.ok === false) throw new Error(json.message || '导出工作区失败')
   return json
@@ -188,14 +190,14 @@ export async function importWorkspaceBackup(backup) {
 
 /** 附件表数据 → CSV 下载/文本（B3 数据注入） */
 export async function fetchAttachmentCsv(wsId, idx) {
-  const res = await fetch(`/api/workspaces/${wsId}/attachments/${idx}/data.csv`)
+  const res = await apiFetch(`/api/workspaces/${wsId}/attachments/${idx}/data.csv`)
   if (!res.ok) throw new Error('附件数据获取失败')
   return res.text()
 }
 
 /** 附件表数据 → JSON（Pyodide 直用） */
 export async function fetchAttachmentJson(wsId, idx) {
-  const res = await fetch(`/api/workspaces/${wsId}/attachments/${idx}/data.json`)
+  const res = await apiFetch(`/api/workspaces/${wsId}/attachments/${idx}/data.json`)
   const json = await res.json().catch(() => ({}))
   if (!res.ok || json.ok === false) throw new Error(json.message || '附件数据获取失败')
   return json
@@ -211,7 +213,7 @@ export async function fetchAttachmentJson(wsId, idx) {
 export async function retrieveKnowledge(query, settings, topK = 3) {
   if (!query || !query.trim()) return []
   try {
-    const res = await fetch('/api/knowledge/search', {
+    const res = await apiFetch('/api/knowledge/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

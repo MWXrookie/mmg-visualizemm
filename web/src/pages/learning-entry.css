@@ -1,0 +1,129 @@
+.app-shell.learning-shell {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.learning-shell > .content { grid-area: 1 / 1 / -1 / -1; }
+
+.learning-entry {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg);
+}
+
+.learning-entry-header,
+.learning-entry-body {
+  width: min(100% - 36px, 860px);
+  margin-inline: auto;
+}
+
+.learning-entry-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.learning-entry-brand {
+  color: var(--primary-strong);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.learning-entry-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  color: var(--muted);
+}
+
+.learning-entry-back:hover { color: var(--fg); }
+
+.learning-entry-body {
+  padding: clamp(44px, 9vh, 84px) 0 36px;
+}
+
+.learning-entry-body h1 {
+  margin-bottom: 22px;
+  font: 700 clamp(28px, 4vw, 42px)/1.25 var(--display);
+}
+
+.learning-entry-body h1:focus { outline: none; }
+
+.learning-section-links {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.learning-section-link {
+  position: relative;
+  display: block;
+  padding: 24px 48px 24px 24px;
+}
+
+.learning-section-link:hover {
+  border-color: var(--primary);
+  background: var(--panel-tint);
+}
+
+.learning-section-link h2 { font-size: 19px; }
+.learning-section-link p { margin-top: 6px; color: var(--muted); }
+.learning-section-link > svg { position: absolute; inset: 27px 20px auto auto; color: var(--primary); }
+
+.learning-entry-panel {
+  max-width: 620px;
+  padding: clamp(18px, 3vw, 28px);
+}
+
+.learning-entry-panel p,
+.learning-entry-description { color: var(--muted); }
+
+.learning-entry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.learning-entry-actions .btn { min-height: 44px; }
+.learning-resume-title { margin-top: 12px; overflow-wrap: anywhere; }
+
+@media (max-width: 560px) {
+  .learning-section-links { grid-template-columns: 1fr; }
+}
+
+.secondary-library { max-width: 740px; }
+.secondary-library-heading { margin-bottom: 16px; }
+.secondary-library-heading h2, .secondary-reader h3 { font-size: 22px; margin-bottom: 5px; }
+.secondary-library-heading p, .secondary-topic { color: var(--muted); }
+.secondary-library .kl-scopes button { min-height: 42px; padding-inline: 14px; }
+.secondary-card-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding-top: 16px; }
+.secondary-card-list .kl-entry { padding: 14px; }
+.secondary-card-list .kl-entry:hover { border-color: var(--primary); }
+.secondary-card-list .kl-entry strong { font-size: 16px; }
+.secondary-card-list .kl-entry-summary { font-size: 13px; -webkit-line-clamp: 3; }
+.secondary-reader { padding-top: 14px; max-width: 600px; }
+.secondary-reader-actions { display: flex; gap: 8px; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.secondary-reader-actions .btn { min-height: 44px; padding-inline: 8px; }
+.secondary-reader > p { margin: 6px 0; }
+.secondary-reader .secondary-definition { font-weight: 650; font-size: 17px; }
+.secondary-demo { margin: 12px 0; }
+.secondary-demo .demo-svg { display: block; max-width: 430px; margin-inline: auto; }
+.secondary-comparison { display: grid; gap: 12px; }
+.secondary-comparison span { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 13px; }
+.secondary-comparison p { margin: 0; }
+.secondary-meter { position: relative; height: 10px; background: var(--surface-2); border-radius: 4px; }
+.secondary-meter i { display: block; height: 100%; border-radius: inherit; background: var(--primary-strong); }
+.secondary-meter em { position: absolute; inset-block: -3px; border-left: 2px dashed var(--fg); }
+.secondary-section { margin-top: 16px; }
+.secondary-section h4 { font-size: 14px; margin: 0 0 4px; }
+.secondary-section p { margin: 0 0 4px; }
+.secondary-boundary { padding: 10px 14px; border-left: 2px solid var(--primary); background: var(--panel-tint); }
+.secondary-course-note { font-size: 13px; margin-top: 24px; }
+@media (max-width: 600px) {
+  .secondary-card-list { grid-template-columns: 1fr; gap: 8px; }
+}

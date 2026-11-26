@@ -21,7 +21,7 @@ const GEN_SYSTEM =
   '6. 代码里的所有解释性注释/批注必须使用简体中文；可以保留 Python、pandas、NaN、R²、AIC 等必要术语，但要用中文说明它们在做什么。\n' +
   '7. 必须按这些中文区块组织代码：# ========== 0. 产出说明 ==========、# ========== 1. 可调参数 ==========、# ========== 2. 读取数据 ==========、# ========== 3. 数据检查 ==========、# ========== 4. 建模分析 ==========、# ========== 5. 输出结果 ==========、# ========== 6. 结果自检 ==========\n' +
   '8. 如果没有可调参数，也要保留"1. 可调参数"区块，并写注释说明"本代码暂无需要手动调整的参数"；如果有参数，用大写变量名在区块中声明，并用中文行内注释说明。\n' +
-  '9. 如果涉及多个拆解块或多个表格，不要把所有东西混成一段：用函数或清晰中文注释分块，每块 print 段落标题。\n' +
+  '9. 如果涉及多张卡片或多张表格，不要把所有东西混成一段：用函数或清晰中文注释分块，每块 print 段落标题。\n' +
   '10. 如果需要多张图，请合成到一个 matplotlib figure 的多个子图里，并统一保存到 /plot.png；如果本题不需要图，也要用 print 输出清楚结果。\n' +
   '11. 代码内自带最小 Sanity：对结果做合理性检查（量纲/数量级/NaN/边界），异常时 print 警告而不是静默输出。\n' +
   '12. 数值计算、标准化、加权和排序使用未舍入值；只在最终展示时格式化小数。需要核对得分或误差时默认至少输出小数点后 9 位，不要将 round、.round() 或格式化后的值写回参与后续计算的变量。\n' +
@@ -498,7 +498,7 @@ function workflowSteps({ breakdown, genInfo, code, summary, running, busyAction,
     {
       label: '选择目标',
       state: genInfo?.source ? 'done' : breakdown.length ? 'ready' : 'idle',
-      hint: genInfo?.source || (breakdown.length ? '可从拆解块生成代码' : '先到梳理台拆解题目'),
+      hint: genInfo?.source || (breakdown.length ? '可从卡片生成代码' : '先到思路整理台写卡片'),
     },
     {
       label: '生成代码',
@@ -746,7 +746,7 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
   }
 
   const wsIdNow = ws?.id
-  const breakdown = ws?.breakdown || []
+  const breakdown = useMemo(() => (ws?.breakdown || []).filter(node => node.kind !== 'question'), [ws?.breakdown])
   const attachments = ws?.attachments || []
   const dataFiles = useMemo(() => attachmentDataFiles(attachments), [attachments])
 
@@ -925,7 +925,7 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
   async function generateCode() {
     setBusyAction('AI生成')
     if (!settings.apiKey) return setError('请先在「模型设置」配置 API Key')
-    if (selected.size === 0) return setError('请至少选择一个拆解块')
+    if (selected.size === 0) return setError('请至少选择一张卡片')
     setGenOpen(false); setBusyAction('AI生成'); setRunning(true); setError('')
     const isCurrent = beginAiRequest()
     const chosen = breakdown.filter((_, i) => selected.has(i))
@@ -936,12 +936,12 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
         const method = typeof s.method === 'string' ? s.method : (s.desc || '')
         return `要怎么做：${action}；怎么实现：${method}`
       }).join('；')
-      return `【拆解块】${b.title}\n题目依据：${b.quote || '（无）'}\n一句话思路：${idea || '（无）'}\n${steps || '步骤：（无）'}`
+      return `【卡片】${b.title}\n题目依据：${b.quote || '（无）'}\n一句话思路：${idea || '（无）'}\n${steps || '步骤：（无）'}`
     }).join('\n\n')
     const summary = attachSummary(attachments)
-    // 题目全文注入：让 AI 生成代码时能读到完整题干（不只拆解块+附件摘要）
+    // 题目全文注入：让 AI 生成代码时能读到完整题干（不只卡片+附件摘要）
     const problemCtx = (ws?.problemText || '').trim() ? `【完整题目】\n${ws.problemText}\n\n` : ''
-    const user = `${problemCtx}建模环节：\n${blocksDesc}\n\n${summary ? `数据附件摘要：\n${summary}\n\n` : ''}${dataFilePrompt(dataFiles)}\n产出目标：${genText || '请根据所选拆解块，自动决定需要输出的文字结果、表格结果和图表结果，并在代码开头注释说明。'}`
+    const user = `${problemCtx}建模环节：\n${blocksDesc}\n\n${summary ? `数据附件摘要：\n${summary}\n\n` : ''}${dataFilePrompt(dataFiles)}\n产出目标：${genText || '请根据所选卡片，自动决定需要输出的文字结果、表格结果和图表结果，并在代码开头注释说明。'}`
     setLog((prev) => [...prev, { time: now(), cls: 'core', text: '✨ AI 生成代码中…' }])
     setGenPreview({ title: '✨ AI 生成代码中…（实时输出）', content: '' })
     try {
@@ -1028,7 +1028,7 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
           }
         }
         applyCode(c)
-        setGenInfo({ action: '生成', source: chosen.map((b) => b.title).join('、') || '未选拆解块', lines: c.split('\n').length, time: now(), summary: summarizeGeneratedCode(c, chosen, dataFiles) })
+        setGenInfo({ action: '生成', source: chosen.map((b) => b.title).join('、') || '未选卡片', lines: c.split('\n').length, time: now(), summary: summarizeGeneratedCode(c, chosen, dataFiles) })
         setSelected(new Set()); setGenText('')
         if (interrupted) {
           setError(`生成未完成：${finishHint}。已保留当前代码供检查，请勿将其视为可运行结果。`)
@@ -1212,7 +1212,7 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
         <button className="rail-btn" onClick={onExpandSidebar} title="展开侧栏"><IconMenu size={16} /></button>
         <button className="rail-btn" onClick={exportCode} title="导出代码 .py"><IconDownload size={16} /></button>
         <div style={{ flex: 1 }} />
-        <button className="rail-btn rail-back" onClick={() => { location.hash = '#/modeling' }} title="返回梳理台"><IconArrowLeft size={16} /></button>
+        <button className="rail-btn rail-back" onClick={() => { location.hash = '#/modeling' }} title="返回思路整理台"><IconArrowLeft size={16} /></button>
       </aside>
 
       {/* 左 50%：代码区 */}
@@ -1507,16 +1507,16 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
         <div className="scrim" onClick={() => setGenOpen(false)}>
           <div className="sheet generation-sheet" role="dialog" aria-modal="true" aria-label="生成代码" onClick={(e) => e.stopPropagation()}>
             <h2>生成代码</h2>
-            <p className="sub">先选要解决的拆解块，再说明希望运行后看到什么结果。</p>
+            <p className="sub">先选要解决的卡片，再说明希望运行后看到什么结果。</p>
             <div className="generation-sheet-body">
             <div className="fgroup-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-              <span>① 选择拆解块 <span style={{ color: 'var(--primary)', fontFamily: 'var(--mono)' }}>已选 {selected.size} / {breakdown.length || 0}</span></span>
+              <span>① 选择卡片 <span style={{ color: 'var(--primary)', fontFamily: 'var(--mono)' }}>已选 {selected.size} / {breakdown.length || 0}</span></span>
               <span style={{ display: 'flex', gap: 6 }}>
                 <button className="btn btn-ghost btn-sm" onClick={selectAllBlocks} disabled={breakdown.length === 0}>全选</button>
                 <button className="btn btn-ghost btn-sm" onClick={clearSelectedBlocks} disabled={selected.size === 0}>清空</button>
               </span>
             </div>
-            {breakdown.length === 0 && <div className="hint" style={{ marginBottom: 12 }}>暂无拆解块，可先在建模思路梳理台创建。</div>}
+            {breakdown.length === 0 && <div className="hint" style={{ marginBottom: 12 }}>暂无卡片，可先在思路整理台创建。</div>}
             {breakdown.map((b, i) => (
               <button
                 type="button"
@@ -1530,7 +1530,7 @@ export default function Coding({ settings, ws, patchWs, patchWsAt, onExpandSideb
               </button>
             ))}
             <div className="gen-scope">
-              <div><b>{selected.size || 0}</b><span>个拆解块</span></div>
+              <div><b>{selected.size || 0}</b><span>张卡片</span></div>
               <div><b>{dataFiles.length}</b><span>张可读表</span></div>
               <div><b>1</b><span>份 main.py</span></div>
             </div>
