@@ -99,10 +99,23 @@ export function createAuthFailureLimiter({
   now = Date.now,
 } = {}) {
   const buckets = new Map()
+  let operations = 0
+  function prune(time) {
+    operations += 1
+    if (operations < 32 && buckets.size < 128) return
+    operations = 0
+    for (const [ip, bucket] of buckets) {
+      if (time >= bucket.resetAt) buckets.delete(ip)
+    }
+  }
   function current(ip) {
     const time = now()
+    prune(time)
     const bucket = buckets.get(ip)
-    if (!bucket || time >= bucket.resetAt) return null
+    if (!bucket || time >= bucket.resetAt) {
+      if (bucket) buckets.delete(ip)
+      return null
+    }
     return bucket
   }
   return {
@@ -112,6 +125,7 @@ export function createAuthFailureLimiter({
     },
     recordFailure(ip) {
       const time = now()
+      prune(time)
       let bucket = buckets.get(ip)
       if (!bucket || time >= bucket.resetAt) {
         bucket = { count: 0, resetAt: time + windowMs }
@@ -122,6 +136,9 @@ export function createAuthFailureLimiter({
     },
     reset(ip) {
       buckets.delete(ip)
+    },
+    size() {
+      return buckets.size
     },
   }
 }
@@ -187,20 +204,6 @@ export function buildSecurityStatus({ lan = false, https = false } = {}) {
   }
 }
 
-/**
- * 知识库状态接口不再接受查询串中的 apiKey。
- * 密钥出现在 URL 中时会进入浏览器历史、反向代理日志和 Referer。
- */
-export function embeddingProviderFromStatsQuery(query) {
-  const source = query && typeof query === 'object' ? query : {}
-  return {
-    baseUrl: typeof source.baseUrl === 'string' ? source.baseUrl : '',
-    apiKey: '',
-    embedModel: typeof source.embedModel === 'string' ? source.embedModel : '',
-    proxyUrl: typeof source.proxyUrl === 'string' ? source.proxyUrl : '',
-  }
-}
-
 function readConfigText(readFile, filePath, label) {
   try {
     return { value: readFile(filePath) }
@@ -213,15 +216,22 @@ export function loadServerSecurity(env = process.env, io = {}) {
   const exists = io.exists || fs.existsSync
   const readFile = io.readFile || fs.readFileSync
   const host = normalizeBindHost(env.MMG_HOST)
-  const accessToken = typeof env.MMG_ACCESS_TOKEN === 'string' ? env.MMG_ACCESS_TOKEN.trim() : ''
+  const rawToken = typeof env.MMG_ACCESS_TOKEN === 'string' ? env.MMG_ACCESS_TOKEN : ''
   const certPath = typeof env.MMG_TLS_CERT === 'string' ? env.MMG_TLS_CERT.trim() : ''
   const keyPath = typeof env.MMG_TLS_KEY === 'string' ? env.MMG_TLS_KEY.trim() : ''
   const lan = !isLoopbackBindHost(host)
   const errors = []
-
-  if (lan && accessToken === '') {
+  const hasWhitespace = rawToken !== '' && /\s/.test(rawToken)
+  if (hasWhitespace) {
+    errors.push('MMG_ACCESS_TOKEN 不能包含空白字符。拒绝启动。')
+  }
+  if (!hasWhitespace && rawToken !== '' && rawToken.length < 8) {
+    errors.push('MMG_ACCESS_TOKEN 至少需要 8 个字符。拒绝启动。')
+  }
+  if (lan && rawToken.trim() === '') {
     errors.push(`MMG_HOST=${host} 不是回环地址，必须设置非空的 MMG_ACCESS_TOKEN。拒绝启动。`)
   }
+  const accessToken = hasWhitespace ? '' : rawToken
 
   const hasCert = certPath !== ''
   const hasKey = keyPath !== ''

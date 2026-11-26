@@ -17,7 +17,6 @@ import {
   createApiAuthMiddleware,
   createAuthFailureLimiter,
   decideApiAccess,
-  embeddingProviderFromStatsQuery,
   isLoopbackAddress,
   loadServerSecurity,
 } from '../../server/lan-security.js'
@@ -231,22 +230,42 @@ test('启动配置：空令牌、只配一半 TLS、缺失文件都会拒绝', (
   assert.equal(typeof plaintext.security.warnings[0].message, 'string')
   assert.equal(plaintext.security.authRequired, true)
   assert.equal(plaintext.security.https, false)
+
+  const spaced = loadServerSecurity({ MMG_ACCESS_TOKEN: 'secret token' })
+  assert.equal(spaced.ok, false)
+  assert.match(spaced.errors.join('\n'), /空白/)
+  const short = loadServerSecurity({ MMG_HOST: '0.0.0.0', MMG_ACCESS_TOKEN: '1234567' })
+  assert.equal(short.ok, false)
+  assert.match(short.errors.join('\n'), /8/)
+  const minimum = loadServerSecurity({ MMG_HOST: '0.0.0.0', MMG_ACCESS_TOKEN: '12345678' })
+  assert.equal(minimum.ok, true)
+  assert.equal(minimum.accessToken, '12345678')
 })
 
-test('知识库状态不从查询串读取 apiKey', () => {
-  const provider = embeddingProviderFromStatsQuery({
-    baseUrl: 'http://127.0.0.1:9',
-    apiKey: 'mmg-query-secret',
-    embedModel: 'text-embedding-v3',
-    proxyUrl: 'http://127.0.0.1:7890',
-  })
-  assert.deepEqual(provider, {
-    baseUrl: 'http://127.0.0.1:9',
-    apiKey: '',
-    embedModel: 'text-embedding-v3',
-    proxyUrl: 'http://127.0.0.1:7890',
-  })
-  assert.equal(JSON.stringify(provider).includes('mmg-query-secret'), false)
+test('过期的鉴权失败记录会被清出表', () => {
+  let now = 1_000
+  const limiter = createAuthFailureLimiter({ limit: 2, windowMs: 50, now: () => now })
+  for (let i = 0; i < 40; i += 1) {
+    decideApiAccess({
+      remoteAddress: `203.0.113.${(i % 200) + 1}`,
+      pathname: '/api/workspaces',
+      accessToken: TOKEN,
+      authorization: 'Bearer wrong',
+      limiter,
+    })
+  }
+  assert.equal(limiter.size() > 0, true)
+  now = 10_000
+  for (let i = 0; i < 40; i += 1) {
+    decideApiAccess({
+      remoteAddress: `198.51.100.${(i % 200) + 1}`,
+      pathname: '/api/workspaces',
+      accessToken: TOKEN,
+      authorization: 'Bearer wrong',
+      limiter,
+    })
+  }
+  assert.equal(limiter.size() <= 40, true)
 })
 
 test('HTTP 中间件使用注入的 remoteAddress，忽略转发头，并放行静态资源与流式接口', async () => {
@@ -529,10 +548,10 @@ test('同时提供证书和私钥时以 HTTPS 启动，且不再发出明文警�
   }
 })
 
-test('真实 /api/chat/stream 接受 Authorization，/api/knowledge/stats 忽略查询串 apiKey，日志不含密钥', async () => {
+test('局域网模式下带令牌的 /api/chat/stream 返回 200，查询串里的密钥或上游地址被拒绝', async () => {
   const queryKey = 'mmg-stats-query-key-do-not-log'
   const bodyKey = 'mmg-stream-body-key-do-not-log'
-  const bearer = 'mmg-stream-bearer-do-not-log'
+  const accessToken = 'mmg-lan-stream-token'
   const dir = await mkdtemp(path.join(os.tmpdir(), 'mmg-lan-api-'))
   const seen = []
   const embed = http.createServer((req, res) => {
@@ -546,25 +565,42 @@ test('真实 /api/chat/stream 接受 Authorization，/api/knowledge/stats 忽略
   const embedPort = await listen(embed)
   const upstreamPort = await listen(upstream)
   const port = await reservePort()
-  const env = childEnv(dir, { PORT: String(port) })
-  delete env.MMG_FORCE_LOCAL_EMBEDDING
-  const child = spawnServer('server/index.js', env)
+  const child = spawnServer('server/index.js', childEnv(dir, {
+    PORT: String(port),
+    MMG_HOST: '0.0.0.0',
+    MMG_ACCESS_TOKEN: accessToken,
+    MMG_TEST_REMOTE_ADDRESS: '203.0.113.77',
+  }))
   try {
     await waitForHealth(`http://127.0.0.1:${port}`, child)
-    const stats = await readJson(await fetch(
-      `http://127.0.0.1:${port}/api/knowledge/stats?apiKey=${encodeURIComponent(queryKey)}&baseUrl=${encodeURIComponent(`http://127.0.0.1:${embedPort}`)}&embedModel=text-embedding-v3`,
-    ))
-    assert.equal(stats.status, 200)
-    assert.equal(stats.body.ok, true)
-    assert.equal(stats.text.includes(queryKey), false)
-    assert.equal(Object.hasOwn(stats.body, 'apiKey'), false)
+    for (const query of [
+      `apiKey=${encodeURIComponent(queryKey)}`,
+      `baseUrl=${encodeURIComponent(`http://127.0.0.1:${embedPort}`)}`,
+      `proxyUrl=${encodeURIComponent(`http://127.0.0.1:${embedPort}`)}`,
+    ]) {
+      const stats = await readJson(await fetch(`http://127.0.0.1:${port}/api/knowledge/stats?${query}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }))
+      assert.equal(stats.status, 400, query)
+      assert.equal(stats.body.ok, false)
+      assert.equal(stats.body.code, 'UPSTREAM_BLOCKED')
+      assert.equal(stats.text.includes(queryKey), false)
+    }
     assert.deepEqual(seen, [])
+
+    const missing = await readJson(await fetch(`http://127.0.0.1:${port}/api/chat/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: [{ role: 'user', content: 'ping' }] }),
+    }))
+    assert.equal(missing.status, 401)
+    assert.equal(missing.body.code, 'AUTH_REQUIRED')
 
     const streamed = await readJson(await fetch(`http://127.0.0.1:${port}/api/chat/stream`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${bearer}`,
+        Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify({
         baseUrl: `http://127.0.0.1:${upstreamPort}`,
@@ -579,13 +615,28 @@ test('真实 /api/chat/stream 接受 Authorization，/api/knowledge/stats 忽略
 
     const output = child.output()
     const combined = output.stdout + output.stderr
-    for (const secret of [queryKey, bodyKey, bearer]) {
+    for (const secret of [queryKey, bodyKey, accessToken]) {
       assert.equal(combined.includes(secret), false)
     }
   } finally {
     await stopChild(child)
     await new Promise((resolve) => embed.close(resolve))
     await new Promise((resolve) => upstream.close(resolve))
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('PORT=0 时启动日志打印实际监听端口', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'mmg-lan-port0-'))
+  const child = spawnServer('server/index.js', childEnv(dir, { PORT: '0' }))
+  try {
+    const boundPort = await waitForBoundPort(child)
+    assert.equal(boundPort > 0, true)
+    const health = await readJson(await fetch(`http://127.0.0.1:${boundPort}/api/health`))
+    assert.equal(health.status, 200)
+    assert.equal(health.body.security.lan, false)
+  } finally {
+    await stopChild(child)
     await rm(dir, { recursive: true, force: true })
   }
 })
@@ -705,6 +756,21 @@ async function waitForExit(child, timeoutMs) {
   } finally {
     clearTimeout(timer)
   }
+}
+
+async function waitForBoundPort(running) {
+  const deadline = Date.now() + 20_000
+  while (Date.now() < deadline) {
+    if (running.child.exitCode !== null) {
+      const output = running.output()
+      throw new Error(`服务提前退出 code=${running.child.exitCode}\n${output.stderr}\n${output.stdout}`)
+    }
+    const match = running.output().stdout.match(/本机访问: https?:\/\/127\.0\.0\.1:(\d+)/)
+    if (match && match[1] !== '0') return Number(match[1])
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  const output = running.output()
+  throw new Error(`没有从启动日志读到实际端口\n${output.stderr}\n${output.stdout}`)
 }
 
 async function waitForHealth(url, running) {

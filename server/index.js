@@ -16,7 +16,7 @@ import { pdfLayoutLines } from './pdf-layout.js'
 import http from 'node:http'
 import https from 'node:https'
 import { formatNetworkError, requestUpstream, responseText } from './upstream.js'
-import { createApiAuthMiddleware, embeddingProviderFromStatsQuery, loadServerSecurity } from './lan-security.js'
+import { createApiAuthMiddleware, loadServerSecurity } from './lan-security.js'
 
 const security = loadServerSecurity(process.env)
 if (!security.ok) {
@@ -73,7 +73,14 @@ const HOST = security.host
 app.disable('x-powered-by') // 隐藏 Express 版本号
 // 鉴权只使用套接字对端地址。不要打开 trust proxy，否则 req.ip 会相信客户端可伪造的转发头。
 app.set('trust proxy', false)
-app.use(createApiAuthMiddleware({ accessToken: security.accessToken }))
+// 路由大小写敏感，避免 /API/workspaces 命中 /api/workspaces。鉴权仍会先拦住混合大小写的 /api 路径。
+app.set('case sensitive routing', true)
+const testRemoteAddress = typeof process.env.MMG_TEST_REMOTE_ADDRESS === 'string' ? process.env.MMG_TEST_REMOTE_ADDRESS : ''
+app.use(createApiAuthMiddleware({
+  accessToken: security.accessToken,
+  // 仅测试用：把所有请求看成这个对端地址。生产环境不要设置。
+  ...(testRemoteAddress ? { getRemoteAddress: () => testRemoteAddress } : {}),
+}))
 app.use(express.json({ limit: '100mb' })) // base64 上传放大 ~33%，100mb ≈ 75MB 文件
 
 /* ---------- AI 中继 ---------- */
@@ -914,12 +921,24 @@ app.get('/api/health', (_req, res) => {
 /* ---------- 知识库（RAG） ---------- */
 import { ensureKnowledgeBase, searchKnowledge, knowledgeStats } from './knowledge.js'
 
-// 知识库状态：论文数 / 分块数（按类型）/ embedding 来源
+function queryText(value) {
+  if (Array.isArray(value)) return value.map((item) => String(item ?? '')).join(',')
+  return String(value ?? '')
+}
+
+// 知识库状态：论文数 / 分块数（按类型）/ embedding 来源。
+// 不接受查询串中的密钥或上游地址：密钥不能进入 URL，查询串里的 baseUrl / proxyUrl 也不能发起出站请求。
 app.get('/api/knowledge/stats', async (req, res) => {
+  const suppliedInUrl = ['apiKey', 'baseUrl', 'proxyUrl'].filter((key) => queryText(req.query[key]).trim())
+  if (suppliedInUrl.length > 0) {
+    return res.status(400).json({
+      ok: false,
+      code: 'UPSTREAM_BLOCKED',
+      message: '知识库状态不接受网址中的 apiKey、baseUrl 或 proxyUrl。密钥不能放在 URL 里；Embedding 请使用服务端环境变量，或通过 POST /api/knowledge/search 的请求体提交。',
+    })
+  }
   try {
-    // 忽略查询串中的 apiKey，避免密钥进入 URL、访问日志和浏览器历史。
-    const provider = embeddingProviderFromStatsQuery(req.query)
-    const kb = await ensureKnowledgeBase(provider)
+    const kb = await ensureKnowledgeBase()
     res.json({ ok: true, ...knowledgeStats(), vecsReady: !!kb && kb.vecs.length === kb.chunks.length })
   } catch (e) {
     res.status(500).json({ ok: false, message: `知识库状态获取失败：${e.message}` })
@@ -991,10 +1010,12 @@ server.on('error', (error) => {
 
 server.listen(PORT, HOST, () => {
   const scheme = security.https ? 'https' : 'http'
+  const bound = server.address()
+  const boundPort = bound && typeof bound === 'object' ? bound.port : PORT
   const localHost = HOST === '0.0.0.0' || HOST === '::' ? '127.0.0.1' : HOST
   console.log('[server] MMG_VisualizeMM 后端已启动')
-  console.log(`  · 监听: ${scheme}://${HOST}:${PORT}`)
-  console.log(`  · 本机访问: ${scheme}://${localHost}:${PORT}`)
+  console.log(`  · 监听: ${scheme}://${HOST}:${boundPort}`)
+  console.log(`  · 本机访问: ${scheme}://${localHost}:${boundPort}`)
   if (security.lan) {
     const nets = require('os').networkInterfaces()
     const lanIps = []
@@ -1003,7 +1024,7 @@ server.listen(PORT, HOST, () => {
         if ((ni.family === 'IPv4' || ni.family === 4) && !ni.internal) lanIps.push(ni.address)
       }
     }
-    const lan = lanIps.length > 0 ? lanIps.map((ip) => `${scheme}://${ip}:${PORT}`).join(' 或 ') : '（未检测到局域网 IPv4）'
+    const lan = lanIps.length > 0 ? lanIps.map((ip) => `${scheme}://${ip}:${boundPort}`).join(' 或 ') : '（未检测到局域网 IPv4）'
     console.log(`  · 局域网访问: ${lan}`)
     console.log('  · 非回环客户端访问 /api/*（除 /api/health）需要请求头 Authorization: Bearer <MMG_ACCESS_TOKEN>')
     console.log('  · 页面、脚本和其他非 /api 静态资源不校验该令牌')
