@@ -48,7 +48,7 @@ function validateDraft({ baseUrl, apiKey, model, proxyUrl }) {
   return ''
 }
 
-export default function Settings({ settings, setSettings }) {
+export default function Settings({ settings, setSettings, securityWarnings = [] }) {
   const [providerId, setProviderId] = useState(settings.providerId)
   const [baseUrl, setBaseUrl] = useState(settings.baseUrl)
   const [apiKey, setApiKey] = useState(settings.apiKey)
@@ -124,6 +124,9 @@ export default function Settings({ settings, setSettings }) {
           <div className="eyebrow">MODEL CONNECTION</div>
           <h1 className="page-title">模型设置</h1>
           <p className="page-desc">配置自己的模型服务。Key 只在本浏览器加密保存，不会在应用服务器持久化；测试时仅由本地中继临时转发。</p>
+          {securityWarnings.map((warning) => (
+            <div key={warning.code} className="alert" role="status" data-security-code={warning.code}>{warning.message}</div>
+          ))}
         </div>
         <div className={`settings-status ${hasKey ? 'configured' : 'empty'}`}>
           <span className="settings-status-dot" />

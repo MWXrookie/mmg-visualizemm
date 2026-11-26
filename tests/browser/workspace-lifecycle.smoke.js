@@ -316,7 +316,7 @@ test('本地工作区可上传题干、跨工作台持久化并完成备份恢�
   const download = await downloadPromise
   const backup = JSON.parse(await readFile(await download.path(), 'utf8'))
   expect(backup.format).toBe('mmg-workspace-backup')
-  expect(backup.schemaVersion).toBe(1)
+  expect(backup.schemaVersion).toBe(2)
   expect(backup.workspace.problemText).toBe(problemText)
   expect(backup.workspace.breakdown).toHaveLength(1)
   expect(backup).not.toHaveProperty('apiKey')
@@ -1310,6 +1310,55 @@ test('划选后临时问小墨继承原对话，关闭清掉分支', async ({ pa
     await expect(main.getByText(initialReply, { exact: true })).toBeVisible()
     await expect(main).not.toContainText(branchQuestion)
     await expect(tempChat).toHaveCount(0)
+  } finally {
+    await page.request.delete(`${baseURL}/api/workspaces/${id}`)
+  }
+})
+
+test('白板状态随工作区保存，清空本机缓存后仍能从后端恢复', async ({ page }) => {
+  const id = `board-persist-${Date.now()}`
+  await page.request.post(`${baseURL}/api/workspaces`, { data: {
+    id, title: '白板持久化', problemText: '问题 1：先核对观测单位。', breakdown: [],
+  } })
+  try {
+    await page.addInitScript((workspaceId) => {
+      localStorage.setItem('mmg_current_ws_v1', workspaceId)
+      if (sessionStorage.getItem('mmg_board_migrated') === workspaceId) return
+      localStorage.setItem(`mmg_thought_root_position_v1:${workspaceId}`, JSON.stringify({ x: 120, y: 180 }))
+      localStorage.setItem(`mmg_modeling_panel_state_v1:${workspaceId}`, JSON.stringify({
+        panel: 'chat',
+        msgs: [{ role: 'user', text: '先看单位', time: '08:00' }],
+        kcQuery: '',
+        focusedQuestionId: null,
+        hiddenQuestions: [],
+      }))
+    }, id)
+    await page.goto(`${baseURL}/#/modeling`)
+    await expect(page.locator('.thought-root')).toHaveCSS('left', '120px')
+    await expect.poll(async () => {
+      const { workspace } = await (await page.request.get(`${baseURL}/api/workspaces/${id}`)).json()
+      return {
+        root: workspace.thoughtBoard?.rootPosition,
+        text: workspace.thoughtBoard?.messages?.[0]?.text,
+      }
+    }, { timeout: 15_000 }).toEqual({ root: { x: 120, y: 180 }, text: '先看单位' })
+    await page.evaluate((workspaceId) => {
+      sessionStorage.setItem('mmg_board_migrated', workspaceId)
+      localStorage.removeItem(`mmg_thought_root_position_v1:${workspaceId}`)
+      localStorage.removeItem(`mmg_thought_source_positions_v1:${workspaceId}`)
+      localStorage.removeItem(`mmg_modeling_panel_state_v1:${workspaceId}`)
+    }, id)
+    await page.reload()
+    await expect(page.locator('.thought-root')).toHaveCSS('left', '120px')
+    await expect(page.locator('.thought-root')).toHaveCSS('top', '180px')
+    await page.getByRole('button', { name: '小墨', exact: true }).click()
+    await expect(page.getByRole('dialog', { name: '小墨' })).toContainText('先看单位')
+    const kept = await (await page.request.post(`${baseURL}/api/workspaces`, { data: { id, title: '只改标题' } })).json()
+    expect(kept.ok).toBe(true)
+    const { workspace } = await (await page.request.get(`${baseURL}/api/workspaces/${id}`)).json()
+    expect(workspace.title).toBe('只改标题')
+    expect(workspace.thoughtBoard.rootPosition).toEqual({ x: 120, y: 180 })
+    expect(workspace.thoughtBoard.messages[0].text).toBe('先看单位')
   } finally {
     await page.request.delete(`${baseURL}/api/workspaces/${id}`)
   }

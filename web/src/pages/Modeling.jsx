@@ -9,6 +9,7 @@ import ProblemTextView from '../components/ProblemTextView.jsx'
 import ThoughtBoard from './ThoughtBoard.jsx'
 import ThoughtQuoteFollowUp from './ThoughtQuoteFollowUp.jsx'
 import { buildThoughtProblem, canLinkThoughtNode, focusThoughtQuestion, formatThoughtExport, thoughtAncestors, thoughtParents, THOUGHT_AREAS, THOUGHT_NODE_TYPES, withThoughtParents } from '../lib/thoughtProblem.js'
+import { cacheThoughtBoard, emptyThoughtBoard, normalizeThoughtBoard, readLegacyThoughtBoard, resolveThoughtBoard } from '../lib/thoughtBoardState.js'
 
 const TUTOR_NAME = '小墨'
 
@@ -105,7 +106,6 @@ function isCardFollowUp(text) {
   return /第[一二三四五六七八九十0-9]+个|上面|前面|刚才|这个|这里|你说的|知识卡片|噪声|滑块|展开|第一张|第二张/.test(text || '')
 }
 
-const MODELING_PANEL_STATE_KEY = 'mmg_modeling_panel_state_v1'
 const MODELING_DRAFT_KEY = 'mmg_modeling_draft_v1'
 const THOUGHT_GUIDE_KEY = 'mmg_thought_guide_dismissed_v1'
 
@@ -121,37 +121,14 @@ function loadModelingDraft(wsId, blocks) {
   } catch { return null }
 }
 
-function loadModelingPanelState(wsId) {
-  if (!wsId) return null
-  try {
-    const raw = localStorage.getItem(`${MODELING_PANEL_STATE_KEY}:${wsId}`)
-    if (!raw) return null
-    const state = JSON.parse(raw)
-    return {
-      panel: state.panel === 'kc' ? 'kc' : 'chat',
-      msgs: Array.isArray(state.msgs) ? state.msgs : [],
-      kcQuery: typeof state.kcQuery === 'string' ? state.kcQuery : '',
-      focusedQuestionId: typeof state.focusedQuestionId === 'string' ? state.focusedQuestionId : null,
-      hiddenQuestions: Array.isArray(state.hiddenQuestions)
-        ? state.hiddenQuestions.filter(question => typeof question?.id === 'string' && typeof question.quote === 'string')
-        : [],
-    }
-  } catch {
-    return null
+function boardPanel(board) {
+  return {
+    panel: board?.panel === 'kc' ? 'kc' : 'chat',
+    msgs: Array.isArray(board?.messages) ? board.messages : [],
+    kcQuery: typeof board?.kcQuery === 'string' ? board.kcQuery : '',
+    focusedQuestionId: board?.focusedQuestionId || null,
+    hiddenQuestions: Array.isArray(board?.hiddenQuestions) ? board.hiddenQuestions : [],
   }
-}
-
-function saveModelingPanelState(wsId, state) {
-  if (!wsId) return
-  try {
-    localStorage.setItem(`${MODELING_PANEL_STATE_KEY}:${wsId}`, JSON.stringify({
-      panel: state.panel,
-      msgs: state.msgs,
-      kcQuery: state.kcQuery,
-      focusedQuestionId: state.focusedQuestionId,
-      hiddenQuestions: state.hiddenQuestions,
-    }))
-  } catch { /* ignore local cache failures */ }
 }
 
 function normalizeStep(step) {
@@ -206,7 +183,8 @@ const nid = () => `b${Date.now()}-${uid++}`
 export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSidebar }) {
   const problemText = ws?.problemText || ''
   const attachments = ws?.attachments || []
-  const initialPanelState = useRef(loadModelingPanelState(ws?.id))
+  const initialBoard = useRef(resolveThoughtBoard(ws))
+  const initialPanelState = useRef(boardPanel(initialBoard.current))
   const [blocks, setBlocks] = useState([])
   const problem = useMemo(() => buildThoughtProblem(problemText, ws?.problemSourceKind, ws?.problemPages), [problemText, ws?.problemSourceKind, ws?.problemPages])
   const [typeMenu, setTypeMenu] = useState(undefined)
@@ -260,6 +238,12 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
     try { return localStorage.getItem(THOUGHT_GUIDE_KEY) === '1' } catch { return false }
   })
   const knowledgeRequest = useRef(null)
+  const layoutRef = useRef({
+    rootPosition: initialBoard.current.rootPosition,
+    sourcePositions: initialBoard.current.sourcePositions,
+    inputMode: initialBoard.current.inputMode,
+  })
+  const publishedBoard = useRef(JSON.stringify(initialBoard.current))
   const chatRef = useRef(null)
   const composerInput = useRef(null)
   const restoringPanelStateRef = useRef(false)
@@ -296,7 +280,19 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
   useEffect(() => {
     if (!wsIdNow || !ws || ws.id !== wsIdNow) return
     const b = normalizeBlocks(ws.breakdown)
-    const saved = loadModelingPanelState(wsIdNow)
+    const resolved = resolveThoughtBoard(ws)
+    const saved = boardPanel(resolved)
+    layoutRef.current = {
+      rootPosition: resolved.rootPosition,
+      sourcePositions: resolved.sourcePositions,
+      inputMode: resolved.inputMode,
+    }
+    publishedBoard.current = JSON.stringify(resolved)
+    cacheThoughtBoard(wsIdNow, resolved)
+    const legacy = readLegacyThoughtBoard(wsIdNow)
+    if (!normalizeThoughtBoard(ws.thoughtBoard) && JSON.stringify(legacy) !== JSON.stringify(emptyThoughtBoard())) {
+      patchWsAt?.(wsIdNow, { thoughtBoard: resolved })
+    }
     const savedDraft = loadModelingDraft(wsIdNow, b)
     restoringPanelStateRef.current = true
     setBlocks(b)
@@ -357,14 +353,34 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
     return () => removeEventListener('beforeunload', warn)
   }, [draftCacheOk, editingId])
 
-  // 保留思路梳理台右栏的对话、知识卡片 tab 和搜索状态。
+  function publishThoughtBoard(layoutPatch) {
+    if (layoutPatch) layoutRef.current = { ...layoutRef.current, ...layoutPatch }
+    if (!wsIdNow || blocksWsId !== wsIdNow) return
+    const board = normalizeThoughtBoard({
+      version: 1,
+      ...layoutRef.current,
+      panel,
+      messages: history,
+      kcQuery,
+      focusedQuestionId,
+      hiddenQuestions,
+    })
+    if (!board) return
+    cacheThoughtBoard(wsIdNow, board)
+    const serialized = JSON.stringify(board)
+    if (publishedBoard.current === serialized) return
+    publishedBoard.current = serialized
+    patchWsAt?.(wsIdNow, { thoughtBoard: board })
+  }
+
+  // 保留思路整理台的对话、面板和布局。未确认草稿仍只留在 sessionStorage。
   useEffect(() => {
     if (restoringPanelStateRef.current) {
       restoringPanelStateRef.current = false
       return
     }
-    saveModelingPanelState(wsIdNow, { panel, msgs: history, kcQuery, hiddenQuestions, focusedQuestionId })
-  }, [wsIdNow, panel, history, kcQuery, hiddenQuestions, focusedQuestionId])
+    publishThoughtBoard()
+  }, [wsIdNow, blocksWsId, panel, history, kcQuery, hiddenQuestions, focusedQuestionId])
 
   useEffect(() => {
     if ((floating && panel === 'kc') || history.some(message => message.role === 'ai')) ensureKnowledge()
@@ -1010,6 +1026,7 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
               title={problem.title || ws?.title || '未命名题目'} summary={problem.summary}
               questionCount={questions.length} selectedId={selectedId} organizerOpen={organizerOpen}
               recognitionMiss={recognitionMiss} showGuide={showGuide} onDismissGuide={dismissGuide}
+              initialBoard={resolveThoughtBoard(ws)} onBoardChange={publishThoughtBoard}
               onSelect={id => {
                 closeNodeTypes()
                 const node = organizerOpen && boardNodes.find(item => item.id === id)

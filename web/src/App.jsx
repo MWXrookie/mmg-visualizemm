@@ -3,6 +3,8 @@ import Settings from './pages/Settings.jsx'
 import LearningEntry from './pages/LearningEntry.jsx'
 import { loadSettings, loadTheme, saveTheme, getCurrentWsId, setCurrentWsId } from './store.js'
 import { loadWorkspace, saveWorkspace, listWorkspaces, deleteWorkspace, exportWorkspaceBackup, importWorkspaceBackup } from './api.js'
+import { apiFetch, warningsFromHealth } from './lib/apiClient.js'
+import { THOUGHT_BOARD_TOO_LARGE_MESSAGE, thoughtBoardTooLarge } from './lib/thoughtBoardState.js'
 import { IconBook, IconCompass, IconCode, IconHome, IconGear, IconSun, IconMoon, IconEdit, IconTrash, IconMenu, IconClose } from './components/Icons.jsx'
 
 const Workbench = lazy(() => import('./pages/Workbench.jsx'))
@@ -29,7 +31,7 @@ function getView() {
 }
 
 function workspacePayload(w) {
-  return {
+  const payload = {
     id: w.id,
     title: w.title || '',
     problemText: w.problemText || '',
@@ -41,28 +43,44 @@ function workspacePayload(w) {
     overview: w.overview || '',
     code: w.code || '',
   }
+  if (w.thoughtBoard && typeof w.thoughtBoard === 'object' && !Array.isArray(w.thoughtBoard)) {
+    if (thoughtBoardTooLarge(w.thoughtBoard)) return { payload, boardOmitted: true }
+    payload.thoughtBoard = w.thoughtBoard
+  }
+  return { payload, boardOmitted: false }
 }
 
-/** 常规自动保存使用普通请求；仅 pagehide 使用 keepalive 或同步兜底。 */
-function persist(w, unloading = false) {
-  if (!w || !w.id) return
-  const body = JSON.stringify(workspacePayload(w))
+async function sendWorkspace(payload, unloading) {
+  const body = JSON.stringify(payload)
   if (!unloading) {
-    return fetch('/api/workspaces', {
+    const response = await apiFetch('/api/workspaces', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body,
-    }).then(async (response) => {
-      if (!response.ok) throw new Error(`保存失败：HTTP ${response.status}`)
-      const result = await response.json()
-      if (result.ok === false) throw new Error(result.error || '保存未成功')
     })
+    const result = await response.json().catch(() => ({}))
+    if (response.status === 413 && result.code === 'THOUGHT_BOARD_TOO_LARGE') {
+      const error = new Error(THOUGHT_BOARD_TOO_LARGE_MESSAGE)
+      error.code = 'THOUGHT_BOARD_TOO_LARGE'
+      throw error
+    }
+    if (!response.ok || result.ok === false) {
+      const error = new Error(result.message || result.error || `保存失败：HTTP ${response.status}`)
+      error.code = result.code || ''
+      error.status = response.status
+      throw error
+    }
+    return
   }
-  // keepalive 请求体有约 64KB 上限，大工作区在 pagehide 时直接走同步兜底。
+  const headers = { 'Content-Type': 'application/json' }
+  try {
+    const token = sessionStorage.getItem('mmg_lan_token')
+    if (token) headers.Authorization = `Bearer ${token}`
+  } catch { /* 离页时读不到口令就按未登录发送。 */ }
   if (new TextEncoder().encode(body).byteLength <= 60 * 1024) {
-    fetch('/api/workspaces', {
+    apiFetch('/api/workspaces', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body,
       keepalive: true,
     }).catch((error) => console.warn('[persist] 离页保存失败：', error))
@@ -72,11 +90,30 @@ function persist(w, unloading = false) {
     const xhr = new XMLHttpRequest()
     xhr.open('POST', '/api/workspaces', false)
     xhr.setRequestHeader('Content-Type', 'application/json')
+    if (headers.Authorization) xhr.setRequestHeader('Authorization', headers.Authorization)
     xhr.send(body)
     if (xhr.status < 200 || xhr.status >= 300) console.warn('[persist] 离页保存失败：HTTP', xhr.status)
   } catch (error) {
     console.warn('[persist] 离页保存失败：', error)
   }
+}
+
+/** 常规自动保存使用普通请求；仅 pagehide 使用 keepalive 或同步兜底。白板过大时先去掉该字段再保存其余内容。 */
+function persist(w, unloading = false) {
+  if (!w || !w.id) return
+  const prepared = workspacePayload(w)
+  const notifyOversized = () => {
+    if (!unloading) globalThis.__notifyBoardLimit?.(THOUGHT_BOARD_TOO_LARGE_MESSAGE)
+  }
+  if (prepared.boardOmitted) notifyOversized()
+  const saving = sendWorkspace(prepared.payload, unloading)
+  if (unloading || !saving) return saving
+  return saving.catch(async (error) => {
+    if (error.code !== 'THOUGHT_BOARD_TOO_LARGE' || !prepared.payload.thoughtBoard) throw error
+    notifyOversized()
+    const { thoughtBoard, ...rest } = prepared.payload
+    await sendWorkspace(rest, false)
+  })
 }
 
 export default function App() {
@@ -96,6 +133,10 @@ export default function App() {
   const workspaceCreatingRef = useRef(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [openedViews, setOpenedViews] = useState(() => new Set([getView()]))
+  const [securityWarnings, setSecurityWarnings] = useState([])
+  const [boardWarning, setBoardWarning] = useState('')
+  const [authPrompt, setAuthPrompt] = useState(null)
+  const authInput = useRef(null)
   if (!openedViews.has(view)) setOpenedViews(prev => new Set(prev).add(view))
   const mobileMenuButton = useRef(null)
 
@@ -115,7 +156,13 @@ export default function App() {
   // 全局通知入口（供各页面调用：window.__notify('...')）
   useEffect(() => {
     window.__notify = (msg) => setToast(msg)
-    return () => { delete window.__notify }
+    window.__notifyBoardLimit = (msg) => setBoardWarning(msg)
+    window.__lanAuthPrompt = ({ code, message, finish }) => setAuthPrompt({ code, message, finish })
+    return () => {
+      delete window.__notify
+      delete window.__notifyBoardLimit
+      delete window.__lanAuthPrompt
+    }
   }, [])
   useEffect(() => {
     if (!toast) return
@@ -133,6 +180,14 @@ export default function App() {
   useEffect(() => { wsIdRef.current = wsId }, [wsId])
 
   useEffect(() => { loadSettings().then(setSettings) }, [])
+  useEffect(() => {
+    let live = true
+    apiFetch('/api/health')
+      .then((response) => response.json().catch(() => ({})))
+      .then((health) => { if (live) setSecurityWarnings(warningsFromHealth(health)) })
+      .catch(() => { if (live) setSecurityWarnings(warningsFromHealth(null)) })
+    return () => { live = false }
+  }, [])
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
     saveTheme(theme)
@@ -193,7 +248,10 @@ export default function App() {
         setToast((previous) => previous === '卡片修改已应用，正在保存…' ? '卡片已保存到工作区' : previous)
       } catch (error) {
         console.warn('[persist] 保存失败：', error)
-        if (current) setSaveState({ id: ws.id, status: 'error' })
+        if (current) {
+          setSaveState({ id: ws.id, status: 'error' })
+          if (error.code === 'AUTH_RATE_LIMITED' && error.message) setToast(error.message)
+        }
       }
     }, delay)
     // A late acknowledgement must not describe a newer revision or another workspace.
@@ -318,7 +376,9 @@ export default function App() {
     setBackupBusy(true)
     try {
       // 先显式保存最新状态，避免导出尚在 800ms 防抖队列中的旧版本。
-      await saveWorkspace(workspacePayload(current))
+      const prepared = workspacePayload(current)
+      if (prepared.boardOmitted) window.__notifyBoardLimit?.(THOUGHT_BOARD_TOO_LARGE_MESSAGE)
+      await saveWorkspace(prepared.payload)
       const backup = await exportWorkspaceBackup(current.id)
       const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json;charset=utf-8' })
       const url = URL.createObjectURL(blob)
@@ -559,12 +619,32 @@ export default function App() {
         {view === 'coding' && <Suspense fallback={<PageFallback label="编程工作台" />}>
           <Coding {...pageProps} />
         </Suspense>}
-        {view === 'settings' && <Settings settings={settings} setSettings={setSettings} />}
+        {view === 'settings' && <Settings settings={settings} setSettings={setSettings} securityWarnings={securityWarnings} />}
       </main>
+      {boardWarning && <div className="toast save-error" role="alert"><span>{boardWarning}</span><button type="button" onClick={() => setBoardWarning('')}>知道了</button></div>}
       {workspaceCreating ? <div className="toast" role="status">正在创建新工作区，请稍候…</div>
         : saveState.id === ws?.id && saveState.status === 'error'
           ? <div className="toast save-error" role="status"><span>工作区保存失败，当前修改仍保留</span><button type="button" onClick={() => setSaveRetry((count) => count + 1)}>重试保存</button></div>
           : toast && <div className="toast" role="status">{toast}</div>}
+      {authPrompt && (
+        <div className="scrim">
+          <form className="sheet" role="dialog" aria-modal="true" aria-labelledby="lan-auth-title" onSubmit={(event) => {
+            event.preventDefault()
+            const value = authInput.current?.value || ''
+            const finish = authPrompt.finish
+            setAuthPrompt(null)
+            finish(value)
+          }}>
+            <h2 id="lan-auth-title">访问口令</h2>
+            <p className="sub">{authPrompt.code === 'AUTH_INVALID' ? '口令不正确，请重新输入。' : (authPrompt.message || '请输入访问口令。')}</p>
+            <input ref={authInput} className="bk-input" type="password" aria-label="访问口令" autoFocus autoComplete="current-password" style={{ width: '100%' }} />
+            <div className="sheet-actions">
+              <button type="button" className="btn btn-ghost" onClick={() => { const finish = authPrompt.finish; setAuthPrompt(null); finish('') }}>取消</button>
+              <button type="submit" className="btn btn-primary">确认</button>
+            </div>
+          </form>
+        </div>
+      )}
       {wsDialog && (
         <div className="scrim" onClick={() => setWsDialog(null)}>
           <div className="sheet" onClick={(e) => e.stopPropagation()}>

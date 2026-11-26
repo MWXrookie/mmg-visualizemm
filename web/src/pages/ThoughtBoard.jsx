@@ -72,7 +72,7 @@ function loadLayout(key, fallback) {
 
 const ThoughtBoard = forwardRef(function ThoughtBoard({
   workspaceId, nodes, hiddenSourceIds, activeQuestionId, focusedCardIds, title, summary, questionCount, selectedId, organizerOpen,
-  recognitionMiss, showGuide, onDismissGuide,
+  recognitionMiss, showGuide, onDismissGuide, initialBoard, onBoardChange,
   onCreateNode, onFocusQuestion, onSelect, onConnect, onMove, onEdit, onAsk, onRemove,
 }, actions) {
   const viewport = useRef(null)
@@ -83,10 +83,12 @@ const ThoughtBoard = forwardRef(function ThoughtBoard({
   const rootKey = workspaceId ? `mmg_thought_root_position_v1:${workspaceId}` : null
   const sourceKey = workspaceId ? `mmg_thought_source_positions_v1:${workspaceId}` : null
   const [rootPosition, setRootPosition] = useState(() => {
+    const saved = initialBoard?.rootPosition
+    if (Number.isFinite(saved?.x) && Number.isFinite(saved?.y)) return saved
     const point = loadLayout(rootKey, ROOT)
-    return Number.isFinite(point.x) && Number.isFinite(point.y) ? point : ROOT
+    return Number.isFinite(point?.x) && Number.isFinite(point?.y) ? point : ROOT
   })
-  const [sourcePositions, setSourcePositions] = useState(() => loadLayout(sourceKey, {}))
+  const [sourcePositions, setSourcePositions] = useState(() => initialBoard?.sourcePositions || loadLayout(sourceKey, {}))
   const [moving, setMoving] = useState(null)
   const [panning, setPanning] = useState(false)
   const [view, setView] = useState(HOME_VIEW)
@@ -97,7 +99,7 @@ const ThoughtBoard = forwardRef(function ThoughtBoard({
   const [mapOpen, setMapOpen] = useState(false)
   const mapId = useId()
   const arrowId = useId()
-  const [inputMode, setInputMode] = useState(() => loadLayout(INPUT_MODE_KEY, 'mouse') === 'trackpad' ? 'trackpad' : 'mouse')
+  const [inputMode, setInputMode] = useState(() => (initialBoard?.inputMode === 'trackpad' || loadLayout(INPUT_MODE_KEY, 'mouse') === 'trackpad') ? 'trackpad' : 'mouse')
   const { scale } = view
   const positions = useMemo(() => layoutThoughtTree(nodes.map(node => {
     const point = node.sourceQuestion ? sourcePositions[node.id] : null
@@ -134,6 +136,11 @@ const ThoughtBoard = forwardRef(function ThoughtBoard({
     try {
       if (sourceKey) localStorage.setItem(sourceKey, JSON.stringify(nextSource))
     } catch { /* Keep the current positions if storage is unavailable. */ }
+    if (movedId) onBoardChange?.({
+      rootPosition: movedId === ROOT_NODE ? newPosition : rootPosition,
+      sourcePositions: nextSource,
+      inputMode,
+    })
     return positions
   }
 
@@ -571,6 +578,7 @@ const ThoughtBoard = forwardRef(function ThoughtBoard({
         <select className="thought-input-mode" aria-label="画布操作模式" title={INPUT_HINTS[inputMode]} aria-describedby={inputHelpId} value={inputMode} onChange={event => {
           const nextMode = event.target.value
           setInputMode(nextMode)
+          onBoardChange?.({ rootPosition, sourcePositions, inputMode: nextMode })
           try { localStorage.setItem(INPUT_MODE_KEY, JSON.stringify(nextMode)) } catch { /* Use the current preference. */ }
         }}>
           <option value="mouse">鼠标模式</option>

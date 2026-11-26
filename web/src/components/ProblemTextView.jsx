@@ -3,6 +3,7 @@ import { marked } from 'marked'
 import { IconFile } from './Icons.jsx'
 import { sanitize, renderMath } from './MD.jsx'
 import { analyzeProblemText } from '../lib/problemText.js'
+import { apiFetch } from '../lib/apiClient.js'
 
 function renderBlock(text) {
   return renderMath(sanitize(marked.parse(String(text || ''))))
@@ -57,7 +58,7 @@ function PdfOriginal({ document }) {
   useEffect(() => {
     const ctrl = new AbortController()
     setPreview((prev) => ({ ...prev, image: '', busy: true, error: '' }))
-    fetch('/api/pdf-preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ document, page }), signal: ctrl.signal })
+    apiFetch('/api/pdf-preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ document, page }), signal: ctrl.signal })
       .then(async (res) => { const result = await res.json(); if (!res.ok || !result.ok) throw new Error(result.message || '原版预览失败'); return result })
       .then((result) => { if (!ctrl.signal.aborted) setPreview({ image: result.image, total: result.total, busy: false, error: '' }) })
       .catch((error) => { if (!ctrl.signal.aborted) setPreview((prev) => ({ ...prev, busy: false, error: error.message })) })
