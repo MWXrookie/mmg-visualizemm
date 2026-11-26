@@ -84,6 +84,38 @@ function readNumber(token) {
   return units === undefined ? digits.indexOf(tens) : (tens ? digits.indexOf(tens) : 1) * 10 + (units ? digits.indexOf(units) : 0)
 }
 
+const EXPLICIT_QUESTION = /^(?:(?:子?问题|小问|任务)\s*[（(]?\s*([0-9一二三四五六七八九十]+)(?=[\s：:、.．)）]|$)|第\s*([0-9一二三四五六七八九十]+)\s*(?:小?问|题))\s*[）)]?\s*[：:、.．]?\s*(.*)$/
+const PAREN_QUESTION = /^[（(]\s*([0-9一二三四五六七八九十]+)\s*[)）]\s*(\S.{5,})$/
+const DOT_QUESTION = /^([0-9]+)[.．、](?!\d)\s*(\S.*)$/
+const TASK_CUE = /请|试|求|分析|建立|预测|给出|确定|比较|计算|讨论|说明|设计|评估|检验|验证|判断/
+
+function explicitQuestion(line) {
+  const heading = line.match(EXPLICIT_QUESTION)
+  const number = heading ? readNumber(heading[1] || heading[2]) : NaN
+  if (!Number.isSafeInteger(number) || number <= 0) return null
+  return { number, rest: heading[3] || '' }
+}
+
+function bareQuestion(line) {
+  const paren = line.match(PAREN_QUESTION)
+  if (paren) {
+    const number = readNumber(paren[1])
+    return Number.isSafeInteger(number) && number > 0 ? { number, rest: paren[2] } : null
+  }
+  const dotted = line.match(DOT_QUESTION)
+  if (!dotted || !TASK_CUE.test(dotted[2])) return null
+  const number = Number(dotted[1])
+  return Number.isSafeInteger(number) && number > 0 ? { number, rest: dotted[2] } : null
+}
+
+function startQuestion(questions, seen, number, rest) {
+  seen.add(number)
+  const current = { id: `source-question:${number}`, kind: 'question', questionNumber: number, title: `问题 ${number}`, sourceQuestion: true, content: [] }
+  questions.push(current)
+  if (rest) current.content.push(rest)
+  return current
+}
+
 export function buildThoughtProblem(text, sourceKind, pages) {
   const analysis = analyzeProblemText(text, sourceKind, pages)
   const lines = analysis.raw.split('\n')
@@ -97,19 +129,26 @@ export function buildThoughtProblem(text, sourceKind, pages) {
   const seen = new Set()
   const lead = []
   let current = null
+  let explicitSeen = false
+  let nextBare = 1
 
   for (const raw of lines) {
     const line = raw.trim().replace(/^#{1,6}\s+/, '').replace(/\*\*/g, '')
     if (!line || /^--\s*(?:page_?number|\d+)\s+of\b/i.test(line)) continue
     if (current && /^(?:附录\s*[0-9一二三四五六七八九十A-Z]*|参考文献)(?=$|[\s：:、.．])/.test(line)) break
-    const heading = line.match(/^(?:(?:子?问题|小问)\s*[（(]?\s*([0-9一二三四五六七八九十]+)(?=[\s：:、.．)）]|$)|第\s*([0-9一二三四五六七八九十]+)\s*小?问)\s*[）)]?\s*[：:、.．]?\s*(.*)$/)
-    const number = heading ? readNumber(heading[1] || heading[2]) : NaN
-    if (Number.isSafeInteger(number) && number > 0 && !seen.has(number)) {
-      seen.add(number)
-      current = { id: `source-question:${number}`, kind: 'question', questionNumber: number, title: `问题 ${number}`, sourceQuestion: true, content: [] }
-      questions.push(current)
-      if (heading[3]) current.content.push(heading[3])
-    } else if (current) current.content.push(line)
+    const explicit = explicitQuestion(line)
+    if (explicit && !seen.has(explicit.number)) {
+      explicitSeen = true
+      current = startQuestion(questions, seen, explicit.number, explicit.rest)
+      continue
+    }
+    const bare = !explicitSeen ? bareQuestion(line) : null
+    if (bare && bare.number === nextBare && !seen.has(bare.number)) {
+      nextBare = bare.number + 1
+      current = startQuestion(questions, seen, bare.number, bare.rest)
+      continue
+    }
+    if (current) current.content.push(line)
     else if (line !== sourceTitle && !kicker.test(line)) lead.push(line)
   }
 
@@ -122,4 +161,68 @@ export function buildThoughtProblem(text, sourceKind, pages) {
       return { ...question, quote, idea: quote, steps: [], refs: [] }
     }),
   }
+}
+
+function thoughtTitle(node) {
+  return String(node?.title || '').trim() || '未命名卡片'
+}
+
+export function formatThoughtExport({ title, questions = [], cards = [], when = '' }) {
+  const all = [...questions, ...cards.filter(card => !questions.some(question => question.id === card.id))]
+  const byId = new Map(all.map(node => [node.id, node]))
+  const downstream = new Map(all.map(node => [node.id, []]))
+  for (const node of all) {
+    for (const parent of thoughtParents(node)) {
+      if (parent === null || !downstream.has(parent)) continue
+      downstream.get(parent).push(node)
+    }
+  }
+  const upstream = node => thoughtParents(node)
+    .map(id => (id === null ? '当前题目' : byId.get(id) ? thoughtTitle(byId.get(id)) : ''))
+    .filter(Boolean)
+    .join('、') || '无'
+  const following = node => (downstream.get(node.id) || []).map(thoughtTitle).join('、') || '无'
+  const lines = [
+    `# 思路整理台 · ${when}`,
+    '',
+    `> 题目：${title || '未命名'}`,
+    '',
+    '## 小问',
+    '',
+  ]
+  if (!questions.length) lines.push('未自动拆出小问。', '')
+  for (const question of questions) {
+    lines.push(
+      `### ${thoughtTitle(question)}`,
+      '',
+      `上游：${upstream(question)}`,
+      `下游：${following(question)}`,
+      '',
+      '原文：',
+      '',
+      question.quote || question.idea || '（无）',
+      '',
+    )
+  }
+  lines.push('## 卡片', '')
+  if (!cards.length) lines.push('还没有自己写的卡片。', '')
+  cards.forEach((card, index) => {
+    const steps = Array.isArray(card.steps) ? card.steps : []
+    lines.push(
+      `### ${index + 1}. ${thoughtTitle(card)}`,
+      '',
+      `类型：${THOUGHT_NODE_TYPES[card.kind]?.label || '卡片'}`,
+      `上游：${upstream(card)}`,
+      `下游：${following(card)}`,
+      '',
+    )
+    if (card.quote) lines.push(`依据：${card.quote}`, '')
+    if (card.idea) lines.push(`内容：${card.idea}`, '')
+    for (const step of steps) {
+      lines.push(`- **要怎么做：** ${step.action || ''}`, `  **怎么实现：** ${step.method || ''}`)
+    }
+    if (card.refs?.length) lines.push('', `关联：${card.refs.join('、')}`)
+    lines.push('')
+  })
+  return lines.join('\n')
 }

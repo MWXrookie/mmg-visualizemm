@@ -3326,9 +3326,9 @@ function CardDetail({ card, onAddToBreakdown, added = false }) {
     {workflow && onAddToBreakdown && (
       <div className="kc-action-footer">
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => onAddToBreakdown(card)} disabled={added}>
-          <IconPlus size={13} /> {added ? '已加入候选' : '加入拆解块'}
+          <IconPlus size={13} /> {added ? '已加入候选' : '加入卡片'}
         </button>
-        <span>{added ? '可在梳理台继续修改' : '将方法记为备选'}</span>
+        <span>{added ? '可在思路整理台继续修改' : '将方法记为备选'}</span>
       </div>
     )}
   </>

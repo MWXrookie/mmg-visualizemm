@@ -1,15 +1,14 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { marked } from 'marked'
 import { streamChat, chat, attachSummary, retrieveKnowledge, formatKnowledgeContext } from '../api.js'
-import { KnowledgeLibrary, KnowledgeCard, findConceptMatches, CARD_BY_ID, getCardWorkflow } from './Cards.jsx'
-import MD, { sanitize } from '../components/MD.jsx'
+import { loadKnowledgeCards } from '../lib/loadKnowledgeCards.js'
+import MD from '../components/MD.jsx'
 import AttachmentList from '../components/AttachmentList.jsx'
-import { IconMenu, IconDownload, IconArrowLeft, IconFile, IconTable, IconSparkles, IconLayers, IconSearch, IconEdit, IconChevronRight, IconChevronDown, IconLink, IconClose, IconSend, IconPlus, IconTrash } from '../components/Icons.jsx'
+import { IconMenu, IconDownload, IconArrowLeft, IconFile, IconTable, IconSparkles, IconLayers, IconSearch, IconEdit, IconChevronRight, IconLink, IconClose, IconSend, IconPlus, IconTrash } from '../components/Icons.jsx'
 import { EXPERT_CORE } from '../lib/modelingExpert.js'
 import ProblemTextView from '../components/ProblemTextView.jsx'
 import ThoughtBoard from './ThoughtBoard.jsx'
 import ThoughtQuoteFollowUp from './ThoughtQuoteFollowUp.jsx'
-import { buildThoughtProblem, canLinkThoughtNode, focusThoughtQuestion, thoughtAncestors, thoughtParents, THOUGHT_AREAS, THOUGHT_NODE_TYPES, withThoughtParents } from '../lib/thoughtProblem.js'
+import { buildThoughtProblem, canLinkThoughtNode, focusThoughtQuestion, formatThoughtExport, thoughtAncestors, thoughtParents, THOUGHT_AREAS, THOUGHT_NODE_TYPES, withThoughtParents } from '../lib/thoughtProblem.js'
 
 const TUTOR_NAME = '小墨'
 
@@ -18,21 +17,21 @@ const SECRETARY_SYSTEM = [
   '你是小墨，数学建模工作台里可以随时提问的秘书。跟随用户当前的话题，也可以回答与当前题目无关的问题。',
   '概念、术语、推导和一般事实可以直接解释。也可以回顾对话、提取要点、比较用户已有想法的依据，或帮忙归纳和润色。不需要在每个回答后追问。',
   '用户在决定当前建模问题的方案、变量、假设或验证方向时，给出观察线索或适用条件，必要时问一个开放式问题。不要列可选方案，不要给出推荐选项，也不要代替用户选定答案。',
-  '用自然语言回复。题干、附件、节点、知识卡和历史是参考上下文。节点的记录与编辑由用户在思路整理中完成，不生成修改指令、节点补丁或整棵思路树。',
+  '用自然语言回复。题干、附件、节点、知识卡和历史是参考上下文。节点的记录与编辑由用户在思路整理台完成，不生成修改指令、节点补丁或整套卡片关系。',
   '针对节点的提问中，每条上游连线是用户标记的关系。区分已知条件、暂时假设和检验记录。上游如果有多个，分别说明它们与当前想法的关系；保留冲突和不确定性，不把假设当作已经验证的事实。',
 ].join('\n')
 
 const IDEA_GEN_GUIDE =
   '你是数学建模思路引导助手，采用**苏格拉底式提问法**——让用户自己说出思路，而不是替他想好完整方案。\n' +
-  '用户正在编辑一个拆解块，请根据标题与题目依据：\n' +
+  '用户正在编辑一张卡片，请根据标题与题目依据：\n' +
   '1) 先提出 2-3 个关键引导问题（例如：目标到底是什么？有哪些约束/限制？附件数据能支撑哪些分析？），标为「请你先想清楚」\n' +
   '2) 最后给出一句**思路草案**，用一句话概括方向，关键处留空或用「…」让用户自己填。\n' +
   '只输出这一句话，不要 Markdown、不要标题、不要解释文字，80 字以内，全部中文。\n' +
   EXPERT_CORE
 
 const IDEA_GEN_DIRECT =
-  '你是数学建模思路梳理助手。用户正在编辑一个拆解块，需要你写一句可直接使用的「思路」。\n' +
-  '根据拆解块的标题与题目依据，概括解决方向以及关键判断。\n' +
+  '你是数学建模思路整理助手。用户正在编辑一张卡片，需要你写一句可直接使用的内容。\n' +
+  '根据卡片的标题与题目依据，概括解决方向以及关键判断。\n' +
   '要求：只输出一句中文，不要 Markdown、不要标题、不要任何解释文字，控制在 80 字以内。'
 
 const now = () => new Date().toTimeString().slice(0, 5)
@@ -52,7 +51,7 @@ function buildTutorWorkspaceContext(problemText, node, nodes, attachments) {
   const summary = attachSummary(attachments)
   const problemCtx = problemText.trim() ? `【完整题目】\n${problemText}\n\n` : ''
   const scope = node ? `【本轮针对的节点】${node.title}（稳定id=${node.id}）。用户说“这个思路”时指此节点。\n\n` : ''
-  const heading = node ? '当前节点与沿实际连线找到的上游' : '当前思路树'
+  const heading = node ? '当前节点与沿实际连线找到的上游' : '当前思路整理台'
   return `${problemCtx}${scope}${heading}：\n${blocksDesc || '（暂无节点）'}\n\n${summary ? `数据附件摘要：\n${summary}\n\n` : ''}`
 }
 
@@ -72,7 +71,8 @@ function buildConversationHistory(messages, maxMessages = 12, maxChars = 9000) {
 }
 
 /** 把已经展示过的卡片原文传回模型，支持“第一个卡片/上面的噪声”这类追问。 */
-function buildCardContext(matchesByMessage, currentText = '') {
+function buildCardContext(matchesByMessage, currentText = '', library) {
+  if (!library?.CARD_BY_ID) return ''
   const seen = new Set()
   const ids = []
   for (const matches of matchesByMessage || []) {
@@ -83,7 +83,7 @@ function buildCardContext(matchesByMessage, currentText = '') {
       }
     }
   }
-  for (const match of findConceptMatches(currentText)) {
+  for (const match of library.findConceptMatches(currentText)) {
     if (!seen.has(match.id)) {
       seen.add(match.id)
       ids.push(match.id)
@@ -91,7 +91,7 @@ function buildCardContext(matchesByMessage, currentText = '') {
   }
   const selectedIds = ids.length > 8 ? [...ids.slice(0, 4), ...ids.slice(-4)] : ids
   const cards = selectedIds.map((id, index) => {
-    const card = CARD_BY_ID.get(id)
+    const card = library.CARD_BY_ID.get(id)
     if (!card) return ''
     const demoContext = [card.demoGuide, card.aiContext].filter(Boolean).join('；')
     return `【界面知识卡片 ${index + 1}】\n标题：${card.title}\n标签：${card.tag}\n一句话定义：${clipContext(card.definition || card.concept, 420) || '（无）'}\n概念解释：${clipContext(card.note, 420) || '（无）'}\n什么时候用：${clipContext(card.when, 420) || '（无）'}\n注意事项：${clipContext(card.cautions, 420) || '（无）'}\n互动示例：${clipContext(demoContext, 520) || '（卡片没有额外演示说明）'}\n来源摘要：${clipContext(card.sourceBrief, 260) || '（无）'}\n完整来源：${clipContext(card.src, 360) || '（无）'}`
@@ -107,6 +107,7 @@ function isCardFollowUp(text) {
 
 const MODELING_PANEL_STATE_KEY = 'mmg_modeling_panel_state_v1'
 const MODELING_DRAFT_KEY = 'mmg_modeling_draft_v1'
+const THOUGHT_GUIDE_KEY = 'mmg_thought_guide_dismissed_v1'
 
 function loadModelingDraft(wsId, blocks) {
   try {
@@ -164,7 +165,7 @@ function normalizeBlock(block) {
   const { x, y } = block?.position || {}
   return withThoughtParents({
     id: typeof block?.id === 'string' && block.id ? block.id : nid(),
-    title: typeof block?.title === 'string' ? block.title : '未命名拆解块',
+    title: typeof block?.title === 'string' ? block.title : '未命名卡片',
     quote: typeof block?.quote === 'string' ? block.quote : '',
     idea: typeof block?.idea === 'string' ? block.idea : (typeof block?.body === 'string' ? block.body : ''),
     steps: Array.isArray(block?.steps) ? block.steps.map(normalizeStep) : [],
@@ -254,6 +255,11 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
   const draftSession = useRef(0)
   const [kcQuery, setKcQuery] = useState(() => initialPanelState.current?.kcQuery || '')
   const [ctxOpen, setCtxOpen] = useState(false)
+  const [knowledge, setKnowledge] = useState(null)
+  const [guideDismissed, setGuideDismissed] = useState(() => {
+    try { return localStorage.getItem(THOUGHT_GUIDE_KEY) === '1' } catch { return false }
+  })
+  const knowledgeRequest = useRef(null)
   const chatRef = useRef(null)
   const composerInput = useRef(null)
   const restoringPanelStateRef = useRef(false)
@@ -273,7 +279,20 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
   activeWorkspace.current = wsIdNow
   const aiRequest = useRef(0)
 
-  // 工作区切换 / 首次载入 → 载入拆解块；等 ws 真正到位后再同步，避免空壳覆盖已存在数据
+  function ensureKnowledge() {
+    knowledgeRequest.current ||= loadKnowledgeCards().then(mod => {
+      setKnowledge(mod)
+      return mod
+    })
+    return knowledgeRequest.current
+  }
+
+  function dismissGuide() {
+    setGuideDismissed(true)
+    try { localStorage.setItem(THOUGHT_GUIDE_KEY, '1') } catch { /* 引导可以下次再出现。 */ }
+  }
+
+  // 工作区切换 / 首次载入 → 载入卡片；等 ws 真正到位后再同步，避免空壳覆盖已存在数据
   useEffect(() => {
     if (!wsIdNow || !ws || ws.id !== wsIdNow) return
     const b = normalizeBlocks(ws.breakdown)
@@ -346,6 +365,10 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
     }
     saveModelingPanelState(wsIdNow, { panel, msgs: history, kcQuery, hiddenQuestions, focusedQuestionId })
   }, [wsIdNow, panel, history, kcQuery, hiddenQuestions, focusedQuestionId])
+
+  useEffect(() => {
+    if ((floating && panel === 'kc') || history.some(message => message.role === 'ai')) ensureKnowledge()
+  }, [floating, panel, history])
 
   // 已确认块立即同步到三台共享状态；父层仍负责网络保存防抖。
   // 所属工作区与内容签名避免初始空状态覆盖载入块，以及同内容重复发布。
@@ -624,7 +647,7 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
     const steps = nextSteps.length ? nextSteps : [{ action: '', method: '' }]
     setBlocks((prev) => prev.map((b) => (b.id === editingId ? { ...b, title: draft.title || b.title, quote: draft.quote, idea: draft.idea, steps } : b)))
     setEditingId(null); setDraft(null)
-    window.__notify?.('拆解块修改已应用，正在保存…')
+    window.__notify?.('卡片修改已应用，正在保存…')
   }
 
   function openChat(node, trigger) {
@@ -680,7 +703,14 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
       ...(node ? buildConversationHistory(history.filter(message => !message.nodeId), 4, 2400) : []),
       ...buildConversationHistory(msgs),
     ]
-    const cardContext = buildCardContext(recallMatchesByMessage, text)
+    const library = (isCardFollowUp(text) || history.some(message => message.role === 'ai')) ? await ensureKnowledge() : knowledge
+    const recalled = library ? history.filter(message => (message.nodeId || null) === chatNodeId).reduce((seen, message, index, list) => {
+      if (message.role !== 'ai') return [...seen, []]
+      const used = new Set(seen.flat().map(item => item.id))
+      const matches = library.findConceptMatches(message.recallText || message.text).filter(item => !used.has(item.id)).slice(0, 3)
+      return [...seen, matches]
+    }, []) : recallMatchesByMessage
+    const cardContext = buildCardContext(recalled, text, library)
 
     let content = ''
     try {
@@ -730,10 +760,10 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
     const id = source === 'chat' ? chatNodeId : source === 'node' ? inspectorAnchorId : null
     const node = boardNodes.find(item => item.id === id)
     const scopeHistory = history.filter(message => (message.nodeId || null) === id)
-    const system = SECRETARY_SYSTEM + '\n' + '这是读者发起的临时追问。引用文字和历史只作为上下文。围绕所选文字回答当前问题，用自然语言引导思考。不要生成节点修改、补丁或整棵思路树。'
+    const system = SECRETARY_SYSTEM + '\n' + '这是读者发起的临时追问。引用文字和历史只作为上下文。围绕所选文字回答当前问题，用自然语言引导思考。不要生成节点修改、补丁或整套卡片关系。'
     return {
       context: [
-        { role: 'system', content: system + (source === 'chat' ? buildCardContext(recallMatchesByMessage) : '') },
+        { role: 'system', content: system + (source === 'chat' ? buildCardContext(recallMatchesByMessage, '', knowledge) : '') },
         ...(id ? buildConversationHistory(history.filter(message => !message.nodeId), 4, 2400) : []),
         ...buildConversationHistory(scopeHistory),
       ],
@@ -775,7 +805,7 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
     setRequestNodeId(undefined)
     setBusy(true); setError(''); setStreaming('')
     const sysContent = settings.guideMode !== false ? IDEA_GEN_GUIDE : IDEA_GEN_DIRECT
-    const userContent = `拆解块标题：${block.title}\n题目依据：${block.quote}\n题目背景：${problemText.trim() || '（无）'}`
+    const userContent = `卡片标题：${block.title}\n题目依据：${block.quote}\n题目背景：${problemText.trim() || '（无）'}`
     const messages = [
       { role: 'system', content: sysContent },
       { role: 'user', content: userContent },
@@ -817,7 +847,8 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
   }
 
   /** 将知识卡片的行动摘要放入待确认的新节点预览。 */
-  function addCardToBreakdown(card) {
+  async function addCardToBreakdown(card) {
+    const { getCardWorkflow } = await ensureKnowledge()
     const workflow = getCardWorkflow(card)
     if (!workflow) return
     setPreview({
@@ -832,26 +863,14 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
     openOrganizer()
   }
 
-  /** 导出思路为 Markdown */
+  /** 导出思路为 Markdown，包含自动识别的小问原文和上下游。 */
   function exportIdea() {
-    const md = [
-      `# 建模思路梳理 · ${new Date().toLocaleString('zh-CN')}`,
-      '',
-      `> 题目：${(ws?.title || '未命名')}`,
-      ...blocks.flatMap((b, i) => [
-        `## ${i + 1}. ${b.title}`,
-        '',
-        `类型：${THOUGHT_NODE_TYPES[b.kind]?.label || '思路'}`,
-        `上游：${thoughtParents(b).map(id => id === null ? '当前题目' : boardNodes.find(node => node.id === id)?.title).filter(Boolean).join('、') || '无'}`,
-        '',
-        ...(b.quote ? [`依据：${b.quote}`] : []),
-        ...(b.idea ? ['', `思路：${b.idea}`] : []),
-        '',
-        ...b.steps.map((s) => `- **要怎么做：** ${s.action}\n  **怎么实现：** ${s.method}`),
-        ...(b.refs?.length ? ['', `关联：${b.refs.join('、')}`] : []),
-        '',
-      ]),
-    ].join('\n')
+    const md = formatThoughtExport({
+      title: ws?.title || '未命名',
+      questions: problem.questions,
+      cards: blocks,
+      when: new Date().toLocaleString('zh-CN'),
+    })
     const blob = new Blob(['\ufeff' + md], { type: 'text/markdown;charset=utf-8' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
@@ -863,16 +882,17 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
 
   const doneTables = attachments.filter((a) => a.status === 'done' && a.type === 'table')
   const recallMatchesByMessage = useMemo(() => {
+    if (!knowledge) return msgs.map(() => [])
     const seen = new Set()
     return msgs.map((message) => {
       if (message.role !== 'ai') return []
-      const matches = findConceptMatches(message.recallText || message.text)
+      const matches = knowledge.findConceptMatches(message.recallText || message.text)
         .filter((item) => !seen.has(item.id))
         .slice(0, 3)
       matches.forEach((item) => seen.add(item.id))
       return matches
     })
-  }, [msgs])
+  }, [msgs, knowledge])
 
 
   const inspectorAnchorId = preview ? null : inspectorId
@@ -888,6 +908,8 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
   const sourceQuestion = problem.questions.find(node => node.id === inspectorId)
   const chatNode = boardNodes.find(node => node.id === chatNodeId)
   const chatBusy = busy && requestNodeId === chatNodeId
+  const recognitionMiss = Boolean(problemText.trim()) && problem.questions.length === 0
+  const showGuide = Boolean(wsIdNow && blocksWsId === wsIdNow && blocks.length === 0 && !guideDismissed)
 
   return (
     <div className="ws mdl thought-workspace">
@@ -932,12 +954,12 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
 
       <section ref={boardMain} className={`ws-main thought-main${organizerOpen ? ' has-organizer' : ''}`}>
         <header className="thought-header">
-          <h1>思路树</h1>
+          <h1>思路整理台</h1>
           <div className="thought-header-actions">
             <button type="button" className="btn btn-ghost btn-sm" aria-expanded={ctxOpen} onClick={() => setCtxOpen(value => !value)}><IconFile size={14} /> 题干与附件</button>
             <button ref={organizerButton} type="button" className="btn btn-ghost btn-sm thought-organizer-trigger"
               aria-expanded={organizerOpen} aria-controls={organizerOpen ? 'thought-organizer' : undefined}
-              onClick={event => toggleOrganizer(event.currentTarget)}><IconEdit size={14} /> 思路整理</button>
+              onClick={event => toggleOrganizer(event.currentTarget)}><IconEdit size={14} /> 编辑卡片</button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={exportIdea}>导出思路</button>
             <button type="button" className="btn btn-primary btn-sm" onClick={() => { location.hash = '#/coding' }} disabled={!wsIdNow}>去编程台 <IconChevronRight size={13} /></button>
           </div>
@@ -978,7 +1000,7 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
             <div className="thought-question-brief">
               <p className={activeQuestion ? undefined : 'thought-question-hint'}>{activeQuestion
                 ? activeQuestion.idea || '写下这道小问要回答的内容。'
-                : questions.length ? '选一道小问打开梳理区，也可以先记一条全题便签。' : '添加小问开启分区，也可以先记一条思路。'}</p>
+                : recognitionMiss ? '未自动拆出小问，可手动添加。' : questions.length ? '选一道小问打开梳理区，也可以先记一条全题便签。' : '添加小问开启分区，也可以先记一条思路。'}</p>
               {activeQuestion && <button type="button" className="btn btn-ghost btn-sm" onClick={event => editBoardNode(activeQuestion, event.currentTarget)}>
                 {activeQuestion.sourceQuestion ? '查看小问' : '编辑小问'}
               </button>}
@@ -987,6 +1009,7 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
               activeQuestionId={activeQuestion?.id} focusedCardIds={focusedCardIds} onCreateNode={addBlock} onFocusQuestion={changeQuestion}
               title={problem.title || ws?.title || '未命名题目'} summary={problem.summary}
               questionCount={questions.length} selectedId={selectedId} organizerOpen={organizerOpen}
+              recognitionMiss={recognitionMiss} showGuide={showGuide} onDismissGuide={dismissGuide}
               onSelect={id => {
                 closeNodeTypes()
                 const node = organizerOpen && boardNodes.find(item => item.id === id)
@@ -1012,14 +1035,14 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
           {organizerOpen && <aside id="thought-organizer" className="thought-organizer" aria-labelledby="thought-organizer-title"
             onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); closeOrganizer() } }}>
             <header className="thought-overlay-head">
-              <h2 id="thought-organizer-title" ref={organizerHeading} tabIndex={-1}>思路整理</h2>
+              <h2 id="thought-organizer-title" ref={organizerHeading} tabIndex={-1}>编辑卡片</h2>
               <div className="thought-organizer-actions">
                 {organizerNode && !preview && (
                   <button type="button" className="btn btn-ghost btn-sm thought-delete" onClick={event => askToRemove(organizerNode, event.currentTarget)}>
                     <IconTrash size={14} /> {organizerNode.sourceQuestion ? '移除小问' : '删除节点'}
                   </button>
                 )}
-                <button type="button" className="ico-btn" aria-label="关闭思路整理" onClick={closeOrganizer}><IconClose size={16} /></button>
+                <button type="button" className="ico-btn" aria-label="关闭编辑卡片" onClick={closeOrganizer}><IconClose size={16} /></button>
               </div>
             </header>
             {visibleBoardNodes.length > 0 && !preview && <div className="thought-organizer-node">
@@ -1144,7 +1167,7 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
                   <span className="avatar">{message.role === 'ai' ? <IconSparkles size={14} /> : '我'}</span>
                   <div className="bubble">
                     {message.role === 'ai' ? <MD text={message.text} /> : <div className="t">{message.text}</div>}
-                    {message.role === 'ai' && <ConceptCards matches={recallMatchesByMessage[index]} />}
+                    {message.role === 'ai' && <ConceptCards matches={recallMatchesByMessage[index]} Card={knowledge?.KnowledgeCard} />}
                     <div className="msg-time">{message.time}</div>
                   </div>
                 </div>
@@ -1168,7 +1191,7 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
           </> : (
             <div className="kp">
               <div className="kp-search"><span><IconSearch size={14} /></span><input value={kcQuery} onChange={event => setKcQuery(event.target.value)} placeholder="搜索知识卡片…" /></div>
-              <KnowledgeLibrary query={kcQuery} onAddToBreakdown={addCardToBreakdown} />
+              {knowledge ? <knowledge.KnowledgeLibrary query={kcQuery} onAddToBreakdown={addCardToBreakdown} /> : <p className="hint">正在打开知识卡片…</p>}
             </div>
           )}
         </section>}
@@ -1180,7 +1203,7 @@ export default function Modeling({ settings, ws, patchWs, patchWsAt, onExpandSid
         <div className="scrim" onClick={() => setRelateId(null)}>
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
             <h2>关联附件数据</h2>
-            <div className="sub">把附件挂到该拆解块上，生成代码时会一并注入数据。</div>
+            <div className="sub">把附件挂到这张卡片上，生成代码时会一并注入数据。</div>
             {doneTables.length === 0 && <div className="hint">暂无已解析附件，请先在读题工作台上传。</div>}
             {doneTables.map((a) => (
               <button key={a.id} type="button" className="check-opt" onClick={() => linkAttachment(relateId, a.name)}>
@@ -1249,12 +1272,12 @@ function ThoughtTypePicker({ trigger, onClose, onChoose }) {
   )
 }
 
-function ConceptCards({ matches = [] }) {
-  if (!matches.length) return null
+function ConceptCards({ matches = [], Card }) {
+  if (!matches.length || !Card) return null
   return (
     <div className="concept-recall-list">
       {matches.map((match) => (
-        <KnowledgeCard
+        <Card
           key={match.id}
           cardId={match.id}
           variant="summary"
@@ -1263,182 +1286,6 @@ function ConceptCards({ matches = [] }) {
         />
       ))}
     </div>
-  )
-}
-
-function LegacyBlock({ b, index, open, preview, editing, draft, setDraft, onToggle, onEdit, onCommitEdit, onCancelEdit, onRelate, onRemove, onApply, onCancelPreview, onAiBody, aiBusy, onUpdateStep }) {
-  // 步骤展开状态：默认只展开第一步，减少初始密度；新增步骤自动展开到新增加的那一步
-  const prevStepCount = useRef(b.steps.length)
-  const [openSteps, setOpenSteps] = useState(() => (b.steps.length > 0 ? new Set([0]) : new Set()))
-  const [editStep, setEditStep] = useState(null) // 正在填写思路的步骤索引
-  const [stepDraft, setStepDraft] = useState('') // 步骤思路草稿
-  useEffect(() => {
-    setOpenSteps((prev) => {
-      const next = new Set(prev)
-      for (let i = prevStepCount.current; i < b.steps.length; i++) next.add(i)
-      return next
-    })
-    prevStepCount.current = b.steps.length
-  }, [b.steps.length]) // eslint-disable-line react-hooks/exhaustive-deps
-  function toggleStep(i) {
-    setOpenSteps((prev) => {
-      const next = new Set(prev)
-      next.has(i) ? next.delete(i) : next.add(i)
-      return next
-    })
-  }
-  function startEditStep(i, desc) {
-    setEditStep(i)
-    setStepDraft(desc || '')
-  }
-  function saveStep(i) {
-    onUpdateStep(i, stepDraft.trim())
-    setEditStep(null)
-    setStepDraft('')
-  }
-  const progress = getBlockProgress(b)
-  return (
-    <article className={`decomp-block ${open ? 'open' : ''} status-${progress.status === '已完成' ? 'done' : progress.status === '进行中' ? 'active' : 'idle'}`}>
-      <div className="block-head">
-        <button className="block-title-btn" onClick={onToggle} aria-expanded={open}>
-          <span className="block-no">{index + 1}</span>
-          <span className="block-title-wrap">
-            <span className="block-title">{b.title}</span>
-            <span className={`block-status status-${progress.status === '已完成' ? 'done' : progress.status === '进行中' ? 'active' : 'idle'}`}>
-              <span className="block-status-dot" aria-hidden="true" />{progress.status}
-            </span>
-          </span>
-        </button>
-        <span className="block-ops">
-          <button className="ico-btn" title="编辑" onClick={onEdit}><IconEdit size={14} /></button>
-          <button className="ico-btn block-toggle" title={open ? '收起' : '展开'} onClick={onToggle} aria-expanded={open}><IconChevronRight size={14} /></button>
-        </span>
-      </div>
-      <div className="block-body">
-        <div className="body-inner">
-          <div className="bd">
-            {editing ? (
-              <>
-                <input className="bk-input" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder="拆解块标题" />
-                <textarea className="bk-textarea" value={draft.quote} onChange={(e) => setDraft({ ...draft, quote: e.target.value })} placeholder="核心说明（一句话概括这块要做什么）" rows={2} />
-                <div className="bk-label">思路正文 · 支持 Markdown（自由书写）</div>
-                <textarea
-                  className="bk-textarea bk-md"
-                  value={draft.body}
-                  onChange={(e) => setDraft({ ...draft, body: e.target.value })}
-                  placeholder={'用 Markdown 自由表达思路，例如：\n**目标**：最小化总成本\n\n- 步骤一：读取数据\n- 步骤二：构造特征\n\n> 引用题干："车辆更新须满足…"'}
-                  rows={6}
-                />
-                  <div className="bk-md-hint"><IconSparkles size={12} /> 支持 Markdown：`**加粗**` · `- 列表` · `&gt; 引用` · `# 标题` · `` `代码` `` · `![图](url)`</div>
-                <div className="bk-ai-row">
-                  <button className="btn btn-ghost btn-sm" onClick={onAiBody} disabled={aiBusy} title="让 AI 根据标题与核心说明生成思路正文，填入下方输入框">
-                    {aiBusy ? <><IconSparkles size={13} /> AI 生成中…</> : <><IconSparkles size={13} /> AI 帮我写思路</>}
-                  </button>
-                </div>
-                <div className="bk-label">步骤标题（有序列表，每步展开后可分别填写思路）</div>
-                <textarea className="bk-textarea" value={draft.stepsText} onChange={(e) => setDraft({ ...draft, stepsText: e.target.value })} placeholder="每行一个步骤标题（如：数据预处理 / 建模 / 验证）。每步的思路在下方展开区分别填写。" rows={3} />
-                <div className="bk-edit-actions">
-                  <button className="btn btn-ghost btn-sm" onClick={onCancelEdit}>取消</button>
-                  <button className="btn btn-primary btn-sm" onClick={onCommitEdit}>保存</button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="block-progress-summary">
-                  <div className="block-progress-copy"><span>完成度</span><strong>{progress.ratio}%</strong><span className="block-progress-detail">{progress.filledSteps}/{progress.totalSteps} 个步骤已补充</span></div>
-                  <div className="block-progress-track" aria-label={`${progress.ratio}% 完成`}><span style={{ width: `${progress.ratio}%` }} /></div>
-                </div>
-                {b.quote && (
-                  <div className="block-quote">
-                    <span className="bk-tag tag-accent">核心</span>
-                    <MD text={b.quote} />
-                  </div>
-                )}
-                {b.body && (
-                  <div className="block-body-md">
-                    <span className="bk-tag tag-primary">思路</span>
-                    <MD text={b.body} />
-                  </div>
-                )}
-                {b.steps.length > 0 && (
-                  <div className="block-steps">
-                    <span className="bk-tag">步骤</span>
-                    <ol className="step-list">
-                      {b.steps.map((s, si) => {
-                        const sOpen = openSteps.has(si)
-                        return (
-                          <li key={si} className={`step-item ${sOpen ? 'open' : ''}`}>
-                            <button className="step-head" onClick={() => toggleStep(si)} aria-expanded={sOpen}>
-                              <span className="step-no">{si + 1}</span>
-                              <span className="step-title">{s.label}</span>
-                              <span className={`step-chev ${sOpen ? 'open' : ''}`}><IconChevronDown size={14} /></span>
-                            </button>
-                            {sOpen && (
-                              <div className="step-body">
-                                {editStep === si ? (
-                                  <>
-                                    <textarea
-                                      className="step-edit"
-                                      value={stepDraft}
-                                      onChange={(e) => setStepDraft(e.target.value)}
-                                      placeholder={'在此填写该步骤的思路（支持 Markdown）：\n**做法**：…\n- 要点一\n- 要点二\n> 引用/假设…'}
-                                      rows={4}
-                                      autoFocus
-                                    />
-                                    <div className="step-edit-actions">
-                                      <button className="btn btn-ghost btn-sm" onClick={() => setEditStep(null)}>取消</button>
-                                      <button className="btn btn-primary btn-sm" onClick={() => saveStep(si)}>保存思路</button>
-                                    </div>
-                                  </>
-                                ) : (
-                                  <>
-                                    {s.desc ? <MD text={s.desc} /> : <span className="hint">（此步骤暂无思路，点击「填写思路」补充）</span>}
-                                    <button className="step-edit-btn" onClick={() => startEditStep(si, s.desc)}>
-                                      <IconEdit size={12} /> {s.desc ? '编辑思路' : '填写思路'}
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            )}
-                          </li>
-                        )
-                      })}
-                    </ol>
-                  </div>
-                )}
-                {b.refs?.length > 0 && (
-                  <div className="block-refs">{b.refs.map((r) => <span key={r} className="ref-chip"><IconTable size={12} /> {r}</span>)}</div>
-                )}
-                <div className="row-ops">
-                  <button className="link-btn" onClick={onEdit}><IconEdit size={13} /> 编辑</button>
-                  <button className="link-btn" onClick={onRelate}><IconLink size={13} /> 关联</button>
-                  <button className="link-btn" onClick={onToggle}>{open ? '▲ 收起' : '▼ 展开'}</button>
-                  <button className="link-btn danger" onClick={onRemove}><IconClose size={13} /> 删除</button>
-                </div>
-              </>
-            )}
-
-            {preview && (
-              <div className="modify-preview">
-                <div className="mp-head"><span className="pulse" />修改预览 · 待确认</div>
-                <div className="mp-body">
-                  <div className="preview-field"><span className="preview-label">标题</span><strong>{preview.title || b.title}</strong></div>
-                  {(preview.quote || b.quote) && <div className="preview-field"><span className="preview-label">核心</span><div className="preview-copy">{preview.quote || b.quote}</div></div>}
-                  {preview.body && <div className="preview-field"><span className="preview-label">思路</span><div className="preview-copy"><MD text={preview.body} /></div></div>}
-                  {preview.steps?.length > 0 && (
-                    <div className="preview-field"><span className="preview-label">步骤</span><ol className="preview-steps">{preview.steps.map((s, si) => <li key={si}><span>{si + 1}</span><div><strong>{s.label}</strong>{s.desc && <small>{s.desc}</small>}</div></li>)}</ol></div>
-                  )}
-                </div>
-                <div className="mp-ops">
-                  <button className="btn btn-ghost btn-sm" onClick={onCancelPreview}>取消</button>
-                  <button className="btn btn-primary btn-sm" onClick={onApply}>确认写入</button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </article>
   )
 }
 
@@ -1522,21 +1369,21 @@ function Block({ b, index, open, editing, draft, draftCacheOk, setDraft, onToggl
       <div className="block-head">
         {editing ? (
           <div className="block-title-btn block-inline-editor">
-            <span className="block-no">{index + 1}</span>
+            <span className="block-no">卡</span>
             <div className="block-inline-fields">
-              <label className="sr-only" htmlFor={`block-title-${b.id}`}>拆解块标题</label>
-              <input id={`block-title-${b.id}`} className="bk-input" value={draft?.title || ''} onChange={(e) => updateDraft({ title: e.target.value })} placeholder="拆解块标题" />
+              <label className="sr-only" htmlFor={`block-title-${b.id}`}>卡片标题</label>
+              <input id={`block-title-${b.id}`} className="bk-input" value={draft?.title || ''} onChange={(e) => updateDraft({ title: e.target.value })} placeholder="卡片标题" />
               <label className="bk-label" htmlFor={`block-idea-${b.id}`}>{nodeType?.label || '思路'} <span>{nodeType?.field || '用一句话说清解决方向'}</span></label>
               <textarea ref={ideaInput} id={`block-idea-${b.id}`} autoFocus={!Number.isInteger(draft?.focusStep)} className="bk-textarea bk-idea" value={draft?.idea || ''} onChange={(e) => updateDraft({ idea: e.target.value })} placeholder={nodeType?.field || '先写一句你打算怎样解决这个问题'} rows={2} />
               <div className="bk-edit-actions">
-                <button className="btn btn-primary btn-sm" onClick={onCommitEdit}>保存拆解块</button>
+                <button className="btn btn-primary btn-sm" onClick={onCommitEdit}>保存卡片</button>
                 <button className="btn btn-ghost btn-sm" onClick={onCancelEdit}>取消</button>
                 <span className="block-draft-note" role="status">{!draftCacheOk ? '草稿暂存失败，请在离开前保存' : draftChanged ? '有未应用修改 · 本标签页已暂存' : '编辑中 · 内容尚未修改'}</span>
               </div>
             </div>
           </div>
         ) : <button className="block-title-btn" onClick={onToggle} aria-expanded={open}>
-          <span className="block-no">{index + 1}</span>
+          <span className="block-no">卡</span>
           <span className="block-title-wrap">
             <span className="block-title">{b.title}</span>
             <span className="block-idea-preview">{b.idea || '还没有一句话思路'}</span>
@@ -1615,9 +1462,9 @@ function Block({ b, index, open, editing, draft, draftCacheOk, setDraft, onToggl
                 </div>
                 <button type="button" className="add-step-btn" onClick={addDraftStep}><IconPlus size={14} /> 添加步骤</button>
                 <div className="bk-edit-actions block-step-actions">
-                  <span className="block-draft-note">步骤修改随整个拆解块一起保存</span>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={onCancelEdit}>取消整块编辑</button>
-                  <button type="button" className="btn btn-primary btn-sm" onClick={onCommitEdit}>保存整个拆解块</button>
+                  <span className="block-draft-note">步骤和这张卡片一起保存</span>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={onCancelEdit}>取消编辑</button>
+                  <button type="button" className="btn btn-primary btn-sm" onClick={onCommitEdit}>保存这张卡片</button>
                 </div>
                 </details>
 

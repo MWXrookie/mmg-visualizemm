@@ -132,6 +132,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .content { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
 .content > .ws, .content > .code-split, .content > .settings-page { flex: 1; min-height: 0; }
 .content > .settings-page { overflow: auto; width: 100%; }
+.page-fallback { flex: 1; display: grid; place-items: center; color: var(--muted); }
 .page-view { display: none; min-width: 0; min-height: 0; overflow: hidden; }
 .page-view.active { display: flex; flex: 1; }
 .page-view.active > .ws { flex: 1; min-height: 0; }
@@ -448,7 +449,7 @@ h3.pdf-document-heading { font-size: 16px; }
 .reading-table-context-option input { flex: none; margin-top: 3px; accent-color: var(--primary); }
 .reading-table-context-option:has(input:disabled) { color: var(--muted); cursor: default; }
 
-/* ============ 梳理台（拆解块） ============ */
+/* ============ 思路整理台（卡片） ============ */
 .prob-switch { display: flex; gap: 6px; }
 .prob-tab { padding: 6px 14px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); font-size: 13px; cursor: pointer; color: var(--muted); }
 .prob-tab.active { background: var(--grad); color: var(--on-primary); border-color: transparent; }
@@ -902,7 +903,7 @@ pre.code, pre.code-highlight { white-space: pre; font-size: 13.5px; line-height:
 .att-strip { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
 .att-strip-chip { font-size: 12px; color: var(--fg); background: var(--surface-2); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
 
-/* 拆解块 */
+/* 卡片 */
 .mdl .decomp { display: flex; flex-direction: column; gap: 14px; }
 .mdl .decomp-block { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); overflow: hidden; transition: border-color .2s, box-shadow .2s; }
 .mdl .decomp-block:hover { border-color: var(--accent-soft); box-shadow: var(--shadow); }
@@ -1156,7 +1157,7 @@ pre.code, pre.code-highlight { white-space: pre; font-size: 13.5px; line-height:
 .mdl .bubble .markdown-body code { font-size: 12.5px; }
 .mdl .bubble .markdown-body blockquote { margin: 6px 0; padding-left: 10px; }
 
-/* 拆解块 Markdown 正文 */
+/* 卡片 Markdown 正文 */
 .bk-label { font-size: 12px; font-weight: 600; color: var(--muted); margin: 10px 0 6px; }
 .bk-md { min-height: 130px; }
 .bk-md-hint { font-size: 11.5px; color: var(--muted); margin: -4px 0 8px; line-height: 1.7; }
@@ -1164,7 +1165,7 @@ pre.code, pre.code-highlight { white-space: pre; font-size: 13.5px; line-height:
 .block-body-md .markdown-body { font-size: 13.5px; line-height: 1.75; }
 .block-quote .markdown-body { font-size: 13.5px; line-height: 1.7; }
 
-/* 拆解块编辑：AI 生成思路按钮 */
+/* 卡片编辑：AI 生成思路按钮 */
 .bk-ai-row { display: flex; justify-content: flex-start; margin: -2px 0 10px; }
 
 /* 运行输出结果卡片 */
@@ -1436,7 +1437,7 @@ h1, h2, h3, h4 { font-weight: 600; letter-spacing: .01em; }
 .block-quote, .block-body-md { display: flex; flex-direction: column; }
 .block-steps { margin-top: 14px; }
 .block-steps .flow { margin-top: 2px; }
-/* 拆解块标题过长省略，操作按钮固定右侧 */
+/* 卡片标题过长省略，操作按钮固定右侧 */
 .mdl .block-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mdl .block-ops { flex: none; display: flex; align-items: center; gap: 4px; }
 
@@ -1541,7 +1542,7 @@ h1, h2, h3, h4 { font-weight: 600; letter-spacing: .01em; }
   .ai-head-note { padding-left: 0; }
 }
 
-/* ============ 拆解块新结构：一句话思路 + 双字段步骤 ============ */
+/* ============ 卡片结构：一句话内容 + 双字段步骤 ============ */
 .mdl-intro-note { display: flex; align-items: flex-start; gap: 8px; width: min(360px, 42%); flex: none; padding: 11px 13px; border-left: 2px solid var(--accent); color: var(--muted); font-size: 12px; line-height: 1.55; }
 .mdl-intro-note svg { flex: none; margin-top: 2px; color: var(--accent); }
 .mdl .block-title-wrap { align-items: center; flex-wrap: wrap; gap: 4px 10px; }

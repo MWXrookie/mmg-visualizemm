@@ -95,7 +95,7 @@ for (const theme of ['light', 'dark']) for (const width of [1280, 1440]) {
     await expect(block.locator('.block-draft-note').first()).toContainText('未应用修改')
     await shot('draft-changed')
     mode = 'hold'
-    await block.getByRole('button', { name: '保存拆解块', exact: true }).click()
+    await block.getByRole('button', { name: '保存卡片', exact: true }).click()
     await expect(page.locator('.toast')).toContainText('正在保存')
     await expect(block.getByTitle('编辑', { exact: true })).toBeFocused()
     await expect.poll(() => held.length).toBe(3)

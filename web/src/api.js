@@ -158,7 +158,7 @@ export async function saveWorkspace(ws) {
   return post('/api/workspaces', ws)
 }
 
-/** 读取工作区（含题目/附件/拆解块/代码） */
+/** 读取工作区（含题目/附件/卡片/代码） */
 export async function loadWorkspace(id) {
   const res = await fetch(`/api/workspaces/${id}`)
   const json = await res.json().catch(() => ({}))

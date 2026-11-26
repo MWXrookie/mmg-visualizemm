@@ -1,18 +1,23 @@
-import React, { useEffect, useRef, useState } from 'react'
-import Workbench from './pages/Workbench.jsx'
-import Modeling from './pages/Modeling.jsx'
-import Coding from './pages/Coding.jsx'
+import React, { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import Settings from './pages/Settings.jsx'
 import LearningEntry from './pages/LearningEntry.jsx'
 import { loadSettings, loadTheme, saveTheme, getCurrentWsId, setCurrentWsId } from './store.js'
 import { loadWorkspace, saveWorkspace, listWorkspaces, deleteWorkspace, exportWorkspaceBackup, importWorkspaceBackup } from './api.js'
 import { IconBook, IconCompass, IconCode, IconHome, IconGear, IconSun, IconMoon, IconEdit, IconTrash, IconMenu, IconClose } from './components/Icons.jsx'
 
+const Workbench = lazy(() => import('./pages/Workbench.jsx'))
+const Modeling = lazy(() => import('./pages/Modeling.jsx'))
+const Coding = lazy(() => import('./pages/Coding.jsx'))
+
 const VIEWS = [
   { id: 'workbench', label: '读题工作台', compactLabel: '1 读题', icon: <IconBook size={18} /> },
-  { id: 'modeling', label: '建模思路梳理', compactLabel: '2 建模', icon: <IconCompass size={18} /> },
+  { id: 'modeling', label: '思路整理台', compactLabel: '2 思路', icon: <IconCompass size={18} /> },
   { id: 'coding', label: '编程工作台', compactLabel: '3 编程', icon: <IconCode size={18} /> },
 ]
+
+function PageFallback({ label }) {
+  return <div className="page-fallback" role="status">正在打开{label}…</div>
+}
 
 const ENTRY_VIEWS = ['home', 'university', 'secondary']
 
@@ -90,6 +95,8 @@ export default function App() {
   const [workspaceCreating, setWorkspaceCreating] = useState(false)
   const workspaceCreatingRef = useRef(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [openedViews, setOpenedViews] = useState(() => new Set([getView()]))
+  if (!openedViews.has(view)) setOpenedViews(prev => new Set(prev).add(view))
   const mobileMenuButton = useRef(null)
 
   function closeMobileMenu() {
@@ -183,7 +190,7 @@ export default function App() {
         await persist(ws)
         if (!current) return
         setSaveState({ id: ws.id, status: 'saved' })
-        setToast((previous) => previous === '拆解块修改已应用，正在保存…' ? '拆解块已保存到工作区' : previous)
+        setToast((previous) => previous === '卡片修改已应用，正在保存…' ? '卡片已保存到工作区' : previous)
       } catch (error) {
         console.warn('[persist] 保存失败：', error)
         if (current) setSaveState({ id: ws.id, status: 'error' })
@@ -539,13 +546,19 @@ export default function App() {
 
       <main className="content" inert={workspaceCreating ? '' : undefined} aria-busy={workspaceCreating} style={{ minWidth: 0, overflow: 'hidden' }}>
         {isEntry && <LearningEntry view={view} theme={theme} onToggleTheme={toggleTheme} resumeWorkspace={resumeWorkspace} onStart={startLearning} onResume={resumeLearning} />}
-        <div className={`page-view ${view === 'workbench' ? 'active' : ''}`}>
-          <Workbench {...pageProps} workspaceCreating={workspaceCreating} onNewWorkspace={() => newWorkspace()} />
-        </div>
-        <div className={`page-view ${view === 'modeling' ? 'active' : ''}`}>
-          <Modeling {...pageProps} />
-        </div>
-        {view === 'coding' && <Coding {...pageProps} />}
+        {openedViews.has('workbench') && <Suspense fallback={view === 'workbench' ? <PageFallback label="读题工作台" /> : null}>
+          <div className={`page-view ${view === 'workbench' ? 'active' : ''}`}>
+            <Workbench {...pageProps} workspaceCreating={workspaceCreating} onNewWorkspace={() => newWorkspace()} />
+          </div>
+        </Suspense>}
+        {openedViews.has('modeling') && <Suspense fallback={view === 'modeling' ? <PageFallback label="思路整理台" /> : null}>
+          <div className={`page-view ${view === 'modeling' ? 'active' : ''}`}>
+            <Modeling {...pageProps} />
+          </div>
+        </Suspense>}
+        {view === 'coding' && <Suspense fallback={<PageFallback label="编程工作台" />}>
+          <Coding {...pageProps} />
+        </Suspense>}
         {view === 'settings' && <Settings settings={settings} setSettings={setSettings} />}
       </main>
       {workspaceCreating ? <div className="toast" role="status">正在创建新工作区，请稍候…</div>

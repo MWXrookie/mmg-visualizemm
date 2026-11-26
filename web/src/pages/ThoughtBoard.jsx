@@ -1,5 +1,6 @@
 import React, { forwardRef, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { IconEdit, IconPlus, IconSparkles, IconTrash } from '../components/Icons.jsx'
+import { layoutThoughtTree } from '../lib/thoughtLayout.js'
 import { canLinkThoughtNode, thoughtParents, THOUGHT_AREAS, THOUGHT_NODE_TYPES } from '../lib/thoughtProblem.js'
 import './thought-board.css'
 
@@ -69,48 +70,9 @@ function loadLayout(key, fallback) {
   return fallback
 }
 
-export function layoutThoughtTree(nodes, root = ROOT) {
-  const byId = new Map(nodes.map(node => [node.id, node]))
-  const positions = new Map()
-  const parentIds = new Map()
-  const nextRow = new Map()
-
-  for (const node of nodes) {
-    let [parentId] = thoughtParents(node)
-    const seen = new Set([node.id])
-    for (let parent = byId.get(parentId); parent; parent = byId.get(thoughtParents(parent)[0])) {
-      if (seen.has(parent.id)) { parentId = null; break }
-      seen.add(parent.id)
-    }
-    parentIds.set(node.id, byId.has(parentId) ? parentId : null)
-  }
-
-  // Reserve saved positions before laying out newly added or pre-whiteboard nodes.
-  const occupied = [
-    { ...root, width: ROOT_WIDTH, height: ROOT_HEIGHT },
-    ...nodes.flatMap(node => node.position ? [{ ...node.position, width: NODE_WIDTH, height: NODE_HEIGHT }] : []),
-  ]
-  for (const node of nodes) {
-    let depth = 1
-    for (let parent = parentIds.get(node.id); parent; parent = parentIds.get(parent)) depth++
-    const x = ROOT.x + depth * X_GAP
-    const parentY = positions.get(parentIds.get(node.id))?.y ?? ROOT.y
-    let y = Math.max(nextRow.get(depth) ?? parentY, parentY)
-    if (node.position) {
-      positions.set(node.id, node.position)
-      continue
-    }
-    while (occupied.some(position => overlapsCard(x, y, position))) y += Y_GAP
-    const position = { x, y }
-    positions.set(node.id, position)
-    occupied.push({ ...position, width: NODE_WIDTH, height: NODE_HEIGHT })
-    nextRow.set(depth, y + Y_GAP)
-  }
-  return positions
-}
-
 const ThoughtBoard = forwardRef(function ThoughtBoard({
   workspaceId, nodes, hiddenSourceIds, activeQuestionId, focusedCardIds, title, summary, questionCount, selectedId, organizerOpen,
+  recognitionMiss, showGuide, onDismissGuide,
   onCreateNode, onFocusQuestion, onSelect, onConnect, onMove, onEdit, onAsk, onRemove,
 }, actions) {
   const viewport = useRef(null)
@@ -472,7 +434,20 @@ const ThoughtBoard = forwardRef(function ThoughtBoard({
 
   return (
     <div className="thought-board">
-      <div ref={viewport} className={`thought-viewport ${panning ? 'is-panning' : ''}`} tabIndex={0} role="region" aria-label="思路树画布" aria-describedby={inputHelpId}
+      {showGuide && <aside className="thought-guide" role="note" aria-label="开始引导">
+        <div>
+          <strong>三步开始</strong>
+          {recognitionMiss && <p>未自动拆出小问，可手动添加</p>}
+          <ol>
+            <li>选一道小问，看清要回答什么</li>
+            <li>加一张卡片，写下你的想法</li>
+            <li>连上上下游，卡住了再问小墨</li>
+          </ol>
+        </div>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onDismissGuide}>关闭引导</button>
+      </aside>}
+      {recognitionMiss && !showGuide && <p className="thought-recognition" role="status">未自动拆出小问，可手动添加</p>}
+      <div ref={viewport} className={`thought-viewport ${panning ? 'is-panning' : ''}`} tabIndex={0} role="region" aria-label="思路整理台画布" aria-describedby={inputHelpId}
         style={{ backgroundPosition: `${view.x}px ${view.y}px`, backgroundSize: `${GRID_SIZE * scale}px ${GRID_SIZE * scale}px`,
           '--thought-port-size': `${Math.min(58, Math.max(32, 24 / scale))}px` }}
         onFocusCapture={event => {
