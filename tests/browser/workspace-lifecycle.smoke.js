@@ -12,6 +12,10 @@ import { pdfTableFixture } from '../support/document-pdf.js'
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const problemText = '浏览器冒烟题：在给定预算约束下，选择方案使总收益最大。'
 
+function workspaceSwitch(page, id) {
+  return page.locator('button.sb-ws-main').getByTitle(id, { exact: true })
+}
+
 let serverProcess
 let dataDir
 let baseURL
@@ -961,10 +965,10 @@ test('未确认草稿按工作区恢复，刷新不应用草稿且取消后不�
     await block.getByTitle('编辑步骤 1', { exact: true }).click()
     await block.locator('.step-method-field').fill('A未确认方法\n保留换行')
     await modeling.getByTitle('展开侧栏', { exact: true }).click()
-    await page.getByTitle(ids[1], { exact: true }).click()
+    await workspaceSwitch(page, ids[1]).click()
     await block.getByTitle('编辑', { exact: true }).click()
     await block.locator('.bk-idea').fill('B独立草稿')
-    await page.getByTitle(ids[0], { exact: true }).click()
+    await workspaceSwitch(page, ids[0]).click()
     await expect(block.locator('.step-method-field')).toHaveValue('A未确认方法\n保留换行')
     await expect(block.locator('.step-method-field')).toBeFocused()
     await page.reload()
@@ -978,7 +982,7 @@ test('未确认草稿按工作区恢复，刷新不应用草稿且取消后不�
     await expect(block.locator('.block-idea-preview')).toHaveText('原思路')
     await expect(block.locator('.bk-idea')).toHaveCount(0)
     await modeling.getByTitle('展开侧栏', { exact: true }).click()
-    await page.getByTitle(ids[1], { exact: true }).click()
+    await workspaceSwitch(page, ids[1]).click()
     await expect(block.locator('.bk-idea')).toHaveValue('B独立草稿')
     await block.getByRole('button', { name: '保存拆解块', exact: true }).click()
     await page.reload()
@@ -1083,7 +1087,7 @@ test('切工作区后忽略旧AI预览，旧请求不能解除新请求等待', 
     await send.click()
     await expect.poll(() => pending.length).toBe(1)
     await modeling.getByTitle('展开侧栏', { exact: true }).click()
-    await page.getByTitle(ids[1], { exact: true }).click()
+    await workspaceSwitch(page, ids[1]).click()
     await expect(modeling.locator('.block-title-btn')).toContainText(ids[1])
     await modeling.locator('.composer textarea').fill('修改B')
     await send.click()
@@ -1125,7 +1129,7 @@ test('迟到运行不能串区输出图表或解除新运行等待', async ({ pa
     await root.getByRole('button', { name: '运行', exact: true }).click()
     await page.waitForFunction(() => window.pendingRuns?.length === 1)
     await root.getByTitle('展开侧栏', { exact: true }).click()
-    await page.getByTitle(ids[1], { exact: true }).click()
+    await workspaceSwitch(page, ids[1]).click()
     await root.getByRole('button', { name: '运行', exact: true }).click()
     await page.waitForFunction(() => window.pendingRuns?.length === 2)
     await page.evaluate(() => window.pendingRuns[0]())
@@ -1173,7 +1177,7 @@ test('代码生成跨区隔离，迟到改进不覆盖手工输入', async ({ pa
     await page.getByRole('button', { name: '生成', exact: true }).click()
     await expect.poll(() => pending.length).toBe(1)
     await root.getByTitle('展开侧栏', { exact: true }).click()
-    await page.getByTitle(ids[1], { exact: true }).click()
+    await workspaceSwitch(page, ids[1]).click()
     await root.getByRole('button', { name: 'AI改进', exact: true }).click()
     await expect.poll(() => pending.length).toBe(2)
     pending[0]()
@@ -1365,9 +1369,9 @@ test('解读刚完成即切区先保存，失败留在原区并可重试', async
     await root.getByTitle('展开侧栏', { exact: true }).click()
     await root.getByRole('button', { name: /AI 整体解读/ }).click()
     await expect(root.getByText('模拟模型已完成整体解读，并识别了预算约束与收益目标。', { exact: true })).toBeVisible()
-    await page.getByTitle(ids[1], { exact: true }).click()
+    await workspaceSwitch(page, ids[1]).click()
     await expect.poll(async () => (await (await page.request.get(`${baseURL}/api/workspaces/${ids[0]}`)).json()).workspace.overview).toContain('模拟模型已完成整体解读')
-    await page.getByTitle(ids[0], { exact: true }).click()
+    await workspaceSwitch(page, ids[0]).click()
     await expect(root.getByText('模拟模型已完成整体解读，并识别了预算约束与收益目标。', { exact: true })).toBeVisible()
     await page.reload()
     await expect(root.getByText('模拟模型已完成整体解读，并识别了预算约束与收益目标。', { exact: true })).toBeVisible()
@@ -1376,11 +1380,11 @@ test('解读刚完成即切区先保存，失败留在原区并可重试', async
       if (route.request().method() === 'POST') await route.fulfill({ status: 503, contentType: 'application/json', body: '{}' })
       else await route.continue()
     })
-    await page.getByTitle(ids[1], { exact: true }).click()
+    await workspaceSwitch(page, ids[1]).click()
     await expect(page.getByText('保存失败：HTTP 503，仍留在当前工作区，请重试切换', { exact: true })).toBeVisible()
     await expect(root.getByText('模拟模型已完成整体解读，并识别了预算约束与收益目标。', { exact: true })).toBeVisible()
     await page.unroute('**/api/workspaces')
-    await page.getByTitle(ids[1], { exact: true }).click()
+    await workspaceSwitch(page, ids[1]).click()
     await expect(root.getByText('模拟模型已完成整体解读，并识别了预算约束与收益目标。', { exact: true })).toHaveCount(0)
   } finally {
     await page.unroute('**/api/workspaces')
